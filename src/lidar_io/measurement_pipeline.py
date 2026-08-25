@@ -23,6 +23,7 @@ import laspy
 import numpy as np
 
 from lidar_core.measurement_run import (
+    derive_measurement_readiness,
     summarize_front_cross_section,
     summarize_timber_stack,
 )
@@ -300,11 +301,20 @@ def run_timber_measurement(
         for message in metadata.warnings
     )
 
+    readiness = derive_measurement_readiness(
+        status=MeasurementRunStatus.COMPLETED,
+        observable_geometry_available=True,
+        physical_units_confirmed=(coordinate_metadata.horizontal_units is not None),
+        geometric_volume_available=bool(volume_results),
+        warnings=warnings,
+    )
+
     run = MeasurementRun(
         run_id=resolved_run_id,
         source_path=str(input_path),
         source_sha256=metadata.sha256,
         status=MeasurementRunStatus.COMPLETED,
+        readiness=readiness,
         started_at=started_at,
         completed_at=datetime.now(UTC),
         code_version=code_version,

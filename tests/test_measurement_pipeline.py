@@ -5,7 +5,10 @@ import json
 import laspy
 import numpy as np
 
-from lidar_core.models import MeasurementRunStatus
+from lidar_core.models import (
+    MeasurementReadinessStage,
+    MeasurementRunStatus,
+)
 from lidar_core.timber_stack import TimberStackDetectionConfig
 from lidar_io.measurement_pipeline import run_timber_measurement
 from lidar_io.run_store import read_measurement_run
@@ -83,6 +86,19 @@ def test_run_timber_measurement_persists_observable_geometry(
     assert run.front_cross_section.trapezoid_area > 0
 
     assert run.results == []
+
+    assert run.readiness is not None
+    assert run.readiness.stage == MeasurementReadinessStage.OBSERVABLE_GEOMETRY
+    assert run.readiness.pipeline_completed is True
+    assert run.readiness.observable_geometry_ready is True
+    assert run.readiness.physical_face_area_ready is False
+    assert run.readiness.geometric_volume_ready is False
+    assert run.readiness.reference_validated is False
+    assert run.readiness.blocker_codes == [
+        "crs_unconfirmed",
+        "linear_units_unconfirmed",
+        "pile_depth_not_supplied",
+    ]
 
     assert len(run.artifacts) == 5
 
@@ -210,6 +226,18 @@ def test_run_timber_measurement_with_explicit_depth_persists_volume(
     assert result.parameters["pile_depth"] == 2.5
     assert result.parameters["depth_source"] == "test_fixture"
     assert result.parameters["commercial_cubicacion"] is False
+
+    assert run.readiness is not None
+    assert run.readiness.stage == MeasurementReadinessStage.OBSERVABLE_GEOMETRY
+    assert run.readiness.pipeline_completed is True
+    assert run.readiness.observable_geometry_ready is True
+    assert run.readiness.physical_face_area_ready is False
+    assert run.readiness.geometric_volume_ready is False
+    assert run.readiness.reference_validated is False
+    assert run.readiness.blocker_codes == [
+        "crs_unconfirmed",
+        "linear_units_unconfirmed",
+    ]
 
     warning_codes = {warning.code for warning in run.warnings}
 

@@ -738,6 +738,29 @@ def measure(
         "Status",
         run.status.value,
     )
+
+    if run.readiness is not None:
+        table.add_row(
+            "Readiness",
+            run.readiness.stage.value,
+        )
+        table.add_row(
+            "Observable geometry",
+            ("ready" if run.readiness.observable_geometry_ready else "not ready"),
+        )
+        table.add_row(
+            "Geometric volume",
+            ("ready" if run.readiness.geometric_volume_ready else "not ready"),
+        )
+        table.add_row(
+            "Physical face area",
+            ("ready" if run.readiness.physical_face_area_ready else "not ready"),
+        )
+        table.add_row(
+            "Reference validation",
+            ("validated" if run.readiness.reference_validated else "not validated"),
+        )
+
     table.add_row(
         "Source",
         run.source_path,

@@ -355,6 +355,16 @@ class MeasurementRunStatus(StrEnum):
     FAILED = "failed"
 
 
+class MeasurementReadinessStage(StrEnum):
+    """Measurement maturity, independent from pipeline execution status."""
+
+    NOT_READY = "not_ready"
+    OBSERVABLE_GEOMETRY = "observable_geometry"
+    PHYSICAL_FACE_AREA = "physical_face_area"
+    GEOMETRIC_VOLUME = "geometric_volume"
+    REFERENCE_VALIDATED = "reference_validated"
+
+
 class MeasurementWarningSeverity(StrEnum):
     """Severity of a structured run-level warning."""
 
@@ -427,6 +437,27 @@ class LogDetectionSummary(BaseModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
 
 
+class MeasurementReadiness(BaseModel):
+    """Explicit measurement-readiness contract.
+
+    Readiness is independent from pipeline execution status. A run may
+    complete successfully while physical units, explicit extrusion length,
+    or reference validation remain unresolved.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    stage: MeasurementReadinessStage = MeasurementReadinessStage.NOT_READY
+
+    pipeline_completed: bool = False
+    observable_geometry_ready: bool = False
+    physical_face_area_ready: bool = False
+    geometric_volume_ready: bool = False
+    reference_validated: bool = False
+
+    blocker_codes: list[str] = Field(default_factory=list)
+
+
 class MeasurementRun(BaseModel):
     """Persistable record for one end-to-end measurement run.
 
@@ -446,6 +477,7 @@ class MeasurementRun(BaseModel):
     source_sha256: str | None = None
 
     status: MeasurementRunStatus = MeasurementRunStatus.STARTED
+    readiness: MeasurementReadiness | None = None
 
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None

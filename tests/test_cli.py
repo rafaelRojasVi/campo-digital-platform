@@ -208,6 +208,13 @@ def test_measure_command_persists_structured_run(tmp_path):
 
     assert result.exit_code == 0, result.output
     assert "Measurement Run: cli-test-run" in result.output
+    assert "Readiness" in result.output
+    assert "observable_geometry" in result.output
+    assert "Observable geometry" in result.output
+    assert "Geometric volume" in result.output
+    assert "Physical face area" in result.output
+    assert "Reference validation" in result.output
+    assert "not validated" in result.output
     assert "Selected timber points" in result.output
     assert "Rectangle area" in result.output
     assert "front_profile" in result.output
@@ -266,7 +273,18 @@ def test_measure_command_with_explicit_depth_reports_geometric_volume(
     )
 
     assert result.exit_code == 0, result.output
+    assert "Readiness" in result.output
+    assert "observable_geometry" in result.output
+    assert "Observable geometry" in result.output
+    assert "Physical face area" in result.output
     assert "Geometric volume" in result.output
+    assert "not ready" in result.output
+    assert "Reference validation" in result.output
+    assert "not validated" in result.output
+
+    # The explicit depth produces a raw source-unit extrusion, but the
+    # readiness stage remains observable_geometry because physical
+    # coordinate units are not confirmed in this synthetic fixture.
     assert "cubic_units_unspecified" in result.output
     assert "Explicit pile depth" in result.output
     assert "2.500000 source units" in result.output
