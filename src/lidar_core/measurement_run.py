@@ -150,6 +150,7 @@ def summarize_timber_stack(
         raise ValueError("point_count_input must be non-negative")
 
     return TimberStackSummary(
+        localization_mode="automatic",
         point_count_input=point_count_input,
         point_count_selected=result.selected_point_count,
         selected_fraction=result.selected_point_fraction,
@@ -158,6 +159,36 @@ def summarize_timber_stack(
         vertical_extent_fraction=result.vertical_extent_fraction,
         transverse_extent_fraction=result.transverse_extent_fraction,
         parameters=_config_parameters(config),
+    )
+
+
+def summarize_prelocalized_timber_stack(
+    *,
+    point_count_input: int,
+) -> TimberStackSummary:
+    """Summarize an input explicitly declared to already isolate the pile.
+
+    No automatic timber-stack localization is claimed in this mode. The
+    complete input point set is passed to the downstream face-measurement
+    kernels.
+    """
+
+    if point_count_input < 0:
+        raise ValueError("point_count_input must be non-negative")
+
+    return TimberStackSummary(
+        localization_mode="prelocalized_input",
+        point_count_input=point_count_input,
+        point_count_selected=point_count_input,
+        selected_fraction=(1.0 if point_count_input > 0 else 0.0),
+        detected_components=None,
+        longitudinal_coverage=None,
+        vertical_extent_fraction=None,
+        transverse_extent_fraction=None,
+        parameters={
+            "automatic_localization_run": False,
+            "input_already_isolated": True,
+        },
     )
 
 

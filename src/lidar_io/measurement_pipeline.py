@@ -22,15 +22,21 @@ from time import perf_counter
 import laspy
 import numpy as np
 
+from lidar_core.face_area_reference import (
+    compare_face_area,
+    face_area_unit_from_horizontal_units,
+)
 from lidar_core.measurement_run import (
     derive_measurement_readiness,
     summarize_front_cross_section,
     summarize_front_depth,
+    summarize_prelocalized_timber_stack,
     summarize_projected_face_raster,
     summarize_timber_stack,
 )
 from lidar_core.models import (
     BoundingBox3D,
+    FaceAreaReference,
     MeasurementRun,
     MeasurementRunStatus,
     MeasurementWarning,
@@ -84,20 +90,27 @@ def run_timber_measurement(
     *,
     run_id: str | None = None,
     timber_config: TimberStackDetectionConfig | None = None,
+    input_already_isolated: bool = False,
     cross_section_config: FrontCrossSectionConfig | None = None,
     projected_face_raster_config: ProjectedFaceRasterConfig | None = None,
     front_depth_config: FrontDepthImageConfig | None = None,
     recession_config: RecessionDetectionConfig | None = None,
     front_side: FrontSide | None = None,
+    face_area_reference: FaceAreaReference | None = None,
     code_version: str | None = None,
     pile_depth: float | None = None,
     depth_source: str | None = None,
 ) -> tuple[MeasurementRun, Path]:
     """Run the observable whole-stack measurement path on one LAS/LAZ file.
 
-    The input is expected to be a candidate region containing the timber
-    stack. Timber localization is still performed automatically inside that
-    candidate region.
+    By default, the input is expected to be a candidate region containing
+    the timber stack and localization is performed automatically inside that
+    region.
+
+    When ``input_already_isolated`` is true, automatic localization is
+    deliberately bypassed and the complete input cloud is treated as the
+    measurement region. This is intended for controlled reference validation
+    and must not be interpreted as successful automatic pile localization.
 
     Cubic volume is produced only when an explicit pile depth and its
     provenance are supplied. The result remains a geometric extrusion in
@@ -143,15 +156,34 @@ def run_timber_measurement(
         timber_config if timber_config is not None else TimberStackDetectionConfig()
     )
 
-    timber_result = detect_timber_stack(
-        xyz,
-        config=resolved_timber_config,
-    )
+    if input_already_isolated:
+        timber_mask = np.ones(
+            len(xyz),
+            dtype=bool,
+        )
 
-    timber_xyz = xyz[timber_result.mask]
+        timber_xyz = xyz
+
+        timber_summary = summarize_prelocalized_timber_stack(
+            point_count_input=len(xyz),
+        )
+    else:
+        timber_result = detect_timber_stack(
+            xyz,
+            config=resolved_timber_config,
+        )
+
+        timber_mask = timber_result.mask
+        timber_xyz = xyz[timber_mask]
+
+        timber_summary = summarize_timber_stack(
+            timber_result,
+            point_count_input=len(xyz),
+            config=resolved_timber_config,
+        )
 
     if len(timber_xyz) < 3:
-        raise ValueError("timber-stack localization produced fewer than 3 points")
+        raise ValueError("selected timber measurement input contains fewer than 3 points")
 
     resolved_cross_section_config = (
         cross_section_config if cross_section_config is not None else FrontCrossSectionConfig()
@@ -363,7 +395,7 @@ def run_timber_measurement(
         )
 
     if normalized_rgb is not None:
-        timber_rgb = normalized_rgb.rgb[timber_result.mask]
+        timber_rgb = normalized_rgb.rgb[timber_mask]
 
         visible_log_end_result = analyze_visible_log_end_candidates(
             timber_xyz,
@@ -393,6 +425,18 @@ def run_timber_measurement(
         )
 
     coordinate_metadata = metadata.coordinate_metadata
+
+    face_area_comparison = None
+
+    if face_area_reference is not None:
+        face_area_comparison = compare_face_area(
+            estimate_method="projected_face_raster",
+            estimate_value=(projected_face_raster_result.area_source_units_squared),
+            estimate_unit=face_area_unit_from_horizontal_units(
+                coordinate_metadata.horizontal_units
+            ),
+            reference=face_area_reference,
+        )
 
     if not coordinate_metadata.is_explicit:
         warnings.append(
@@ -454,11 +498,7 @@ def run_timber_measurement(
         completed_at=datetime.now(UTC),
         code_version=code_version,
         coordinate_metadata=coordinate_metadata,
-        timber_stack=summarize_timber_stack(
-            timber_result,
-            point_count_input=len(xyz),
-            config=resolved_timber_config,
-        ),
+        timber_stack=timber_summary,
         front_cross_section=summarize_front_cross_section(
             cross_section_result,
             config=resolved_cross_section_config,
@@ -480,6 +520,7 @@ def run_timber_measurement(
             if (front_depth_result is not None and recession_result is not None)
             else None
         ),
+        face_area_comparison=face_area_comparison,
         results=volume_results,
         warnings=warnings,
         artifacts=artifacts,
@@ -488,6 +529,7 @@ def run_timber_measurement(
             "point_format_id": metadata.point_format_id,
             "input_point_count": metadata.point_count,
             "header_bounds_match": metadata.header_bounds_match,
+            "localization_mode": ("prelocalized_input" if input_already_isolated else "automatic"),
         },
     )
 

@@ -279,6 +279,66 @@ class ReferenceMeasurement(BaseModel):
     notes: str | None = None
 
 
+class FaceAreaUnit(StrEnum):
+    """Units supported by the face-area reference-comparison contract."""
+
+    SOURCE_UNITS_SQUARED = "source_units_squared"
+    SQUARE_METRES = "square_metres"
+
+
+class FaceAreaReference(BaseModel):
+    """Human/client reference for one timber-stack face.
+
+    A reference may be persisted even when it cannot yet be compared to the
+    automatic estimator. In particular, a square-metre reference must not be
+    silently compared against an estimate whose source-coordinate units remain
+    unconfirmed.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    label: str
+    value: float = Field(gt=0)
+    unit: FaceAreaUnit
+
+    method: str
+    source: str | None = None
+
+    same_pile_confirmed: bool = False
+    notes: str | None = None
+
+
+class FaceAreaComparison(BaseModel):
+    """Comparison between one automatic face-area estimate and one reference.
+
+    Error metrics are populated only when the reference is confirmed to
+    describe the same pile and the area units are explicitly compatible.
+
+    This comparison is independent from MeasurementReadinessStage. In
+    particular it does not by itself imply REFERENCE_VALIDATED.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    estimate_method: str
+    estimate_value: float
+    estimate_unit: FaceAreaUnit
+
+    reference: FaceAreaReference
+
+    comparison_ready: bool
+    blocker_codes: list[str] = Field(default_factory=list)
+
+    signed_error: float | None = None
+    absolute_error: float | None = None
+
+    relative_error: float | None = None
+    absolute_relative_error: float | None = None
+
+    percent_error: float | None = None
+    absolute_percent_error: float | None = None
+
+
 class VolumeResult(BaseModel):
     """Result of a volume-estimation algorithm.
 
@@ -395,9 +455,16 @@ class MeasurementArtifact(BaseModel):
 
 
 class TimberStackSummary(BaseModel):
-    """Structured diagnostics from timber-stack localization."""
+    """Structured diagnostics from timber-stack localization.
+
+    ``localization_mode`` distinguishes automatic detector output from an
+    explicitly prelocalized input supplied directly to the measurement
+    kernels.
+    """
 
     model_config = ConfigDict(frozen=True)
+
+    localization_mode: str = "automatic"
 
     point_count_input: int
     point_count_selected: int
@@ -592,6 +659,7 @@ class MeasurementRun(BaseModel):
     front_cross_section: FrontCrossSectionSummary | None = None
     projected_face_raster: ProjectedFaceRasterSummary | None = None
     front_depth: FrontDepthSummary | None = None
+    face_area_comparison: FaceAreaComparison | None = None
     log_detection: LogDetectionSummary | None = None
 
     results: list[VolumeResult] = Field(default_factory=list)
