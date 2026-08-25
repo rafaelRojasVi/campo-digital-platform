@@ -113,3 +113,47 @@ def test_measurement_run_does_not_infer_coordinate_units() -> None:
     assert run.coordinate_metadata is not None
     assert run.coordinate_metadata.horizontal_units is None
     assert run.coordinate_metadata.crs_epsg is None
+
+
+def test_measurement_run_readiness_is_optional_for_backwards_compatibility() -> None:
+    run = MeasurementRun(
+        run_id="legacy-run",
+        source_path="/data/example.las",
+    )
+
+    assert run.readiness is None
+
+
+def test_measurement_readiness_serializes_explicit_maturity() -> None:
+    from lidar_core.models import (
+        MeasurementReadiness,
+        MeasurementReadinessStage,
+    )
+
+    readiness = MeasurementReadiness(
+        stage=MeasurementReadinessStage.OBSERVABLE_GEOMETRY,
+        pipeline_completed=True,
+        observable_geometry_ready=True,
+        physical_face_area_ready=False,
+        geometric_volume_ready=False,
+        reference_validated=False,
+        blocker_codes=[
+            "crs_unconfirmed",
+            "linear_units_unconfirmed",
+            "pile_depth_not_supplied",
+        ],
+    )
+
+    payload = readiness.model_dump(mode="json")
+
+    assert payload["stage"] == "observable_geometry"
+    assert payload["pipeline_completed"] is True
+    assert payload["observable_geometry_ready"] is True
+    assert payload["physical_face_area_ready"] is False
+    assert payload["geometric_volume_ready"] is False
+    assert payload["reference_validated"] is False
+    assert payload["blocker_codes"] == [
+        "crs_unconfirmed",
+        "linear_units_unconfirmed",
+        "pile_depth_not_supplied",
+    ]

@@ -7,6 +7,7 @@ the stable Pydantic reporting schema.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict
 
 import numpy as np
@@ -18,6 +19,11 @@ from lidar_core.log_ends_radial import (
 from lidar_core.models import (
     FrontCrossSectionSummary,
     LogDetectionSummary,
+    MeasurementReadiness,
+    MeasurementReadinessStage,
+    MeasurementRunStatus,
+    MeasurementWarning,
+    MeasurementWarningSeverity,
     TimberStackSummary,
 )
 from lidar_core.timber_stack import (
@@ -28,6 +34,72 @@ from lidar_volume.front_cross_section import (
     FrontCrossSectionConfig,
     FrontCrossSectionEstimate,
 )
+
+
+def derive_measurement_readiness(
+    *,
+    status: MeasurementRunStatus,
+    observable_geometry_available: bool,
+    physical_units_confirmed: bool,
+    geometric_volume_available: bool,
+    warnings: Sequence[MeasurementWarning],
+    reference_validated: bool = False,
+) -> MeasurementReadiness:
+    """Derive measurement maturity from explicit run facts.
+
+    Observable geometry may exist in source-coordinate units without
+    confirmed physical units. Physical face area requires confirmed units.
+    Volume readiness additionally requires an explicit geometric volume.
+    Reference validation is never inferred from execution success.
+    """
+
+    if geometric_volume_available and not observable_geometry_available:
+        raise ValueError("geometric volume availability requires observable geometry")
+
+    if reference_validated and not geometric_volume_available:
+        raise ValueError("reference validation requires geometric volume")
+
+    if reference_validated and not physical_units_confirmed:
+        raise ValueError("reference validation requires confirmed physical units")
+
+    pipeline_completed = status == MeasurementRunStatus.COMPLETED
+
+    observable_geometry_ready = pipeline_completed and observable_geometry_available
+
+    physical_face_area_ready = observable_geometry_ready and physical_units_confirmed
+
+    geometric_volume_ready = physical_face_area_ready and geometric_volume_available
+
+    validated = geometric_volume_ready and reference_validated
+
+    if validated:
+        stage = MeasurementReadinessStage.REFERENCE_VALIDATED
+    elif geometric_volume_ready:
+        stage = MeasurementReadinessStage.GEOMETRIC_VOLUME
+    elif physical_face_area_ready:
+        stage = MeasurementReadinessStage.PHYSICAL_FACE_AREA
+    elif observable_geometry_ready:
+        stage = MeasurementReadinessStage.OBSERVABLE_GEOMETRY
+    else:
+        stage = MeasurementReadinessStage.NOT_READY
+
+    blocker_codes = list(
+        dict.fromkeys(
+            warning.code
+            for warning in warnings
+            if warning.severity == MeasurementWarningSeverity.BLOCKER
+        )
+    )
+
+    return MeasurementReadiness(
+        stage=stage,
+        pipeline_completed=pipeline_completed,
+        observable_geometry_ready=observable_geometry_ready,
+        physical_face_area_ready=physical_face_area_ready,
+        geometric_volume_ready=geometric_volume_ready,
+        reference_validated=validated,
+        blocker_codes=blocker_codes,
+    )
 
 
 def _config_parameters(
