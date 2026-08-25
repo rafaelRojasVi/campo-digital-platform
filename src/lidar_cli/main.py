@@ -1,7 +1,8 @@
 """`lidar` CLI entry point.
 
-Genuinely functional: inspect, analyze, info, crop, generate-synthetic, volume.
-Explicit "not yet implemented" stubs: sections, compare.
+Functional commands include inspect, analyze, info, crop, generate-synthetic,
+volume, measure, compare, and robustness. Explicit experimental/stub commands
+are documented at their individual entry points.
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import laspy
 import numpy as np
@@ -18,6 +19,8 @@ from rich.console import Console
 from rich.table import Table
 
 from lidar_core.models import (
+    FaceAreaReference,
+    FaceAreaUnit,
     ReferenceMeasurement,
     VolumeComparisonRecord,
     VolumeUnit,
@@ -36,9 +39,17 @@ from lidar_volume.front_cross_section import (
     estimate_front_cross_section,
     extruded_volume,
 )
+from lidar_volume.front_depth import FrontSide
 
 app = typer.Typer(add_completion=False, help="Campo Digital LiDAR engineering CLI.")
 console = Console()
+
+
+def _face_area_unit_label(unit: FaceAreaUnit) -> str:
+    if unit == FaceAreaUnit.SQUARE_METRES:
+        return "m²"
+
+    return "source-units²"
 
 
 @app.command()
@@ -710,12 +721,154 @@ def measure(
             help=("Provenance for the explicit pile depth, for example client_measurement."),
         ),
     ] = None,
+    input_already_isolated: Annotated[
+        bool,
+        typer.Option(
+            "--input-already-isolated",
+            help=(
+                "Treat the complete input cloud as an already-isolated timber "
+                "measurement region and bypass automatic pile localization."
+            ),
+        ),
+    ] = False,
+    front_side: Annotated[
+        str | None,
+        typer.Option(
+            "--front-side",
+            help=("Enable front-depth/recession diagnostics. Expected value: low_v or high_v."),
+        ),
+    ] = None,
+    reference_face_area: Annotated[
+        float | None,
+        typer.Option(
+            "--reference-face-area",
+            help="Optional explicit reference area for the same timber-stack face.",
+        ),
+    ] = None,
+    reference_face_area_unit: Annotated[
+        str | None,
+        typer.Option(
+            "--reference-face-area-unit",
+            help=("Reference face-area unit: source_units_squared or square_metres."),
+        ),
+    ] = None,
+    reference_face_area_method: Annotated[
+        str | None,
+        typer.Option(
+            "--reference-face-area-method",
+            help=(
+                "Method/provenance for the reference face area, for example "
+                "lidar360_manual_polygon."
+            ),
+        ),
+    ] = None,
+    reference_face_area_label: Annotated[
+        str,
+        typer.Option(
+            "--reference-face-area-label",
+            help="Human-readable label for the face-area reference.",
+        ),
+    ] = "reference",
+    reference_face_area_source: Annotated[
+        str | None,
+        typer.Option(
+            "--reference-face-area-source",
+            help="Optional organization/person/source for the reference.",
+        ),
+    ] = None,
+    reference_face_area_notes: Annotated[
+        str | None,
+        typer.Option(
+            "--reference-face-area-notes",
+            help="Optional notes about the face-area reference.",
+        ),
+    ] = None,
+    same_pile_reference: Annotated[
+        bool,
+        typer.Option(
+            "--same-pile-reference",
+            help=("Explicitly confirm that the supplied reference describes the same timber pile."),
+        ),
+    ] = False,
 ) -> None:
     """Run the observable timber-stack measurement pipeline."""
 
     if not input_path.is_file():
         console.print(f"[red]Error:[/red] LAS/LAZ file not found: {input_path}")
         raise typer.Exit(code=1)
+
+    reference_metadata_supplied = (
+        any(
+            value is not None
+            for value in (
+                reference_face_area_unit,
+                reference_face_area_method,
+                reference_face_area_source,
+                reference_face_area_notes,
+            )
+        )
+        or same_pile_reference
+    )
+
+    if reference_face_area is None and reference_metadata_supplied:
+        console.print("[red]Error:[/red] face-area reference options require --reference-face-area")
+        raise typer.Exit(code=1)
+
+    resolved_front_side: FrontSide | None = None
+
+    if front_side is not None:
+        if front_side not in {"low_v", "high_v"}:
+            console.print(
+                "[red]Error:[/red] invalid --front-side "
+                f"'{front_side}'. Expected one of: low_v, high_v"
+            )
+            raise typer.Exit(code=1)
+
+        resolved_front_side = cast(
+            FrontSide,
+            front_side,
+        )
+
+    face_area_reference = None
+
+    if reference_face_area is not None:
+        if reference_face_area_unit is None:
+            console.print(
+                "[red]Error:[/red] --reference-face-area-unit is required "
+                "when --reference-face-area is supplied"
+            )
+            raise typer.Exit(code=1)
+
+        if reference_face_area_method is None or not reference_face_area_method.strip():
+            console.print(
+                "[red]Error:[/red] --reference-face-area-method is required "
+                "when --reference-face-area is supplied"
+            )
+            raise typer.Exit(code=1)
+
+        try:
+            face_area_unit = FaceAreaUnit(reference_face_area_unit)
+        except ValueError as exc:
+            allowed = ", ".join(unit.value for unit in FaceAreaUnit)
+            console.print(
+                "[red]Error:[/red] invalid --reference-face-area-unit "
+                f"'{reference_face_area_unit}'. Expected one of: {allowed}"
+            )
+            raise typer.Exit(code=1) from exc
+
+        try:
+            face_area_reference = FaceAreaReference(
+                label=reference_face_area_label,
+                value=reference_face_area,
+                unit=face_area_unit,
+                method=reference_face_area_method.strip(),
+                source=reference_face_area_source,
+                same_pile_confirmed=same_pile_reference,
+                notes=reference_face_area_notes,
+            )
+        except ValueError as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
 
     try:
         run, measurement_path = run_timber_measurement(
@@ -725,6 +878,9 @@ def measure(
             code_version=code_version,
             pile_depth=depth,
             depth_source=depth_source,
+            input_already_isolated=input_already_isolated,
+            front_side=resolved_front_side,
+            face_area_reference=face_area_reference,
         )
     except (ValueError, FileExistsError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
@@ -772,6 +928,10 @@ def measure(
 
     if run.timber_stack is not None:
         table.add_row(
+            "Localization mode",
+            run.timber_stack.localization_mode,
+        )
+        table.add_row(
             "Input points",
             f"{run.timber_stack.point_count_input:,}",
         )
@@ -802,6 +962,42 @@ def measure(
             (f"{run.front_cross_section.trapezoid_area:.6f} source-units²"),
         )
 
+    if run.front_depth is not None:
+        table.add_row(
+            "Front side",
+            run.front_depth.front_side,
+        )
+        table.add_row(
+            "Recession candidates",
+            str(run.front_depth.candidate_count),
+        )
+
+        if run.front_depth.front_depth_runtime_seconds is not None:
+            table.add_row(
+                "Front-depth runtime",
+                (f"{run.front_depth.front_depth_runtime_seconds:.3f} s"),
+            )
+
+        if run.front_depth.recession_runtime_seconds is not None:
+            table.add_row(
+                "Recession runtime",
+                (f"{run.front_depth.recession_runtime_seconds:.3f} s"),
+            )
+
+    if run.projected_face_raster is not None:
+        table.add_row(
+            "Projected raster area",
+            (f"{run.projected_face_raster.area_source_units_squared:.6f} source-units²"),
+        )
+
+        disagreement = run.projected_face_raster.scanline_disagreement_fraction
+
+        if disagreement is not None:
+            table.add_row(
+                "Raster vs scanline",
+                f"{disagreement:.3%}",
+            )
+
     if run.results:
         result = run.results[0]
 
@@ -829,6 +1025,94 @@ def measure(
             )
 
     console.print(table)
+
+    if run.face_area_comparison is not None:
+        comparison = run.face_area_comparison
+
+        console.print()
+
+        reference_table = Table(title="Face Area Reference")
+        reference_table.add_column("Field")
+        reference_table.add_column("Value")
+
+        estimate_unit_label = _face_area_unit_label(comparison.estimate_unit)
+        reference_unit_label = _face_area_unit_label(comparison.reference.unit)
+
+        reference_table.add_row(
+            "Automatic estimator",
+            comparison.estimate_method,
+        )
+        reference_table.add_row(
+            "Automatic area",
+            (f"{comparison.estimate_value:.6f} {estimate_unit_label}"),
+        )
+        reference_table.add_row(
+            "Reference area",
+            (f"{comparison.reference.value:.6f} {reference_unit_label}"),
+        )
+        reference_table.add_row(
+            "Reference label",
+            comparison.reference.label,
+        )
+        reference_table.add_row(
+            "Reference method",
+            comparison.reference.method,
+        )
+
+        if comparison.reference.source is not None:
+            reference_table.add_row(
+                "Reference source",
+                comparison.reference.source,
+            )
+
+        reference_table.add_row(
+            "Same pile confirmed",
+            ("yes" if comparison.reference.same_pile_confirmed else "no"),
+        )
+
+        reference_table.add_row(
+            "Comparison",
+            ("ready" if comparison.comparison_ready else "blocked"),
+        )
+
+        if comparison.comparison_ready:
+            if comparison.signed_error is not None:
+                reference_table.add_row(
+                    "Signed difference",
+                    (f"{comparison.signed_error:+.6f} {estimate_unit_label}"),
+                )
+
+            if comparison.absolute_error is not None:
+                reference_table.add_row(
+                    "Absolute difference",
+                    (f"{comparison.absolute_error:.6f} {estimate_unit_label}"),
+                )
+
+            if comparison.percent_error is not None:
+                reference_table.add_row(
+                    "Percent error",
+                    f"{comparison.percent_error:+.3f}%",
+                )
+
+            if comparison.absolute_percent_error is not None:
+                reference_table.add_row(
+                    "Absolute percent error",
+                    (f"{comparison.absolute_percent_error:.3f}%"),
+                )
+        else:
+            reference_table.add_row(
+                "Comparison blockers",
+                ", ".join(comparison.blocker_codes),
+            )
+
+        console.print(reference_table)
+
+        console.print()
+        console.print(
+            "[yellow]Reference semantics:[/yellow] This face-area comparison "
+            "does not by itself promote the measurement run to the "
+            "volume-level reference_validated readiness stage."
+        )
 
     if run.artifacts:
         console.print()

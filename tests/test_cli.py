@@ -217,6 +217,8 @@ def test_measure_command_persists_structured_run(tmp_path):
     assert "not validated" in result.output
     assert "Selected timber points" in result.output
     assert "Rectangle area" in result.output
+    assert "Projected raster area" in result.output
+    assert "Raster vs scanline" in result.output
     assert "front_profile" in result.output
     assert "front_profile_plot" in result.output
     assert "front_height_profile_plot" in result.output
@@ -581,3 +583,334 @@ def test_robustness_command_deep_checksum_and_overwrite(
     assert report.acquisition is not None
     assert report.metadata.sha256 is not None
     assert len(report.metadata.sha256) == 64
+
+
+def test_measure_command_reports_ready_face_area_reference(
+    tmp_path,
+):
+    from lidar_io.run_store import read_measurement_run
+
+    source = tmp_path / "candidate-face-reference.las"
+    _write_synthetic_front_wall(source)
+
+    output_root = tmp_path / "reports"
+
+    result = runner.invoke(
+        app,
+        [
+            "measure",
+            str(source),
+            "--output-root",
+            str(output_root),
+            "--run-id",
+            "cli-face-reference-ready",
+            "--code-version",
+            "test",
+            "--reference-face-area",
+            "30.0",
+            "--reference-face-area-unit",
+            "source_units_squared",
+            "--reference-face-area-method",
+            "lidar360_manual_polygon",
+            "--reference-face-area-label",
+            "operator reference",
+            "--reference-face-area-source",
+            "client_organization",
+            "--same-pile-reference",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+
+    assert "Face Area Reference" in result.output
+    assert "projected_face_raster" in result.output
+    assert "operator reference" in result.output
+    assert "lidar360_manual_polygon" in result.output
+    assert "client_organization" in result.output
+    assert "source-units²" in result.output
+    assert "Same pile confirmed" in result.output
+    assert "ready" in result.output
+    assert "Percent error" in result.output
+    assert "Absolute percent error" in result.output
+
+    measurement_path = output_root / "cli-face-reference-ready" / "measurement.json"
+
+    run = read_measurement_run(measurement_path)
+
+    assert run.face_area_comparison is not None
+    assert run.face_area_comparison.comparison_ready is True
+
+    # Face comparison remains independent from volume-level readiness.
+    assert run.readiness is not None
+    assert run.readiness.reference_validated is False
+
+
+def test_measure_command_blocks_square_metre_reference_without_metric_crs(
+    tmp_path,
+):
+    from lidar_io.run_store import read_measurement_run
+
+    source = tmp_path / "candidate-face-reference-metres.las"
+    _write_synthetic_front_wall(source)
+
+    output_root = tmp_path / "reports"
+
+    result = runner.invoke(
+        app,
+        [
+            "measure",
+            str(source),
+            "--output-root",
+            str(output_root),
+            "--run-id",
+            "cli-face-reference-metres-blocked",
+            "--reference-face-area",
+            "30.0",
+            "--reference-face-area-unit",
+            "square_metres",
+            "--reference-face-area-method",
+            "lidar360_manual_polygon",
+            "--reference-face-area-label",
+            "operator reference",
+            "--same-pile-reference",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+
+    assert "Face Area Reference" in result.output
+    assert "m²" in result.output
+    assert "blocked" in result.output
+    assert "area_units_incompatible" in result.output
+
+    # Existing readiness terminology must remain distinct.
+    assert "Reference validation" in result.output
+    assert "not validated" in result.output
+
+    measurement_path = output_root / "cli-face-reference-metres-blocked" / "measurement.json"
+
+    run = read_measurement_run(measurement_path)
+
+    comparison = run.face_area_comparison
+
+    assert comparison is not None
+    assert comparison.comparison_ready is False
+    assert comparison.blocker_codes == [
+        "area_units_incompatible",
+    ]
+
+    assert run.readiness is not None
+    assert run.readiness.reference_validated is False
+
+
+def test_measure_command_requires_face_reference_unit(
+    tmp_path,
+):
+    source = tmp_path / "candidate-face-reference-missing-unit.las"
+    _write_synthetic_front_wall(source)
+
+    result = runner.invoke(
+        app,
+        [
+            "measure",
+            str(source),
+            "--output-root",
+            str(tmp_path / "reports"),
+            "--reference-face-area",
+            "30.0",
+            "--reference-face-area-method",
+            "manual_polygon",
+        ],
+    )
+
+    assert result.exit_code == 1
+
+    assert "--reference-face-area-unit is required" in result.output
+
+
+def test_measure_command_requires_face_reference_method(
+    tmp_path,
+):
+    source = tmp_path / "candidate-face-reference-missing-method.las"
+    _write_synthetic_front_wall(source)
+
+    result = runner.invoke(
+        app,
+        [
+            "measure",
+            str(source),
+            "--output-root",
+            str(tmp_path / "reports"),
+            "--reference-face-area",
+            "30.0",
+            "--reference-face-area-unit",
+            "source_units_squared",
+        ],
+    )
+
+    assert result.exit_code == 1
+
+    assert "--reference-face-area-method is required" in result.output
+
+
+def test_measure_command_rejects_invalid_face_reference_unit(
+    tmp_path,
+):
+    source = tmp_path / "candidate-face-reference-invalid-unit.las"
+    _write_synthetic_front_wall(source)
+
+    result = runner.invoke(
+        app,
+        [
+            "measure",
+            str(source),
+            "--output-root",
+            str(tmp_path / "reports"),
+            "--reference-face-area",
+            "30.0",
+            "--reference-face-area-unit",
+            "yards_squared",
+            "--reference-face-area-method",
+            "manual_polygon",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "invalid --reference-face-area-unit" in result.output
+    assert "source_units_squared" in result.output
+    assert "square_metres" in result.output
+
+
+def test_measure_command_rejects_reference_metadata_without_area(
+    tmp_path,
+):
+    source = tmp_path / "candidate-face-reference-no-area.las"
+    _write_synthetic_front_wall(source)
+
+    result = runner.invoke(
+        app,
+        [
+            "measure",
+            str(source),
+            "--output-root",
+            str(tmp_path / "reports"),
+            "--reference-face-area-unit",
+            "square_metres",
+            "--reference-face-area-method",
+            "manual_polygon",
+        ],
+    )
+
+    assert result.exit_code == 1
+
+    assert ("face-area reference options require --reference-face-area") in result.output
+
+
+def test_measure_command_supports_prelocalized_input(
+    tmp_path,
+):
+    from lidar_io.run_store import read_measurement_run
+
+    source = tmp_path / "already-isolated-wall.las"
+    _write_synthetic_front_wall(source)
+
+    output_root = tmp_path / "reports"
+
+    result = runner.invoke(
+        app,
+        [
+            "measure",
+            str(source),
+            "--output-root",
+            str(output_root),
+            "--run-id",
+            "cli-prelocalized",
+            "--code-version",
+            "test",
+            "--input-already-isolated",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+
+    assert "Localization mode" in result.output
+    assert "prelocalized_input" in result.output
+    assert "100.000%" in result.output
+
+    measurement_path = output_root / "cli-prelocalized" / "measurement.json"
+
+    run = read_measurement_run(measurement_path)
+
+    assert run.timber_stack is not None
+
+    assert run.timber_stack.localization_mode == "prelocalized_input"
+
+    assert run.timber_stack.point_count_selected == run.timber_stack.point_count_input
+
+    assert run.timber_stack.selected_fraction == 1.0
+
+    assert run.provenance["localization_mode"] == "prelocalized_input"
+
+
+def test_measure_command_supports_front_depth_diagnostic(
+    tmp_path,
+):
+    from lidar_io.run_store import read_measurement_run
+
+    source = tmp_path / "front-depth-wall.las"
+    _write_synthetic_front_wall(source)
+
+    output_root = tmp_path / "reports"
+
+    result = runner.invoke(
+        app,
+        [
+            "measure",
+            str(source),
+            "--output-root",
+            str(output_root),
+            "--run-id",
+            "cli-front-depth",
+            "--input-already-isolated",
+            "--front-side",
+            "low_v",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+
+    assert "Front side" in result.output
+    assert "low_v" in result.output
+    assert "Recession candidates" in result.output
+    assert "Front-depth runtime" in result.output
+    assert "Recession runtime" in result.output
+
+    run = read_measurement_run(output_root / "cli-front-depth" / "measurement.json")
+
+    assert run.front_depth is not None
+    assert run.front_depth.front_side == "low_v"
+
+
+def test_measure_command_rejects_invalid_front_side(
+    tmp_path,
+):
+    source = tmp_path / "invalid-front-side.las"
+    _write_synthetic_front_wall(source)
+
+    result = runner.invoke(
+        app,
+        [
+            "measure",
+            str(source),
+            "--output-root",
+            str(tmp_path / "reports"),
+            "--input-already-isolated",
+            "--front-side",
+            "left",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "invalid --front-side" in result.output
+    assert "low_v" in result.output
+    assert "high_v" in result.output
