@@ -18,12 +18,15 @@ from lidar_core.log_ends_radial import (
 )
 from lidar_core.models import (
     FrontCrossSectionSummary,
+    FrontDepthSummary,
     LogDetectionSummary,
     MeasurementReadiness,
     MeasurementReadinessStage,
     MeasurementRunStatus,
     MeasurementWarning,
     MeasurementWarningSeverity,
+    ProjectedFaceRasterSummary,
+    RecessedRegionSummary,
     TimberStackSummary,
 )
 from lidar_core.timber_stack import (
@@ -33,6 +36,16 @@ from lidar_core.timber_stack import (
 from lidar_volume.front_cross_section import (
     FrontCrossSectionConfig,
     FrontCrossSectionEstimate,
+)
+from lidar_volume.front_depth import (
+    FrontDepthImage,
+    FrontDepthImageConfig,
+    FrontRecessionEstimate,
+    RecessionDetectionConfig,
+)
+from lidar_volume.projected_face_raster import (
+    ProjectedFaceRasterConfig,
+    ProjectedFaceRasterEstimate,
 )
 
 
@@ -104,7 +117,13 @@ def derive_measurement_readiness(
 
 def _config_parameters(
     config: (
-        TimberStackDetectionConfig | FrontCrossSectionConfig | RadialLogEndDetectionConfig | None
+        TimberStackDetectionConfig
+        | FrontCrossSectionConfig
+        | RadialLogEndDetectionConfig
+        | ProjectedFaceRasterConfig
+        | FrontDepthImageConfig
+        | RecessionDetectionConfig
+        | None
     ),
 ) -> dict[str, object]:
     """Serialize an explicitly supplied dataclass configuration.
@@ -163,6 +182,97 @@ def summarize_front_cross_section(
         trapezoid_area=result.trapezoid_area,
         valid_bin_fraction=result.valid_bin_fraction,
         parameters=_config_parameters(config),
+    )
+
+
+def summarize_projected_face_raster(
+    result: ProjectedFaceRasterEstimate,
+    *,
+    config: ProjectedFaceRasterConfig | None = None,
+    scanline_disagreement_fraction: float | None = None,
+) -> ProjectedFaceRasterSummary:
+    """Convert projected face-area raster diagnostics to run schema."""
+
+    return ProjectedFaceRasterSummary(
+        area_source_units_squared=result.area_source_units_squared,
+        cell_size_u=result.cell_size_u,
+        cell_size_z=result.cell_size_z,
+        raster_rows=result.raster_rows,
+        raster_cols=result.raster_cols,
+        u_min=result.u_min,
+        u_max=result.u_max,
+        z_min=result.z_min,
+        z_max=result.z_max,
+        projected_point_count=result.projected_point_count,
+        raw_occupied_cell_count=result.raw_occupied_cell_count,
+        denoised_occupied_cell_count=result.denoised_occupied_cell_count,
+        retained_component_cell_count=result.retained_component_cell_count,
+        filled_cell_count=result.filled_cell_count,
+        component_count=result.component_count,
+        scanline_disagreement_fraction=scanline_disagreement_fraction,
+        parameters=_config_parameters(config),
+    )
+
+
+def summarize_front_depth(
+    image: FrontDepthImage,
+    recession: FrontRecessionEstimate,
+    *,
+    image_config: FrontDepthImageConfig | None = None,
+    recession_config: RecessionDetectionConfig | None = None,
+    front_depth_runtime_seconds: float | None = None,
+    recession_runtime_seconds: float | None = None,
+) -> FrontDepthSummary:
+    """Convert experimental front-depth diagnostics to run schema.
+
+    Candidate recessed regions remain diagnostic only. They are not
+    interpreted here as confirmed physical voids or subtracted from area.
+    """
+
+    regions = [
+        RecessedRegionSummary(
+            rank=rank,
+            cell_count=region.cell_count,
+            area_source_units_squared=(region.area_source_units_squared),
+            median_recession_source_units=(region.median_recession_source_units),
+            max_recession_source_units=(region.max_recession_source_units),
+            recession_score_source_units_cubed=(region.recession_score_source_units_cubed),
+            u_min=region.u_min,
+            u_max=region.u_max,
+            z_min=region.z_min,
+            z_max=region.z_max,
+            u_centroid=region.u_centroid,
+            z_centroid=region.z_centroid,
+        )
+        for rank, region in enumerate(
+            recession.regions,
+            start=1,
+        )
+    ]
+
+    return FrontDepthSummary(
+        front_side=image.front_side,
+        cell_size_u=image.cell_size_u,
+        cell_size_z=image.cell_size_z,
+        raster_rows=image.raster_rows,
+        raster_cols=image.raster_cols,
+        u_min=image.u_min,
+        u_max=image.u_max,
+        z_min=image.z_min,
+        z_max=image.z_max,
+        projected_point_count=image.projected_point_count,
+        valid_cell_count=image.valid_cell_count,
+        surface_scale_u=recession.surface_scale_u,
+        surface_scale_z=recession.surface_scale_z,
+        recession_threshold_source_units=(recession.threshold_source_units),
+        candidate_count=len(recession.regions),
+        front_depth_runtime_seconds=(front_depth_runtime_seconds),
+        recession_runtime_seconds=(recession_runtime_seconds),
+        regions=regions,
+        parameters={
+            "front_depth": _config_parameters(image_config),
+            "recession": _config_parameters(recession_config),
+        },
     )
 
 

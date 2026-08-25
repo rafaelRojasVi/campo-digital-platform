@@ -13,6 +13,11 @@ from lidar_core.timber_stack import TimberStackDetectionConfig
 from lidar_io.measurement_pipeline import run_timber_measurement
 from lidar_io.run_store import read_measurement_run
 from lidar_volume.front_cross_section import FrontCrossSectionConfig
+from lidar_volume.front_depth import (
+    FrontDepthImageConfig,
+    RecessionDetectionConfig,
+)
+from lidar_volume.projected_face_raster import ProjectedFaceRasterConfig
 
 
 def test_run_timber_measurement_persists_observable_geometry(
@@ -70,6 +75,13 @@ def test_run_timber_measurement_persists_observable_geometry(
             n_bins=24,
             min_points_per_bin=20,
         ),
+        projected_face_raster_config=ProjectedFaceRasterConfig(
+            cell_size_u=0.5,
+            cell_size_z=0.25,
+            min_points_per_cell=1,
+            min_component_cells=1,
+            closing_iterations=0,
+        ),
         code_version="test",
     )
 
@@ -100,7 +112,7 @@ def test_run_timber_measurement_persists_observable_geometry(
         "pile_depth_not_supplied",
     ]
 
-    assert len(run.artifacts) == 5
+    assert len(run.artifacts) == 7
 
     artifacts = {artifact.kind: artifact for artifact in run.artifacts}
 
@@ -108,6 +120,8 @@ def test_run_timber_measurement_persists_observable_geometry(
         "front_profile",
         "front_profile_plot",
         "front_height_profile_plot",
+        "projected_face_raster",
+        "projected_face_raster_plot",
         "timber_stack_point_cloud_preview",
         "timber_stack_point_cloud_preview_manifest",
     }
@@ -132,6 +146,32 @@ def test_run_timber_measurement_persists_observable_geometry(
     height_plot_path = output_path.parent / height_plot.path
     assert height_plot_path.exists()
     assert height_plot_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+    raster_artifact = artifacts["projected_face_raster"]
+    assert raster_artifact.path == "projected_face_raster.json"
+    assert raster_artifact.media_type == "application/json"
+
+    raster_json_path = output_path.parent / raster_artifact.path
+    assert raster_json_path.exists()
+
+    raster_payload = json.loads(raster_json_path.read_text(encoding="utf-8"))
+    assert raster_payload["coordinate_units"] == "source_units"
+    assert raster_payload["semantics"]["commercial_cubicacion"] is False
+
+    raster_plot_artifact = artifacts["projected_face_raster_plot"]
+    assert raster_plot_artifact.path == "projected_face_raster.png"
+    assert raster_plot_artifact.media_type == "image/png"
+
+    raster_plot_path = output_path.parent / raster_plot_artifact.path
+    assert raster_plot_path.exists()
+    assert raster_plot_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+    assert run.projected_face_raster is not None
+    assert run.projected_face_raster.area_source_units_squared > 0
+    assert run.projected_face_raster.filled_cell_count > 0
+    assert run.projected_face_raster.raster_rows > 0
+    assert run.projected_face_raster.raster_cols > 0
+    assert run.projected_face_raster.scanline_disagreement_fraction is not None
 
     preview = artifacts["timber_stack_point_cloud_preview"]
     assert preview.path == "timber_stack_preview.ply"
@@ -208,12 +248,21 @@ def test_run_timber_measurement_with_explicit_depth_persists_volume(
             n_bins=24,
             min_points_per_bin=20,
         ),
+        projected_face_raster_config=ProjectedFaceRasterConfig(
+            cell_size_u=0.5,
+            cell_size_z=0.25,
+            min_points_per_cell=1,
+            min_component_cells=1,
+            closing_iterations=0,
+        ),
         code_version="test",
         pile_depth=2.5,
         depth_source="test_fixture",
     )
 
     assert run.front_cross_section is not None
+    assert run.projected_face_raster is not None
+    assert run.projected_face_raster.area_source_units_squared > 0
     assert len(run.results) == 1
 
     result = run.results[0]
@@ -360,11 +409,18 @@ def test_run_timber_measurement_with_rgb_persists_visible_log_end_analysis(
             n_bins=24,
             min_points_per_bin=20,
         ),
+        projected_face_raster_config=ProjectedFaceRasterConfig(
+            cell_size_u=0.5,
+            cell_size_z=0.25,
+            min_points_per_cell=1,
+            min_component_cells=1,
+            closing_iterations=0,
+        ),
         code_version="test",
     )
 
     assert run.status == MeasurementRunStatus.COMPLETED
-    assert len(run.artifacts) == 6
+    assert len(run.artifacts) == 8
 
     artifacts = {artifact.kind: artifact for artifact in run.artifacts}
 
@@ -408,6 +464,164 @@ def test_run_timber_measurement_with_rgb_persists_visible_log_end_analysis(
     warning_codes = {warning.code for warning in run.warnings}
 
     assert "visible_log_end_rgb_unavailable" not in warning_codes
+
+    persisted = read_measurement_run(output_path)
+
+    assert persisted == run
+
+
+def test_run_timber_measurement_front_depth_is_opt_in_and_diagnostic_only(
+    tmp_path,
+) -> None:
+    rng = np.random.default_rng(31415)
+
+    point_count = 8_000
+
+    x = rng.uniform(
+        0.0,
+        12.0,
+        point_count,
+    )
+
+    y = rng.normal(
+        0.0,
+        0.08,
+        point_count,
+    )
+
+    z = rng.uniform(
+        0.5,
+        3.5,
+        point_count,
+    )
+
+    input_path = tmp_path / "synthetic-front-depth-wall.las"
+
+    header = laspy.LasHeader(
+        point_format=3,
+        version="1.2",
+    )
+
+    header.scales = np.array(
+        [
+            0.001,
+            0.001,
+            0.001,
+        ]
+    )
+
+    las = laspy.LasData(header)
+
+    las.x = x
+    las.y = y
+    las.z = z
+
+    las.write(input_path)
+
+    run, output_path = run_timber_measurement(
+        input_path,
+        tmp_path / "reports",
+        run_id="run-front-depth-opt-in",
+        timber_config=TimberStackDetectionConfig(
+            longitudinal_bins=24,
+            transverse_bins=12,
+            vertical_bins=12,
+            min_longitudinal_coverage=0.10,
+            min_vertical_extent_fraction=0.10,
+            ignore_lowest_vertical_fraction=0.0,
+            pca_sample_size=10_000,
+            seed=42,
+        ),
+        cross_section_config=FrontCrossSectionConfig(
+            n_bins=24,
+            min_points_per_bin=20,
+        ),
+        projected_face_raster_config=ProjectedFaceRasterConfig(
+            cell_size_u=0.5,
+            cell_size_z=0.25,
+            min_points_per_cell=1,
+            min_component_cells=1,
+            closing_iterations=0,
+        ),
+        front_depth_config=FrontDepthImageConfig(
+            cell_size_u=0.5,
+            cell_size_z=0.25,
+            min_points_per_cell=1,
+            front_quantile=0.05,
+            u_quantile_low=0.01,
+            u_quantile_high=0.99,
+            z_quantile_low=0.005,
+            z_quantile_high=0.995,
+        ),
+        recession_config=RecessionDetectionConfig(
+            surface_scale_u=2.0,
+            surface_scale_z=2.0,
+            recession_threshold=None,
+            candidate_percentile=97.0,
+            min_candidate_cells=1,
+            connectivity=8,
+        ),
+        front_side="low_v",
+        code_version="test",
+    )
+
+    assert run.status == MeasurementRunStatus.COMPLETED
+
+    # Front-depth remains diagnostic only.
+    assert run.results == []
+
+    assert run.readiness is not None
+    assert run.readiness.stage == MeasurementReadinessStage.OBSERVABLE_GEOMETRY
+    assert run.readiness.physical_face_area_ready is False
+    assert run.readiness.geometric_volume_ready is False
+    assert run.readiness.reference_validated is False
+
+    assert run.front_depth is not None
+
+    assert run.front_depth.front_side == "low_v"
+    assert run.front_depth.projected_point_count > 0
+    assert run.front_depth.valid_cell_count > 0
+
+    assert run.front_depth.surface_scale_u == 2.0
+    assert run.front_depth.surface_scale_z == 2.0
+
+    assert run.front_depth.front_depth_runtime_seconds is not None
+
+    assert run.front_depth.recession_runtime_seconds is not None
+
+    artifacts = {artifact.kind: artifact for artifact in run.artifacts}
+
+    assert "front_depth_recession" in artifacts
+    assert "front_depth_recession_plot" in artifacts
+
+    json_artifact = artifacts["front_depth_recession"]
+
+    assert json_artifact.path == "front_depth_recession.json"
+
+    payload = json.loads(
+        (output_path.parent / json_artifact.path).read_text(
+            encoding="utf-8",
+        )
+    )
+
+    assert payload["authoritative_measurement"] is False
+
+    assert payload["reference_validated"] is False
+
+    assert payload["semantics"]["confirmed_physical_voids"] is False
+
+    assert payload["semantics"]["subtracted_from_face_area"] is False
+
+    assert payload["semantics"]["affects_volume"] is False
+
+    assert payload["semantics"]["affects_readiness"] is False
+
+    plot_artifact = artifacts["front_depth_recession_plot"]
+
+    plot_path = output_path.parent / plot_artifact.path
+
+    assert plot_path.exists()
+    assert plot_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
     persisted = read_measurement_run(output_path)
 

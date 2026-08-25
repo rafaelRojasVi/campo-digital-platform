@@ -17,6 +17,16 @@ from lidar_core.models import MeasurementArtifact
 from lidar_core.visible_log_end_analysis import VisibleLogEndAnalysisResult
 from lidar_io.las_rgb import NormalizedLasRgb
 from lidar_volume.front_cross_section import FrontCrossSectionEstimate
+from lidar_volume.front_depth import (
+    FrontDepthImage,
+    FrontDepthImageConfig,
+    FrontRecessionEstimate,
+    RecessionDetectionConfig,
+)
+from lidar_volume.projected_face_raster import (
+    ProjectedFaceRasterConfig,
+    ProjectedFaceRasterEstimate,
+)
 
 FRONT_PROFILE_FILENAME = "front_profile.json"
 
@@ -433,5 +443,470 @@ def write_visible_log_end_analysis_artifact(
             "Experimental visible log-end candidate geometry, "
             "cross-window evidence association, and diameter QC "
             "in source-coordinate units."
+        ),
+    )
+
+
+FRONT_DEPTH_FILENAME = "front_depth_recession.json"
+
+
+def write_front_depth_artifact(
+    image: FrontDepthImage,
+    recession: FrontRecessionEstimate,
+    run_directory: Path,
+    *,
+    image_config: FrontDepthImageConfig,
+    recession_config: RecessionDetectionConfig,
+    front_depth_runtime_seconds: float,
+    recession_runtime_seconds: float,
+) -> MeasurementArtifact:
+    """Persist experimental front-depth/recession diagnostics.
+
+    Recessed regions are visibility candidates only. They are not confirmed
+    physical voids and are not subtracted from face area or volume.
+    """
+
+    run_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    path = run_directory / FRONT_DEPTH_FILENAME
+
+    regions = [
+        {
+            "rank": rank,
+            "cell_count": region.cell_count,
+            "projected_candidate_area_source_units_squared": (region.area_source_units_squared),
+            "median_recession_source_units": (region.median_recession_source_units),
+            "max_recession_source_units": (region.max_recession_source_units),
+            "recession_score_source_units_cubed": (region.recession_score_source_units_cubed),
+            "u_min": region.u_min,
+            "u_max": region.u_max,
+            "z_min": region.z_min,
+            "z_max": region.z_max,
+            "u_centroid": region.u_centroid,
+            "z_centroid": region.z_centroid,
+        }
+        for rank, region in enumerate(
+            recession.regions,
+            start=1,
+        )
+    ]
+
+    payload = {
+        "schema_version": "1",
+        "kind": "front_depth_recession",
+        "estimator_status": "experimental_candidate",
+        "authoritative_measurement": False,
+        "reference_validated": False,
+        "coordinate_units": "source_units",
+        "semantics": {
+            "front_visibility_diagnostic": True,
+            "confirmed_physical_voids": False,
+            "subtracted_from_face_area": False,
+            "affects_volume": False,
+            "affects_readiness": False,
+            "commercial_cubicacion": False,
+        },
+        "front_side": image.front_side,
+        "front_depth": {
+            "cell_size_u": image.cell_size_u,
+            "cell_size_z": image.cell_size_z,
+            "rows": image.raster_rows,
+            "cols": image.raster_cols,
+            "u_min": image.u_min,
+            "u_max": image.u_max,
+            "z_min": image.z_min,
+            "z_max": image.z_max,
+            "projected_point_count": image.projected_point_count,
+            "valid_cell_count": image.valid_cell_count,
+        },
+        "recession": {
+            "surface_scale_u": recession.surface_scale_u,
+            "surface_scale_z": recession.surface_scale_z,
+            "threshold_source_units": recession.threshold_source_units,
+            "candidate_count": len(recession.regions),
+            "regions": regions,
+        },
+        "config": {
+            "front_depth": asdict(image_config),
+            "recession": asdict(recession_config),
+        },
+        "runtime_seconds": {
+            "front_depth": front_depth_runtime_seconds,
+            "recession": recession_runtime_seconds,
+            "combined": (front_depth_runtime_seconds + recession_runtime_seconds),
+        },
+    }
+
+    path.write_text(
+        json.dumps(
+            payload,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    return MeasurementArtifact(
+        kind="front_depth_recession",
+        path=FRONT_DEPTH_FILENAME,
+        media_type="application/json",
+        description=(
+            "Experimental front-depth visibility diagnostics and ranked "
+            "recessed-region candidates in source-coordinate units; "
+            "not reference-validated and not subtracted from face area."
+        ),
+    )
+
+
+FRONT_DEPTH_PLOT_FILENAME = "front_depth_recession.png"
+
+
+def write_front_depth_plot_artifact(
+    image: FrontDepthImage,
+    recession: FrontRecessionEstimate,
+    run_directory: Path,
+) -> MeasurementArtifact:
+    """Persist visual QA for front-depth and positive-depth recession."""
+
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+
+    run_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    path = run_directory / FRONT_DEPTH_PLOT_FILENAME
+
+    extent = (
+        image.u_min,
+        image.u_max,
+        image.z_min,
+        image.z_max,
+    )
+
+    figure = Figure(
+        figsize=(13, 6),
+        dpi=150,
+    )
+    canvas = FigureCanvasAgg(figure)
+
+    depth_axis, recession_axis = figure.subplots(
+        1,
+        2,
+    )
+
+    depth_plot = np.ma.masked_where(
+        ~image.valid_mask,
+        image.front_depth_normalized,
+    )
+
+    depth_image = depth_axis.imshow(
+        depth_plot,
+        origin="lower",
+        extent=extent,
+        aspect="auto",
+        cmap="viridis",
+    )
+
+    figure.colorbar(
+        depth_image,
+        ax=depth_axis,
+        label="normalized front depth v",
+    )
+
+    depth_axis.set_title("Robust front-depth image")
+    depth_axis.set_xlabel("Longitudinal station u")
+    depth_axis.set_ylabel("Elevation z")
+
+    recession_plot = np.ma.masked_where(
+        ~image.valid_mask,
+        recession.recession_source_units,
+    )
+
+    finite_recession = recession.recession_source_units[image.valid_mask]
+
+    vmax = (
+        float(
+            np.quantile(
+                finite_recession,
+                0.995,
+            )
+        )
+        if finite_recession.size
+        else 1.0
+    )
+
+    if vmax <= 0:
+        vmax = 1.0
+
+    recession_image = recession_axis.imshow(
+        recession_plot,
+        origin="lower",
+        extent=extent,
+        aspect="auto",
+        cmap="magma",
+        vmin=0.0,
+        vmax=vmax,
+    )
+
+    figure.colorbar(
+        recession_image,
+        ax=recession_axis,
+        label="positive depth recession",
+    )
+
+    for rank, region in enumerate(
+        recession.regions[:15],
+        start=1,
+    ):
+        recession_axis.plot(
+            [
+                region.u_min,
+                region.u_max,
+                region.u_max,
+                region.u_min,
+                region.u_min,
+            ],
+            [
+                region.z_min,
+                region.z_min,
+                region.z_max,
+                region.z_max,
+                region.z_min,
+            ],
+            linewidth=0.8,
+        )
+
+        recession_axis.text(
+            region.u_centroid,
+            region.z_centroid,
+            str(rank),
+            fontsize=7,
+            ha="center",
+            va="center",
+        )
+
+    recession_axis.set_title(
+        f"Positive-depth recession candidates (threshold={recession.threshold_source_units:.3f})"
+    )
+    recession_axis.set_xlabel("Longitudinal station u")
+    recession_axis.set_ylabel("Elevation z")
+
+    figure.tight_layout()
+
+    canvas.print_png(
+        path,
+    )
+
+    return MeasurementArtifact(
+        kind="front_depth_recession_plot",
+        path=FRONT_DEPTH_PLOT_FILENAME,
+        media_type="image/png",
+        description=(
+            "QA visualization of front-depth evidence and experimental recessed-region candidates."
+        ),
+    )
+
+
+PROJECTED_FACE_RASTER_FILENAME = "projected_face_raster.json"
+
+
+def write_projected_face_raster_artifact(
+    estimate: ProjectedFaceRasterEstimate,
+    run_directory: Path,
+    *,
+    config: ProjectedFaceRasterConfig,
+    runtime_seconds: float,
+    scanline_trapezoid_area: float | None = None,
+    scanline_disagreement_fraction: float | None = None,
+) -> MeasurementArtifact:
+    """Persist projected face-area raster diagnostics as JSON.
+
+    Only scalar diagnostics are persisted here; the occupancy/component/
+    filled masks are visualized in the companion PNG artifact instead of
+    being serialized as large arrays.
+    """
+
+    run_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    path = run_directory / PROJECTED_FACE_RASTER_FILENAME
+
+    payload = {
+        "schema_version": "1",
+        "kind": "projected_face_raster",
+        "estimator_status": "experimental_candidate",
+        "authoritative_measurement": False,
+        "reference_validated": False,
+        "coordinate_units": "source_units",
+        "quantity": {
+            "name": "candidate_gross_projected_external_silhouette_area",
+            "unit": "source_units_squared",
+            "value": estimate.area_source_units_squared,
+        },
+        "semantics": {
+            "raw_3d_surface_area": False,
+            "convex_hull_area": False,
+            "width_times_max_height": False,
+            "per_log_circle_summation": False,
+            "solid_wood_area": False,
+            "commercial_cubicacion": False,
+        },
+        "config": asdict(config),
+        "raster": {
+            "cell_size_u": estimate.cell_size_u,
+            "cell_size_z": estimate.cell_size_z,
+            "rows": estimate.raster_rows,
+            "cols": estimate.raster_cols,
+            "u_min": estimate.u_min,
+            "u_max": estimate.u_max,
+            "z_min": estimate.z_min,
+            "z_max": estimate.z_max,
+            "projected_point_count": estimate.projected_point_count,
+            "raw_occupied_cell_count": estimate.raw_occupied_cell_count,
+            "denoised_occupied_cell_count": estimate.denoised_occupied_cell_count,
+            "retained_component_cell_count": estimate.retained_component_cell_count,
+            "filled_cell_count": estimate.filled_cell_count,
+            "component_count": estimate.component_count,
+        },
+        "runtime_seconds": runtime_seconds,
+        "comparison": {
+            "reference_status": "independent_baseline_not_ground_truth",
+            "scanline_method": "trapezoidal_robust_top_bottom_envelope",
+            "scanline_trapezoid_area_source_units_squared": scanline_trapezoid_area,
+            "disagreement_fraction": scanline_disagreement_fraction,
+        },
+    }
+
+    path.write_text(
+        json.dumps(
+            payload,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    return MeasurementArtifact(
+        kind="projected_face_raster",
+        path=PROJECTED_FACE_RASTER_FILENAME,
+        media_type="application/json",
+        description=(
+            "Experimental candidate gross projected silhouette area and "
+            "raster diagnostics in source-coordinate units; not reference-validated."
+        ),
+    )
+
+
+PROJECTED_FACE_RASTER_PLOT_FILENAME = "projected_face_raster.png"
+
+
+def write_projected_face_raster_plot_artifact(
+    estimate: ProjectedFaceRasterEstimate,
+    run_directory: Path,
+    *,
+    front_cross_section: FrontCrossSectionEstimate | None = None,
+) -> MeasurementArtifact:
+    """Persist a visual QA raster of the recovered face silhouette.
+
+    Shows raw occupancy evidence, the final filled gross silhouette, and
+    (when available) the independent scanline base/top envelopes on the
+    same (u, z) frame for visual disagreement inspection.
+    """
+
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+
+    run_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    path = run_directory / PROJECTED_FACE_RASTER_PLOT_FILENAME
+
+    extent = (estimate.u_min, estimate.u_max, estimate.z_min, estimate.z_max)
+
+    figure = Figure(
+        figsize=(10, 6),
+        dpi=150,
+    )
+    canvas = FigureCanvasAgg(figure)
+    axis = figure.subplots()
+
+    axis.imshow(
+        estimate.occupancy_mask,
+        origin="lower",
+        extent=extent,
+        aspect="auto",
+        cmap="Greys",
+        alpha=0.35,
+    )
+
+    axis.imshow(
+        np.ma.masked_where(~estimate.filled_mask, estimate.filled_mask),
+        origin="lower",
+        extent=extent,
+        aspect="auto",
+        cmap="Oranges",
+        alpha=0.55,
+    )
+
+    axis.contour(
+        estimate.filled_mask.astype(np.float64),
+        levels=[0.5],
+        extent=extent,
+        origin="lower",
+        colors="firebrick",
+        linewidths=1.2,
+    )
+
+    if front_cross_section is not None:
+        axis.plot(
+            front_cross_section.bin_centres,
+            front_cross_section.top,
+            linewidth=1.0,
+            linestyle="--",
+            color="tab:blue",
+            label="Scanline top envelope",
+        )
+        axis.plot(
+            front_cross_section.bin_centres,
+            front_cross_section.base,
+            linewidth=1.0,
+            linestyle="--",
+            color="tab:green",
+            label="Scanline base envelope",
+        )
+        axis.legend()
+
+    axis.set_title("Projected gross face-area silhouette (raster)")
+    axis.set_xlabel("Longitudinal station u (source units)")
+    axis.set_ylabel("Elevation z (source units)")
+
+    axis.grid(
+        True,
+        alpha=0.2,
+    )
+
+    figure.tight_layout()
+
+    canvas.print_png(str(path))
+
+    return MeasurementArtifact(
+        kind="projected_face_raster_plot",
+        path=PROJECTED_FACE_RASTER_PLOT_FILENAME,
+        media_type="image/png",
+        description=(
+            "Raw occupancy evidence, retained principal component, and "
+            "filled gross silhouette for the projected face-area raster, "
+            "optionally overlaid with the scanline base/top envelopes."
         ),
     )
