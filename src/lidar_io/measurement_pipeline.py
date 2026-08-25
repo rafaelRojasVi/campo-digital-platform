@@ -25,6 +25,8 @@ import numpy as np
 from lidar_core.measurement_run import (
     derive_measurement_readiness,
     summarize_front_cross_section,
+    summarize_front_depth,
+    summarize_projected_face_raster,
     summarize_timber_stack,
 )
 from lidar_core.models import (
@@ -48,9 +50,13 @@ from lidar_io.inspect import inspect_las
 from lidar_io.las_rgb import extract_normalized_las_rgb
 from lidar_io.point_cloud_preview import write_timber_stack_preview_artifacts
 from lidar_io.run_artifacts import (
+    write_front_depth_artifact,
+    write_front_depth_plot_artifact,
     write_front_height_profile_plot_artifact,
     write_front_profile_artifact,
     write_front_profile_plot_artifact,
+    write_projected_face_raster_artifact,
+    write_projected_face_raster_plot_artifact,
     write_visible_log_end_analysis_artifact,
 )
 from lidar_io.run_store import write_measurement_run
@@ -58,6 +64,17 @@ from lidar_volume.front_cross_section import (
     FrontCrossSectionConfig,
     estimate_front_cross_section,
     extruded_volume,
+)
+from lidar_volume.front_depth import (
+    FrontDepthImageConfig,
+    FrontSide,
+    RecessionDetectionConfig,
+    detect_recessed_regions,
+    estimate_front_depth_image,
+)
+from lidar_volume.projected_face_raster import (
+    ProjectedFaceRasterConfig,
+    estimate_projected_face_raster,
 )
 
 
@@ -68,6 +85,10 @@ def run_timber_measurement(
     run_id: str | None = None,
     timber_config: TimberStackDetectionConfig | None = None,
     cross_section_config: FrontCrossSectionConfig | None = None,
+    projected_face_raster_config: ProjectedFaceRasterConfig | None = None,
+    front_depth_config: FrontDepthImageConfig | None = None,
+    recession_config: RecessionDetectionConfig | None = None,
+    front_side: FrontSide | None = None,
     code_version: str | None = None,
     pile_depth: float | None = None,
     depth_source: str | None = None,
@@ -141,6 +162,74 @@ def run_timber_measurement(
         config=resolved_cross_section_config,
     )
 
+    resolved_raster_config = (
+        projected_face_raster_config
+        if projected_face_raster_config is not None
+        else ProjectedFaceRasterConfig()
+    )
+
+    raster_started = perf_counter()
+
+    projected_face_raster_result = estimate_projected_face_raster(
+        timber_xyz,
+        cross_section_result.center_xy,
+        cross_section_result.longitudinal_axis,
+        config=resolved_raster_config,
+    )
+
+    raster_runtime_seconds = perf_counter() - raster_started
+
+    # Use the trapezoidal integration of the robust top/base envelopes as
+    # the independent scanline comparison. Joining those envelopes forms the
+    # same closed polygon whose area is represented by trapezoidal integration.
+    # This remains a comparison baseline, not ground truth.
+    scanline_area = cross_section_result.trapezoid_area
+    raster_area = projected_face_raster_result.area_source_units_squared
+
+    disagreement_denominator = 0.5 * (raster_area + scanline_area)
+
+    scanline_disagreement_fraction = (
+        abs(raster_area - scanline_area) / disagreement_denominator
+        if disagreement_denominator > 0
+        else None
+    )
+
+    resolved_front_depth_config = (
+        front_depth_config if front_depth_config is not None else FrontDepthImageConfig()
+    )
+
+    resolved_recession_config = (
+        recession_config if recession_config is not None else RecessionDetectionConfig()
+    )
+
+    front_depth_result = None
+    recession_result = None
+
+    front_depth_runtime_seconds = None
+    recession_runtime_seconds = None
+
+    if front_side is not None:
+        front_depth_started = perf_counter()
+
+        front_depth_result = estimate_front_depth_image(
+            timber_xyz,
+            cross_section_result.center_xy,
+            cross_section_result.longitudinal_axis,
+            front_side=front_side,
+            config=resolved_front_depth_config,
+        )
+
+        front_depth_runtime_seconds = perf_counter() - front_depth_started
+
+        recession_started = perf_counter()
+
+        recession_result = detect_recessed_regions(
+            front_depth_result,
+            resolved_recession_config,
+        )
+
+        recession_runtime_seconds = perf_counter() - recession_started
+
     volume_results: list[VolumeResult] = []
 
     if pile_depth is not None:
@@ -210,6 +299,21 @@ def run_timber_measurement(
         run_directory,
     )
 
+    projected_face_raster_artifact = write_projected_face_raster_artifact(
+        projected_face_raster_result,
+        run_directory,
+        config=resolved_raster_config,
+        runtime_seconds=raster_runtime_seconds,
+        scanline_trapezoid_area=scanline_area,
+        scanline_disagreement_fraction=scanline_disagreement_fraction,
+    )
+
+    projected_face_raster_plot_artifact = write_projected_face_raster_plot_artifact(
+        projected_face_raster_result,
+        run_directory,
+        front_cross_section=cross_section_result,
+    )
+
     (
         timber_stack_preview_artifact,
         timber_stack_preview_manifest_artifact,
@@ -223,9 +327,40 @@ def run_timber_measurement(
         front_profile_artifact,
         front_profile_plot_artifact,
         front_height_profile_plot_artifact,
+        projected_face_raster_artifact,
+        projected_face_raster_plot_artifact,
         timber_stack_preview_artifact,
         timber_stack_preview_manifest_artifact,
     ]
+
+    if (
+        front_depth_result is not None
+        and recession_result is not None
+        and front_depth_runtime_seconds is not None
+        and recession_runtime_seconds is not None
+    ):
+        front_depth_artifact = write_front_depth_artifact(
+            front_depth_result,
+            recession_result,
+            run_directory,
+            image_config=resolved_front_depth_config,
+            recession_config=resolved_recession_config,
+            front_depth_runtime_seconds=(front_depth_runtime_seconds),
+            recession_runtime_seconds=(recession_runtime_seconds),
+        )
+
+        front_depth_plot_artifact = write_front_depth_plot_artifact(
+            front_depth_result,
+            recession_result,
+            run_directory,
+        )
+
+        artifacts.extend(
+            [
+                front_depth_artifact,
+                front_depth_plot_artifact,
+            ]
+        )
 
     if normalized_rgb is not None:
         timber_rgb = normalized_rgb.rgb[timber_result.mask]
@@ -327,6 +462,23 @@ def run_timber_measurement(
         front_cross_section=summarize_front_cross_section(
             cross_section_result,
             config=resolved_cross_section_config,
+        ),
+        projected_face_raster=summarize_projected_face_raster(
+            projected_face_raster_result,
+            config=resolved_raster_config,
+            scanline_disagreement_fraction=scanline_disagreement_fraction,
+        ),
+        front_depth=(
+            summarize_front_depth(
+                front_depth_result,
+                recession_result,
+                image_config=resolved_front_depth_config,
+                recession_config=resolved_recession_config,
+                front_depth_runtime_seconds=(front_depth_runtime_seconds),
+                recession_runtime_seconds=(recession_runtime_seconds),
+            )
+            if (front_depth_result is not None and recession_result is not None)
+            else None
         ),
         results=volume_results,
         warnings=warnings,

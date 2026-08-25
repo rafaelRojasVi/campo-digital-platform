@@ -9,6 +9,7 @@ from lidar_core.log_ends_radial import (
 )
 from lidar_core.measurement_run import (
     summarize_front_cross_section,
+    summarize_projected_face_raster,
     summarize_radial_log_detection,
     summarize_timber_stack,
 )
@@ -19,6 +20,10 @@ from lidar_core.timber_stack import (
 from lidar_volume.front_cross_section import (
     FrontCrossSectionConfig,
     FrontCrossSectionEstimate,
+)
+from lidar_volume.projected_face_raster import (
+    ProjectedFaceRasterConfig,
+    estimate_projected_face_raster,
 )
 
 
@@ -106,6 +111,112 @@ def test_summarize_front_cross_section_uses_finite_height_statistics() -> None:
     assert summary.parameters["vertical_quantile_high"] == 0.95
 
 
+def test_summarize_front_depth_preserves_ranked_candidates() -> None:
+    from lidar_core.measurement_run import summarize_front_depth
+    from lidar_volume.front_depth import (
+        FrontDepthImageConfig,
+        RecessionDetectionConfig,
+        detect_recessed_regions,
+        estimate_front_depth_image,
+    )
+
+    points: list[tuple[float, float, float]] = []
+
+    for u in np.arange(0.05, 6.0, 0.10):
+        for z in np.arange(0.05, 3.0, 0.10):
+            cavity = 2.0 <= u <= 4.0 and 0.8 <= z <= 2.0
+
+            front_v = 0.8 if cavity else 0.0
+
+            for offset in (
+                0.000,
+                0.005,
+                0.010,
+                0.015,
+                0.020,
+            ):
+                points.append(
+                    (
+                        float(u),
+                        float(front_v + offset),
+                        float(z),
+                    )
+                )
+
+    xyz = np.asarray(
+        points,
+        dtype=np.float64,
+    )
+
+    image_config = FrontDepthImageConfig(
+        cell_size_u=0.10,
+        cell_size_z=0.10,
+        min_points_per_cell=3,
+        front_quantile=0.05,
+        u_quantile_low=0.0,
+        u_quantile_high=1.0,
+        z_quantile_low=0.0,
+        z_quantile_high=1.0,
+    )
+
+    recession_config = RecessionDetectionConfig(
+        surface_scale_u=2.5,
+        surface_scale_z=2.5,
+        recession_threshold=0.30,
+        min_candidate_cells=10,
+        connectivity=8,
+    )
+
+    image = estimate_front_depth_image(
+        xyz,
+        np.array(
+            [0.0, 0.0],
+            dtype=np.float64,
+        ),
+        np.array(
+            [1.0, 0.0],
+            dtype=np.float64,
+        ),
+        front_side="low_v",
+        config=image_config,
+    )
+
+    recession = detect_recessed_regions(
+        image,
+        recession_config,
+    )
+
+    summary = summarize_front_depth(
+        image,
+        recession,
+        image_config=image_config,
+        recession_config=recession_config,
+        front_depth_runtime_seconds=0.12,
+        recession_runtime_seconds=0.03,
+    )
+
+    assert summary.front_side == "low_v"
+    assert summary.projected_point_count > 0
+    assert summary.valid_cell_count > 0
+
+    assert summary.candidate_count >= 1
+    assert len(summary.regions) == summary.candidate_count
+
+    strongest = summary.regions[0]
+
+    assert strongest.rank == 1
+    assert strongest.median_recession_source_units > 0.70
+    assert strongest.u_min < 3.0 < strongest.u_max
+    assert strongest.z_min < 1.4 < strongest.z_max
+
+    assert summary.front_depth_runtime_seconds == 0.12
+    assert summary.recession_runtime_seconds == 0.03
+
+    assert summary.parameters["front_depth"]["cell_size_u"] == 0.10
+
+    assert summary.parameters["recession"]["recession_threshold"] == 0.30
+
+
 def test_summarize_radial_log_detection_records_runtime_counts() -> None:
     candidates = (
         RadialLogEndCandidate(
@@ -151,3 +262,54 @@ def test_summarize_radial_log_detection_records_runtime_counts() -> None:
     assert summary.parameters["min_radius_px"] == 5
     assert summary.parameters["max_radius_px"] == 10
     assert summary.parameters["max_candidates"] == 200
+
+
+def _simple_raster_result():
+    u_values = np.linspace(0.0, 4.0, 41)
+    z_values = np.linspace(0.0, 2.0, 21)
+    uu, zz = np.meshgrid(u_values, z_values)
+    xyz = np.column_stack((uu.ravel(), np.zeros(uu.size), zz.ravel()))
+
+    config = ProjectedFaceRasterConfig(
+        cell_size_u=0.5,
+        cell_size_z=0.5,
+        min_points_per_cell=1,
+        min_component_cells=1,
+        closing_iterations=0,
+    )
+
+    result = estimate_projected_face_raster(
+        xyz,
+        np.array([0.0, 0.0]),
+        np.array([1.0, 0.0]),
+        config,
+    )
+
+    return result, config
+
+
+def test_summarize_projected_face_raster_carries_scalars_only() -> None:
+    result, config = _simple_raster_result()
+
+    summary = summarize_projected_face_raster(
+        result,
+        config=config,
+        scanline_disagreement_fraction=0.05,
+    )
+
+    assert summary.area_source_units_squared == result.area_source_units_squared
+    assert summary.cell_size_u == config.cell_size_u
+    assert summary.cell_size_z == config.cell_size_z
+    assert summary.raster_rows == result.raster_rows
+    assert summary.raster_cols == result.raster_cols
+    assert summary.filled_cell_count == result.filled_cell_count
+    assert summary.scanline_disagreement_fraction == 0.05
+    assert summary.parameters["cell_size_u"] == config.cell_size_u
+
+
+def test_summarize_projected_face_raster_defaults_disagreement_to_none() -> None:
+    result, config = _simple_raster_result()
+
+    summary = summarize_projected_face_raster(result, config=config)
+
+    assert summary.scanline_disagreement_fraction is None

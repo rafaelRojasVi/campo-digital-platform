@@ -427,6 +427,109 @@ class FrontCrossSectionSummary(BaseModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
 
 
+class ProjectedFaceRasterSummary(BaseModel):
+    """Experimental projected-face raster diagnostics in source units.
+
+    The raster area is a candidate estimator used for topology, visual QC,
+    and cross-method comparison. It is not an authoritative physical area,
+    is not reference-validated, and does not participate in volume results.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    area_source_units_squared: float
+
+    cell_size_u: float
+    cell_size_z: float
+
+    raster_rows: int
+    raster_cols: int
+
+    u_min: float
+    u_max: float
+    z_min: float
+    z_max: float
+
+    projected_point_count: int
+
+    raw_occupied_cell_count: int
+    denoised_occupied_cell_count: int
+    retained_component_cell_count: int
+    filled_cell_count: int
+    component_count: int
+
+    scanline_disagreement_fraction: float | None = None
+
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class RecessedRegionSummary(BaseModel):
+    """One experimental recessed/front-visibility region."""
+
+    model_config = ConfigDict(frozen=True)
+
+    rank: int
+    cell_count: int
+
+    area_source_units_squared: float
+
+    median_recession_source_units: float
+    max_recession_source_units: float
+
+    recession_score_source_units_cubed: float
+
+    u_min: float
+    u_max: float
+    z_min: float
+    z_max: float
+
+    u_centroid: float
+    z_centroid: float
+
+
+class FrontDepthSummary(BaseModel):
+    """Experimental front-depth and recession diagnostics.
+
+    This preserves transverse-depth evidence long enough to distinguish
+    front-facing timber from geometry observed farther behind the visible
+    face.
+
+    It is not an authoritative area estimator, does not subtract regions
+    from the measured face, and does not participate in volume or readiness.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    front_side: str
+
+    cell_size_u: float
+    cell_size_z: float
+
+    raster_rows: int
+    raster_cols: int
+
+    u_min: float
+    u_max: float
+    z_min: float
+    z_max: float
+
+    projected_point_count: int
+    valid_cell_count: int
+
+    surface_scale_u: float
+    surface_scale_z: float
+    recession_threshold_source_units: float
+
+    candidate_count: int
+
+    front_depth_runtime_seconds: float | None = None
+    recession_runtime_seconds: float | None = None
+
+    regions: list[RecessedRegionSummary] = Field(default_factory=list)
+
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
 class LogDetectionSummary(BaseModel):
     """Runtime summary for one visible-log detection pass."""
 
@@ -487,6 +590,8 @@ class MeasurementRun(BaseModel):
 
     timber_stack: TimberStackSummary | None = None
     front_cross_section: FrontCrossSectionSummary | None = None
+    projected_face_raster: ProjectedFaceRasterSummary | None = None
+    front_depth: FrontDepthSummary | None = None
     log_detection: LogDetectionSummary | None = None
 
     results: list[VolumeResult] = Field(default_factory=list)
