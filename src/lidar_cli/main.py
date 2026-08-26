@@ -31,15 +31,25 @@ from lidar_io.analyze import analyze_las
 from lidar_io.comparison_store import write_comparison_record
 from lidar_io.dataset_robustness import build_dataset_robustness_matrix
 from lidar_io.dataset_robustness_store import write_dataset_robustness_matrix
+from lidar_io.face_estimator_benchmark_pipeline import (
+    run_face_estimator_benchmark_from_las,
+)
 from lidar_io.inspect import inspect_las
 from lidar_io.measurement_pipeline import run_timber_measurement
 from lidar_io.run_store import read_measurement_run
+from lidar_volume.face_estimator_benchmark import (
+    HISTORICAL_METHODS,
+    EstimatorNotAvailableError,
+    default_estimator_registry,
+)
+from lidar_volume.face_estimators import ConcaveHullConfig, ConcaveHullContourEstimator
 from lidar_volume.front_cross_section import (
     FrontCrossSectionConfig,
     estimate_front_cross_section,
     extruded_volume,
 )
 from lidar_volume.front_depth import FrontSide
+from lidar_volume.projected_face_raster import ProjectedFaceRasterConfig
 
 app = typer.Typer(add_completion=False, help="Campo Digital LiDAR engineering CLI.")
 console = Console()
@@ -1309,6 +1319,496 @@ def compare(
     )
 
     console.print(table)
+
+
+@app.command("benchmark-face-estimators")
+def benchmark_face_estimators(
+    input_path: Annotated[
+        Path | None,
+        typer.Argument(
+            help=(
+                "Path to a LAS/LAZ candidate region containing the timber "
+                "stack. Not required with --list-methods."
+            ),
+        ),
+    ] = None,
+    output_root: Annotated[
+        Path,
+        typer.Option(
+            "--output-root",
+            help="Root directory for persisted benchmark artifacts.",
+        ),
+    ] = Path("reports/out"),
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Optional explicit run identifier.",
+        ),
+    ] = None,
+    code_version: Annotated[
+        str | None,
+        typer.Option(
+            "--code-version",
+            help="Optional code/version identifier recorded in run provenance.",
+        ),
+    ] = None,
+    input_already_isolated: Annotated[
+        bool,
+        typer.Option(
+            "--input-already-isolated",
+            help=(
+                "Treat the complete input cloud as an already-isolated timber "
+                "measurement region and bypass automatic pile localization."
+            ),
+        ),
+    ] = False,
+    method: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--method",
+            help=(
+                "Restrict the benchmark to one or more estimator method "
+                "names (repeatable). Defaults to every Phase-1 runnable "
+                "method. See --list-methods for available names."
+            ),
+        ),
+    ] = None,
+    front_side: Annotated[
+        str | None,
+        typer.Option(
+            "--front-side",
+            help="Also build front-depth/recession evidence. Expected value: low_v or high_v.",
+        ),
+    ] = None,
+    concave_hull_ratio: Annotated[
+        float,
+        typer.Option(
+            "--concave-hull-ratio",
+            help=(
+                "Hull-tightness ratio for the concave_hull estimator. "
+                "Default follows EXP-007's low-ratio stability sweep; it is "
+                "not claimed to be correct for any given pile."
+            ),
+        ),
+    ] = 0.01,
+    raster_cell_size_u: Annotated[
+        float | None,
+        typer.Option(
+            "--raster-cell-size-u",
+            help=(
+                "Raster cell size along u (source units) for raster_filled/"
+                "concave_hull. Defaults to ProjectedFaceRasterConfig's own "
+                "default (0.05) when not supplied. EXP-007's sensitivity "
+                "sweep used 0.020/0.050/0.075/0.100/0.150."
+            ),
+        ),
+    ] = None,
+    raster_cell_size_z: Annotated[
+        float | None,
+        typer.Option(
+            "--raster-cell-size-z",
+            help="Raster cell size along z (source units). See --raster-cell-size-u.",
+        ),
+    ] = None,
+    raster_min_points_per_cell: Annotated[
+        int | None,
+        typer.Option(
+            "--raster-min-points-per-cell",
+            help=(
+                "Minimum points for a raster cell to count as occupied. "
+                "EXP-007's sensitivity sweep used 1, 2, and 3."
+            ),
+        ),
+    ] = None,
+    raster_connectivity: Annotated[
+        int | None,
+        typer.Option(
+            "--raster-connectivity",
+            help="Raster connected-component connectivity: 4 or 8.",
+        ),
+    ] = None,
+    raster_min_component_cells: Annotated[
+        int | None,
+        typer.Option(
+            "--raster-min-component-cells",
+            help="Minimum cell count for a raster connected component to be retained.",
+        ),
+    ] = None,
+    raster_closing_iterations: Annotated[
+        int | None,
+        typer.Option(
+            "--raster-closing-iterations",
+            help="Binary-closing iterations applied to the raster before hole filling.",
+        ),
+    ] = None,
+    raster_u_quantile_low: Annotated[
+        float | None,
+        typer.Option(
+            "--raster-u-quantile-low",
+            help=(
+                "Lower u quantile trim for the raster (0.0-1.0). EXP-008's "
+                "default is untrimmed (0.0); EXP-007's matching-u-trim sweep "
+                "used 0.01."
+            ),
+        ),
+    ] = None,
+    raster_u_quantile_high: Annotated[
+        float | None,
+        typer.Option(
+            "--raster-u-quantile-high",
+            help="Upper u quantile trim for the raster (0.0-1.0). See --raster-u-quantile-low.",
+        ),
+    ] = None,
+    raster_z_quantile_low: Annotated[
+        float | None,
+        typer.Option(
+            "--raster-z-quantile-low",
+            help="Lower z quantile trim for the raster (0.0-1.0).",
+        ),
+    ] = None,
+    raster_z_quantile_high: Annotated[
+        float | None,
+        typer.Option(
+            "--raster-z-quantile-high",
+            help="Upper z quantile trim for the raster (0.0-1.0).",
+        ),
+    ] = None,
+    reference_face_area: Annotated[
+        float | None,
+        typer.Option(
+            "--reference-face-area",
+            help="Optional explicit reference area for the same timber-stack face.",
+        ),
+    ] = None,
+    reference_face_area_unit: Annotated[
+        str | None,
+        typer.Option(
+            "--reference-face-area-unit",
+            help=("Reference face-area unit: source_units_squared or square_metres."),
+        ),
+    ] = None,
+    reference_face_area_method: Annotated[
+        str | None,
+        typer.Option(
+            "--reference-face-area-method",
+            help=(
+                "Method/provenance for the reference face area, for example "
+                "lidar360_manual_polygon."
+            ),
+        ),
+    ] = None,
+    reference_face_area_label: Annotated[
+        str,
+        typer.Option(
+            "--reference-face-area-label",
+            help="Human-readable label for the face-area reference.",
+        ),
+    ] = "reference",
+    reference_face_area_source: Annotated[
+        str | None,
+        typer.Option(
+            "--reference-face-area-source",
+            help="Optional organization/person/source for the reference.",
+        ),
+    ] = None,
+    reference_face_area_notes: Annotated[
+        str | None,
+        typer.Option(
+            "--reference-face-area-notes",
+            help="Optional notes about the face-area reference.",
+        ),
+    ] = None,
+    same_pile_reference: Annotated[
+        bool,
+        typer.Option(
+            "--same-pile-reference",
+            help=("Explicitly confirm that the supplied reference describes the same timber pile."),
+        ),
+    ] = False,
+    list_methods: Annotated[
+        bool,
+        typer.Option(
+            "--list-methods",
+            help="List available and historical estimator method names, then exit.",
+        ),
+    ] = False,
+) -> None:
+    """Run the shared face-boundary estimator benchmark on one LAS/LAZ file.
+
+    Builds the common projected evidence (local face frame, projected
+    raster) once and runs every requested estimator against it, reporting
+    estimator disagreement, parameter sensitivity, and runtime -- not
+    "accuracy" or a declared winner, unless a confirmed same-pile reference
+    is supplied via --reference-face-area.
+    """
+
+    if list_methods:
+        table = Table(title="Face Estimator Methods")
+        table.add_column("Method")
+        table.add_column("Status")
+        table.add_column("Notes")
+
+        for name in sorted(default_estimator_registry()):
+            table.add_row(name, "runnable", "")
+
+        for name, note in HISTORICAL_METHODS.items():
+            table.add_row(name, "historical (not implemented)", note)
+
+        console.print(table)
+        return
+
+    if input_path is None:
+        console.print(
+            "[red]Error:[/red] an input LAS/LAZ path is required (or pass --list-methods)"
+        )
+        raise typer.Exit(code=1)
+
+    if not input_path.is_file():
+        console.print(f"[red]Error:[/red] LAS/LAZ file not found: {input_path}")
+        raise typer.Exit(code=1)
+
+    resolved_front_side: FrontSide | None = None
+
+    if front_side is not None:
+        if front_side not in {"low_v", "high_v"}:
+            console.print(
+                "[red]Error:[/red] invalid --front-side "
+                f"'{front_side}'. Expected one of: low_v, high_v"
+            )
+            raise typer.Exit(code=1)
+
+        resolved_front_side = cast(
+            FrontSide,
+            front_side,
+        )
+
+    reference_metadata_supplied = (
+        any(
+            value is not None
+            for value in (
+                reference_face_area_unit,
+                reference_face_area_method,
+                reference_face_area_source,
+                reference_face_area_notes,
+            )
+        )
+        or same_pile_reference
+    )
+
+    if reference_face_area is None and reference_metadata_supplied:
+        console.print("[red]Error:[/red] face-area reference options require --reference-face-area")
+        raise typer.Exit(code=1)
+
+    face_area_reference = None
+
+    if reference_face_area is not None:
+        if reference_face_area_unit is None:
+            console.print(
+                "[red]Error:[/red] --reference-face-area-unit is required "
+                "when --reference-face-area is supplied"
+            )
+            raise typer.Exit(code=1)
+
+        if reference_face_area_method is None or not reference_face_area_method.strip():
+            console.print(
+                "[red]Error:[/red] --reference-face-area-method is required "
+                "when --reference-face-area is supplied"
+            )
+            raise typer.Exit(code=1)
+
+        try:
+            face_area_unit = FaceAreaUnit(reference_face_area_unit)
+        except ValueError as exc:
+            allowed = ", ".join(unit.value for unit in FaceAreaUnit)
+            console.print(
+                "[red]Error:[/red] invalid --reference-face-area-unit "
+                f"'{reference_face_area_unit}'. Expected one of: {allowed}"
+            )
+            raise typer.Exit(code=1) from exc
+
+        try:
+            face_area_reference = FaceAreaReference(
+                label=reference_face_area_label,
+                value=reference_face_area,
+                unit=face_area_unit,
+                method=reference_face_area_method.strip(),
+                source=reference_face_area_source,
+                same_pile_confirmed=same_pile_reference,
+                notes=reference_face_area_notes,
+            )
+        except ValueError as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+
+    estimators = default_estimator_registry()
+    estimators[ConcaveHullContourEstimator.method_name] = ConcaveHullContourEstimator(
+        ConcaveHullConfig(ratio=concave_hull_ratio)
+    )
+
+    # Only override the fields the caller actually supplied; everything else
+    # keeps ProjectedFaceRasterConfig's own defaults, and any invalid
+    # combination fails through that dataclass's existing validation inside
+    # estimate_projected_face_raster -- not a second, separate CLI check.
+    default_raster_config = ProjectedFaceRasterConfig()
+
+    raster_config = ProjectedFaceRasterConfig(
+        cell_size_u=(
+            raster_cell_size_u
+            if raster_cell_size_u is not None
+            else default_raster_config.cell_size_u
+        ),
+        cell_size_z=(
+            raster_cell_size_z
+            if raster_cell_size_z is not None
+            else default_raster_config.cell_size_z
+        ),
+        min_points_per_cell=(
+            raster_min_points_per_cell
+            if raster_min_points_per_cell is not None
+            else default_raster_config.min_points_per_cell
+        ),
+        connectivity=(
+            raster_connectivity
+            if raster_connectivity is not None
+            else default_raster_config.connectivity
+        ),
+        min_component_cells=(
+            raster_min_component_cells
+            if raster_min_component_cells is not None
+            else default_raster_config.min_component_cells
+        ),
+        closing_iterations=(
+            raster_closing_iterations
+            if raster_closing_iterations is not None
+            else default_raster_config.closing_iterations
+        ),
+        u_quantile_low=(
+            raster_u_quantile_low
+            if raster_u_quantile_low is not None
+            else default_raster_config.u_quantile_low
+        ),
+        u_quantile_high=(
+            raster_u_quantile_high
+            if raster_u_quantile_high is not None
+            else default_raster_config.u_quantile_high
+        ),
+        z_quantile_low=(
+            raster_z_quantile_low
+            if raster_z_quantile_low is not None
+            else default_raster_config.z_quantile_low
+        ),
+        z_quantile_high=(
+            raster_z_quantile_high
+            if raster_z_quantile_high is not None
+            else default_raster_config.z_quantile_high
+        ),
+    )
+
+    try:
+        result, benchmark_path, summary_path = run_face_estimator_benchmark_from_las(
+            input_path,
+            output_root,
+            run_id=run_id,
+            code_version=code_version,
+            input_already_isolated=input_already_isolated,
+            method_names=method,
+            estimators=estimators,
+            raster_config=raster_config,
+            front_side=resolved_front_side,
+            face_area_reference=face_area_reference,
+        )
+    except (ValueError, EstimatorNotAvailableError) as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(
+        "Raster config: "
+        f"cell_size=({raster_config.cell_size_u}, {raster_config.cell_size_z}) "
+        f"min_points_per_cell={raster_config.min_points_per_cell} "
+        f"connectivity={raster_config.connectivity} "
+        f"u_quantile=({raster_config.u_quantile_low}, {raster_config.u_quantile_high}) "
+        f"z_quantile=({raster_config.z_quantile_low}, {raster_config.z_quantile_high})"
+    )
+    console.print()
+
+    table = Table(title=f"Face Estimator Benchmark: {benchmark_path.parent.name}")
+    table.add_column("Method")
+    table.add_column("Area (source-units²)")
+    table.add_column("Perimeter")
+    table.add_column("Vertices")
+    table.add_column("Parts")
+    table.add_column("Runtime (ms)")
+
+    for outcome in result.outcomes:
+        contour = outcome.contour
+        polygon = contour.polygon
+
+        table.add_row(
+            contour.method_name,
+            f"{polygon.area_source_units_squared:.6f}",
+            f"{polygon.perimeter_source_units:.6f}",
+            str(polygon.vertex_count),
+            str(polygon.part_count),
+            f"{contour.runtime_seconds * 1000.0:.3f}",
+        )
+
+    console.print(table)
+
+    if result.pairwise_disagreement:
+        console.print()
+        disagreement_table = Table(title="Pairwise Disagreement")
+        disagreement_table.add_column("Method A")
+        disagreement_table.add_column("Method B")
+        disagreement_table.add_column("Symmetric relative difference")
+
+        for (method_a, method_b), value in result.pairwise_disagreement.items():
+            disagreement_table.add_row(
+                method_a,
+                method_b,
+                f"{value:.3%}",
+            )
+
+        console.print(disagreement_table)
+
+    reference_outcomes = [
+        outcome for outcome in result.outcomes if outcome.reference_comparison is not None
+    ]
+
+    if reference_outcomes:
+        console.print()
+        reference_table = Table(title="Reference Comparison")
+        reference_table.add_column("Method")
+        reference_table.add_column("Status")
+        reference_table.add_column("Absolute % error")
+
+        for outcome in reference_outcomes:
+            comparison = outcome.reference_comparison
+            assert comparison is not None
+
+            if comparison.comparison_ready:
+                status = "compared"
+                error = f"{comparison.absolute_percent_error:.3f}%"
+            else:
+                status = ", ".join(comparison.blocker_codes)
+                error = "—"
+
+            reference_table.add_row(
+                outcome.contour.method_name,
+                status,
+                error,
+            )
+
+        console.print(reference_table)
+
+    console.print()
+    console.print(f"Benchmark JSON: {benchmark_path}")
+    console.print(f"Summary CSV: {summary_path}")
+    console.print(
+        "[yellow]Note:[/yellow] these are estimator outcomes and disagreement, "
+        "not accuracy claims, unless a confirmed same-pile reference made a "
+        "comparison ready above."
+    )
 
 
 if __name__ == "__main__":

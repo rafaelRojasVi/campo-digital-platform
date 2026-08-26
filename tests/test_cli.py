@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+
+import pytest
 from typer.testing import CliRunner
 
 from lidar_cli.main import app
@@ -914,3 +917,234 @@ def test_measure_command_rejects_invalid_front_side(
     assert "invalid --front-side" in result.output
     assert "low_v" in result.output
     assert "high_v" in result.output
+
+
+def test_benchmark_face_estimators_list_methods():
+    result = runner.invoke(
+        app,
+        [
+            "benchmark-face-estimators",
+            "--list-methods",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "scanline_envelope" in result.output
+    assert "raster_filled" in result.output
+    assert "concave_hull" in result.output
+    assert "marching_squares" in result.output
+    assert "historical" in result.output
+
+
+def test_benchmark_face_estimators_missing_file():
+    result = runner.invoke(
+        app,
+        [
+            "benchmark-face-estimators",
+            "/nonexistent/candidate.las",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "file not found" in result.output.lower()
+
+
+def test_benchmark_face_estimators_requires_path_without_list_methods():
+    result = runner.invoke(
+        app,
+        [
+            "benchmark-face-estimators",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "input" in result.output.lower()
+
+
+def test_benchmark_face_estimators_persists_artifacts(tmp_path):
+    source = tmp_path / "candidate.las"
+    _write_synthetic_front_wall(source)
+
+    output_root = tmp_path / "reports"
+
+    result = runner.invoke(
+        app,
+        [
+            "benchmark-face-estimators",
+            str(source),
+            "--output-root",
+            str(output_root),
+            "--run-id",
+            "cli-benchmark-run",
+            "--input-already-isolated",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "scanline_envelope" in result.output
+    assert "raster_filled" in result.output
+    assert "concave_hull" in result.output
+    assert "Pairwise Disagreement" in result.output
+    assert "not accuracy claims" in result.output
+
+    run_directory = output_root / "estimator-benchmark" / "cli-benchmark-run"
+
+    assert (run_directory / "benchmark.json").exists()
+    assert (run_directory / "summary.csv").exists()
+
+
+def test_benchmark_face_estimators_rejects_historical_method(tmp_path):
+    source = tmp_path / "candidate.las"
+    _write_synthetic_front_wall(source)
+
+    result = runner.invoke(
+        app,
+        [
+            "benchmark-face-estimators",
+            str(source),
+            "--output-root",
+            str(tmp_path / "reports"),
+            "--input-already-isolated",
+            "--method",
+            "marching_squares",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "EXP-007" in result.output
+
+
+def test_benchmark_face_estimators_with_reference_reports_comparison(tmp_path):
+    source = tmp_path / "candidate.las"
+    _write_synthetic_front_wall(source)
+
+    result = runner.invoke(
+        app,
+        [
+            "benchmark-face-estimators",
+            str(source),
+            "--output-root",
+            str(tmp_path / "reports"),
+            "--input-already-isolated",
+            "--method",
+            "scanline_envelope",
+            "--reference-face-area",
+            "40.0",
+            "--reference-face-area-unit",
+            "source_units_squared",
+            "--reference-face-area-method",
+            "manual_polygon",
+            "--same-pile-reference",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Reference Comparison" in result.output
+    assert "compared" in result.output
+
+
+def test_benchmark_face_estimators_concave_hull_ratio_reaches_the_run(tmp_path):
+    # Regression test for a bug where the CLI built a custom estimator
+    # registry (to apply --concave-hull-ratio) but never passed it to the
+    # underlying pipeline, so the option silently had no effect.
+    source = tmp_path / "candidate.las"
+    _write_synthetic_front_wall(source)
+
+    output_root = tmp_path / "reports"
+
+    result = runner.invoke(
+        app,
+        [
+            "benchmark-face-estimators",
+            str(source),
+            "--output-root",
+            str(output_root),
+            "--run-id",
+            "cli-ratio-run",
+            "--input-already-isolated",
+            "--method",
+            "concave_hull",
+            "--concave-hull-ratio",
+            "0.37",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+
+    payload = json.loads(
+        (output_root / "estimator-benchmark" / "cli-ratio-run" / "benchmark.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert payload["outcomes"][0]["parameters"]["ratio"] == pytest.approx(0.37)
+
+
+def test_benchmark_face_estimators_raster_config_options_reach_the_run(tmp_path):
+    source = tmp_path / "candidate.las"
+    _write_synthetic_front_wall(source)
+
+    output_root = tmp_path / "reports"
+
+    result = runner.invoke(
+        app,
+        [
+            "benchmark-face-estimators",
+            str(source),
+            "--output-root",
+            str(output_root),
+            "--run-id",
+            "cli-raster-config-run",
+            "--input-already-isolated",
+            "--method",
+            "raster_filled",
+            "--raster-cell-size-u",
+            "0.02",
+            "--raster-cell-size-z",
+            "0.02",
+            "--raster-min-points-per-cell",
+            "2",
+            "--raster-u-quantile-low",
+            "0.01",
+            "--raster-u-quantile-high",
+            "0.99",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Raster config" in result.output
+    assert "cell_size=(0.02, 0.02)" in result.output
+
+    payload = json.loads(
+        (
+            output_root / "estimator-benchmark" / "cli-raster-config-run" / "benchmark.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    raster_config = payload["input_identity"]["raster_config"]
+    assert raster_config["cell_size_u"] == pytest.approx(0.02)
+    assert raster_config["cell_size_z"] == pytest.approx(0.02)
+    assert raster_config["min_points_per_cell"] == 2
+    assert raster_config["u_quantile_low"] == pytest.approx(0.01)
+    assert raster_config["u_quantile_high"] == pytest.approx(0.99)
+
+
+def test_benchmark_face_estimators_rejects_invalid_raster_config(tmp_path):
+    source = tmp_path / "candidate.las"
+    _write_synthetic_front_wall(source)
+
+    result = runner.invoke(
+        app,
+        [
+            "benchmark-face-estimators",
+            str(source),
+            "--output-root",
+            str(tmp_path / "reports"),
+            "--input-already-isolated",
+            "--raster-cell-size-u",
+            "-1.0",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "cell_size_u" in result.output

@@ -63,15 +63,18 @@ specific algorithm:
    for a purely geometric method, the raw evidence) into an external
    boundary — today's scanline estimator, raster+connected-components,
    marching squares, or a concave-hull family — implements one interface
-   that returns a closed polygon in the local `(u, z)` frame. This is
-   separate from the mask interface so that, for example, a geometry-only
-   contour method can be evaluated against an ML-refined mask, and vice
-   versa, without a combinatorial rewrite.
+   that returns a closed **polygonal geometry** (a single polygon, or a
+   `MultiPolygon` — see the implementation note below) in the local `(u, z)`
+   frame. This is separate from the mask interface so that, for example, a
+   geometry-only contour method can be evaluated against an ML-refined mask,
+   and vice versa, without a combinatorial rewrite.
 
-4. **Common polygon measurement.** Exactly one function computes area (and
-   any boundary-similarity metric) from a closed `(u, z)` polygon, shared by
-   every estimator combination. Area is never computed ad hoc inside a mask
-   or contour implementation.
+4. **Common polygon measurement.** Exactly one function computes area,
+   perimeter (and any future boundary-similarity metric) from a closed `(u,
+   z)` polygonal geometry, shared by every estimator combination. Area is
+   never computed ad hoc inside a mask or contour implementation, and a
+   multi-part result is never bridged or reduced to a single part merely to
+   force a plain polygon.
 
 5. **Common reference-comparison / benchmark framework.** Every estimator
    combination's polygon is scored through the existing
@@ -86,6 +89,36 @@ Mirroring the existing `VolumeEstimator` precedent: each concrete estimator
 declares a `method_name`, and a shared wrapper handles timing and
 provenance, so every tournament/ablation row in
 [`roadmap.md`](../roadmap.md) Phases 1 and 4 is directly comparable.
+
+### Implementation note (2026-08-26): "closed polygon" means polygonal geometry
+
+[EXP-009](../experiments/EXP-009-shared-estimator-benchmark-infrastructure.md)'s
+real-data run of this architecture found that layers 3-4's "closed polygon"
+cannot always be a single simple `Polygon` in practice.
+`estimate_projected_face_raster` labels raster connected components with
+8-connectivity (two cells touching only at a corner count as one component),
+but two unit-cell squares that touch only at a corner do not share a union
+boundary and cannot be represented as one simple `Polygon`. On the real
+frozen pile, the raster mask-to-contour path produced 24 such parts.
+
+The contour-estimator and polygon-measurement layers therefore accept
+**polygonal geometry** — a single `Polygon` or a `MultiPolygon` — not only a
+single simple polygon. `src/lidar_volume/face_boundary.PolygonalMeasurement`
+always sums area/perimeter across every part (matching the raster kernel's
+own cell-counting semantics) and never silently keeps only the largest part
+or bridges parts with a buffer/morphological operation, since either would
+change the measured area for no geometric reason. `part_count` makes the
+number of parts explicit and is persisted in `benchmark.json`/`summary.csv`.
+
+This does not weaken the "one external contour" intent for estimators whose
+method is mathematically guaranteed to produce a single ring (the scanline
+envelope; `concave_hull`, which shapely defines to always return one
+`Polygon`): both call `PolygonalMeasurement.require_single_part()` and would
+raise rather than silently accept a surprise multi-part result. Only
+raster-derived QA/support geometry (`raster_filled`) is allowed to
+legitimately report `part_count > 1`.
+
+No other part of this decision changed.
 
 ## Rationale
 
@@ -171,6 +204,9 @@ individual layers (mask source, contour method) independently.
 - [`research/2026-08-26-hybrid-face-measurement.md`](../research/2026-08-26-hybrid-face-measurement.md)
   — the external research note motivating the future ML layers.
 - [`roadmap.md`](../roadmap.md) — the phase sequence this contract supports.
+- [EXP-009](../experiments/EXP-009-shared-estimator-benchmark-infrastructure.md)
+  — this ADR's implementation, and its first real-data reproducibility check
+  against EXP-006/007/008.
 
 ## Future reconsideration
 
