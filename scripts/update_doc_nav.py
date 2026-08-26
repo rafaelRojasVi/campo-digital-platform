@@ -5,14 +5,15 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCS = ROOT / "docs"
+LIDAR_ROOT = ROOT / "products" / "lidar"
+DOCS = LIDAR_ROOT / "docs"
 SPANISH_DOCS = DOCS / "es"
 
 START_MARKER = "<!-- DOC_NAV_START -->"
 END_MARKER = "<!-- DOC_NAV_END -->"
 
 TARGETS_EN = {
-    "Project README": ROOT / "README.md",
+    "LiDAR README": LIDAR_ROOT / "README.md",
     "Docs index": DOCS / "README.md",
     "Findings": DOCS / "findings" / "cubicacion_accuracy_problem.md",
     "Experiments": DOCS / "experiments",
@@ -23,7 +24,7 @@ TARGETS_EN = {
 }
 
 TARGETS_ES = {
-    "README del proyecto": ROOT / "README.md",
+    "README LiDAR": LIDAR_ROOT / "README.md",
     "Índice de documentación": DOCS / "README.md",
     "Hallazgos": DOCS / "findings" / "cubicacion_accuracy_problem.md",
     "Experimentos": DOCS / "experiments",

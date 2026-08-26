@@ -1,16 +1,34 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 
-MARKDOWN_FILES = [
-    ROOT / "README.md",
-    *sorted((ROOT / "docs").rglob("*.md")),
-]
+result = subprocess.run(
+    [
+        "git",
+        "ls-files",
+        "-co",
+        "--exclude-standard",
+        "-z",
+        "--",
+        "*.md",
+    ],
+    cwd=ROOT,
+    check=True,
+    capture_output=True,
+)
+
+MARKDOWN_FILES = sorted(
+    ROOT / relative_path
+    for raw_path in result.stdout.decode("utf-8").split("\0")
+    if raw_path
+    for relative_path in [Path(raw_path)]
+)
 
 LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 

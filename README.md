@@ -23,10 +23,10 @@ product.
 
 See:
 
-- `docs/projects/lidar/`
-- `docs/roadmap.md`
-- `docs/experiments/`
-- `docs/decisions/`
+- `products/lidar/`
+- `products/lidar/docs/roadmap.md`
+- `products/lidar/docs/experiments/`
+- `products/lidar/docs/decisions/`
 
 ### Gestión Predial Forestal / QGIS
 
@@ -142,6 +142,6 @@ Never commit:
 
 The LiDAR bounded-context entry point is:
 
-`docs/projects/lidar/README.md`
+`products/lidar/README.md`
 
 The original pre-monorepo repository state remains preserved in Git history at commit `423932c862c1a46bcc7b197c7529fe3b8635ad95`.
