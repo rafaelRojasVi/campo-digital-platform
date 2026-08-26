@@ -45,7 +45,7 @@ It does **not** attempt to prove which estimator is physically correct because n
 
 The experiments use the same manually isolated Campo Digital pile:
 
-`data/interim/v01_MG_23jun2026/timber_roi/timber_stack_manual_reference_v1.las`
+`products/lidar/data/interim/v01_MG_23jun2026/timber_roi/timber_stack_manual_reference_v1.las`
 
 Point count:
 

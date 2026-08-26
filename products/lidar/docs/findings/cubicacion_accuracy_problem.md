@@ -951,7 +951,7 @@ explicit ROI configuration
     ↓
 reproducible crop
     ↓
-data/interim/timber-stack ROI
+products/lidar/data/interim/timber-stack ROI
     ↓
 CloudCompare verification
 ~~~

@@ -26,7 +26,7 @@ If the visible timber wall is sufficiently coherent, a raster/silhouette method 
 Frozen manual-reference isolated region (already ignored client data, not committed):
 
 ```text
-data/interim/v01_MG_23jun2026/timber_roi/
+products/lidar/data/interim/v01_MG_23jun2026/timber_roi/
 timber_stack_manual_reference_v1.las
 
 1,577,128 points

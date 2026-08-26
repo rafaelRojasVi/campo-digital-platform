@@ -2,14 +2,14 @@
 
 **Date:** 2026-08-26 (extended same day with a config-reproducibility and concave-hull forensic pass)
 **Status:** Completed (infrastructure + local real-data reproducibility check, including a full EXP-007 sensitivity-sweep reproduction and a resolved concave-hull discrepancy). Not reference-validated.
-**Dataset:** Frozen manually isolated GS100G roadside timber-stack candidate (same file as EXP-008: `data/interim/v01_MG_23jun2026/timber_roi/timber_stack_manual_reference_v1.las`, local/gitignored, never committed)
+**Dataset:** Frozen manually isolated GS100G roadside timber-stack candidate (same file as EXP-008: `products/lidar/data/interim/v01_MG_23jun2026/timber_roi/timber_stack_manual_reference_v1.las`, local/gitignored, never committed)
 **Primary question:** Does the shared experiment architecture defined in ADR-004 (common projected evidence, mask/contour estimator interfaces, one polygon-measurement path, the existing reference-comparison gate) reproduce the geometry-tournament evidence already established in EXP-006/EXP-007/EXP-008 exactly, without duplicating localization/framing/projection logic per estimator?
 
 ---
 
 ## 1. Objective
 
-`docs/roadmap.md` Phase 1 and `docs/decisions/ADR-004-hybrid-measurement-experiment-architecture.md` require a shared benchmark architecture before any new geometry, 2D, or 3D estimator is added, so that future comparisons are apples-to-apples rather than each method computing its own evidence and its own area formula.
+`docs/roadmap.md` Phase 1 and `products/lidar/docs/decisions/ADR-004-hybrid-measurement-experiment-architecture.md` require a shared benchmark architecture before any new geometry, 2D, or 3D estimator is added, so that future comparisons are apples-to-apples rather than each method computing its own evidence and its own area formula.
 
 This experiment is the first real-data run of that new infrastructure (`products/lidar/src/lidar_volume/face_boundary.py`, `face_estimators.py`, `face_estimator_benchmark.py`, `products/lidar/src/lidar_io/face_estimator_benchmark_pipeline.py`, and the `lidar benchmark-face-estimators` CLI command). Its purpose is narrow: confirm the new code reproduces already-published EXP-006/007/008 numbers on the same frozen pile, and record what it revealed along the way.
 
@@ -34,7 +34,7 @@ Reproducibility command (local only; the input path is private/gitignored):
 
 ```bash
 uv run lidar benchmark-face-estimators \
-  data/interim/v01_MG_23jun2026/timber_roi/timber_stack_manual_reference_v1.las \
+  products/lidar/data/interim/v01_MG_23jun2026/timber_roi/timber_stack_manual_reference_v1.las \
   --output-root <local-output-dir> \
   --run-id exp009-local-check \
   --input-already-isolated

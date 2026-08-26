@@ -29,7 +29,7 @@ v01_MG_23jun2026.las
 Deterministic candidate ROI:
 
 ~~~text
-data/interim/v01_MG_23jun2026/timber_roi/
+products/lidar/data/interim/v01_MG_23jun2026/timber_roi/
 timber_stack_candidate_v1.las
 
 4,074,894 points

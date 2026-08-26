@@ -1,7 +1,7 @@
 """Competing face-boundary/contour estimators over one shared evidence bundle.
 
 This module implements layers 1-3 of the shared experiment architecture in
-docs/decisions/ADR-004-hybrid-measurement-experiment-architecture.md:
+products/lidar/docs/decisions/ADR-004-hybrid-measurement-experiment-architecture.md:
 
 1. ``ProjectedFaceEvidence`` -- the common projected evidence every estimator
    consumes. It is built once, upstream, from the already-established local
@@ -22,7 +22,7 @@ Layer 5 (benchmark/reference-comparison) lives in
 ``lidar_volume.face_estimator_benchmark``.
 
 Two Phase-1 candidates discussed in
-docs/experiments/EXP-007-gs100g-boundary-estimator-comparison.md --
+products/lidar/docs/experiments/EXP-007-gs100g-boundary-estimator-comparison.md --
 sub-cell marching-squares contouring and the density-supported vertical
 envelope -- are deliberately NOT implemented here. EXP-007 already found the
 former gives no demonstrated measurement benefit over raw raster area, and

@@ -34,6 +34,9 @@ Current structure:
     configs/
     pipelines/
     notebooks/
+    data/
+    reports/
+    scripts/
     docs/
 
 The shared FastAPI composition layer remains under:

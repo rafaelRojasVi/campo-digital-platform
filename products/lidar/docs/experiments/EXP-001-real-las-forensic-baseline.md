@@ -20,7 +20,7 @@ Dataset:
 v01_MG_23jun2026.las
 ~~~
 
-Private client data remains under `data/raw/` and is not committed.
+Private client data remains under `products/lidar/data/raw/` and is not committed.
 
 Known LAS SHA256:
 
@@ -43,7 +43,7 @@ The implementation computes observed XYZ bounds from actual point records and co
 
 ~~~bash
 uv run lidar inspect \
-  data/raw/v01_MG_23jun2026/v01_MG_23jun2026.las
+  products/lidar/data/raw/v01_MG_23jun2026/v01_MG_23jun2026.las
 ~~~
 
 ## Result

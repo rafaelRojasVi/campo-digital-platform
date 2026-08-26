@@ -9,13 +9,6 @@
 *.tif
 *.tiff
 *.zip
-data/raw/**
-data/interim/**
-data/reference/private/**
-!data/raw/.gitkeep
-!data/interim/.gitkeep
-!data/processed/.gitkeep
-!data/reference/.gitkeep
 
 # Python
 __pycache__/
@@ -46,13 +39,13 @@ htmlcov/
 .idea/
 
 # Generated measurement/report artifacts - may contain client-derived data
-reports/out/**
 
 # Local presentation assets — never commit client imagery
 
 # Product-first LiDAR private/generated data
 products/lidar/data/raw/**
 products/lidar/data/interim/**
+products/lidar/data/external/**
 products/lidar/data/reference/private/**
 !products/lidar/data/raw/.gitkeep
 !products/lidar/data/interim/.gitkeep

@@ -8,7 +8,7 @@ this module.
 
 No estimator computes its own area or perimeter formula. This is the
 "common polygon measurement" layer of the shared experiment architecture
-(see docs/decisions/ADR-004-hybrid-measurement-experiment-architecture.md).
+(see products/lidar/docs/decisions/ADR-004-hybrid-measurement-experiment-architecture.md).
 
 Polygon vs. polygonal geometry
 -------------------------------

@@ -7,7 +7,7 @@ prelocalized bypass) so a benchmark run's shared evidence is built exactly
 the way a real measurement run's evidence would be, but it produces its own
 ``FaceEstimatorBenchmarkResult`` artifact rather than a persisted
 ``MeasurementRun``. See
-docs/decisions/ADR-004-hybrid-measurement-experiment-architecture.md.
+products/lidar/docs/decisions/ADR-004-hybrid-measurement-experiment-architecture.md.
 
 Runtime is reported in three independent buckets so a slow benchmark run can
 be attributed correctly: LAS reading, pile localization, and shared

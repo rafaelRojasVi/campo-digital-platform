@@ -24,7 +24,7 @@ Per [`DOCUMENTATION_POLICY.md`](../../../docs/DOCUMENTATION_POLICY.md), every ph
 is written as a plan, not a result. Where a phase references work that has
 already happened, it links the experiment record that established it.
 Nothing in this document should be read as a new FACT or RESULT — those
-belong in `docs/experiments/`, `docs/findings/`, and `docs/decisions/`.
+belong in `products/lidar/docs/experiments/`, `products/lidar/docs/findings/`, and `products/lidar/docs/decisions/`.
 
 ## Central open question this roadmap exists to answer
 

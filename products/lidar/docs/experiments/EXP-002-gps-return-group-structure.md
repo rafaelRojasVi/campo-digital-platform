@@ -40,7 +40,7 @@ Timestamp groups crossing LAS streaming chunk boundaries are preserved explicitl
 
 ~~~bash
 uv run lidar analyze \
-  data/raw/v01_MG_23jun2026/v01_MG_23jun2026.las
+  products/lidar/data/raw/v01_MG_23jun2026/v01_MG_23jun2026.las
 ~~~
 
 ## Result

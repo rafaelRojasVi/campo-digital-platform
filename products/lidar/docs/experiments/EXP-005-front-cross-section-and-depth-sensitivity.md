@@ -27,7 +27,7 @@ where `d` is supplied externally or established by additional evidence.
 Automatic timber-stack segmentation:
 
 ~~~text
-data/interim/v01_MG_23jun2026/timber_roi/
+products/lidar/data/interim/v01_MG_23jun2026/timber_roi/
 timber_stack_automatic_v1.las
 
 1,342,183 points
@@ -258,7 +258,7 @@ Without depth:
 
 ~~~bash
 uv run lidar volume \
-  data/interim/v01_MG_23jun2026/timber_roi/timber_stack_automatic_v1.las
+  products/lidar/data/interim/v01_MG_23jun2026/timber_roi/timber_stack_automatic_v1.las
 ~~~
 
 the command reports:
@@ -284,7 +284,7 @@ With explicit depth:
 
 ~~~bash
 uv run lidar volume \
-  data/interim/v01_MG_23jun2026/timber_roi/timber_stack_automatic_v1.las \
+  products/lidar/data/interim/v01_MG_23jun2026/timber_roi/timber_stack_automatic_v1.las \
   --depth 5
 ~~~
 

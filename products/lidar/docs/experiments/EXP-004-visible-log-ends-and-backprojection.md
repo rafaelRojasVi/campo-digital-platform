@@ -19,7 +19,7 @@ If the projection preserves source-point correspondence, accepted 2D detections 
 Automatic timber-stack segmentation:
 
 ~~~text
-data/interim/v01_MG_23jun2026/timber_roi/
+products/lidar/data/interim/v01_MG_23jun2026/timber_roi/
 timber_stack_automatic_v1.las
 
 1,342,183 points

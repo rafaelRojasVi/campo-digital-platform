@@ -82,8 +82,8 @@ Useful for validation, but the repository still needs its own deterministic beha
 
 ## Related evidence
 
-- `docs/datasets/v01_MG_23jun2026.md`
-- `docs/findings/cubicacion_accuracy_problem.md`
+- `products/lidar/docs/datasets/v01_MG_23jun2026.md`
+- `products/lidar/docs/findings/cubicacion_accuracy_problem.md`
 - `products/lidar/src/lidar_io/inspect.py`
 - `products/lidar/tests/test_las_scale_offset.py`
 

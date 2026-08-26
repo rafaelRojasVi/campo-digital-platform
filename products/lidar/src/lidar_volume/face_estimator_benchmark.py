@@ -1,7 +1,7 @@
 """Shared benchmark orchestration for competing face-boundary estimators.
 
 This is layer 5 of the shared experiment architecture in
-docs/decisions/ADR-004-hybrid-measurement-experiment-architecture.md: one
+products/lidar/docs/decisions/ADR-004-hybrid-measurement-experiment-architecture.md: one
 place that builds the common projected evidence once, runs every configured
 ``FaceContourEstimator`` against it, and reports comparable outcomes.
 
@@ -14,7 +14,7 @@ for any other estimator in this project.
 
 Historical/rejected candidates
 -------------------------------
-docs/experiments/EXP-007-gs100g-boundary-estimator-comparison.md also
+products/lidar/docs/experiments/EXP-007-gs100g-boundary-estimator-comparison.md also
 evaluated sub-cell marching-squares contouring and a density-supported
 vertical envelope. Both are recorded here as non-runnable entries in
 ``HISTORICAL_METHODS`` -- listed for transparency, but not backed by

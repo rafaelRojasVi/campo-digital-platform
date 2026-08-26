@@ -702,7 +702,7 @@ def measure(
             "--output-root",
             help="Root directory for persisted measurement-run artifacts.",
         ),
-    ] = Path("reports/out"),
+    ] = Path("products/lidar/reports/out"),
     run_id: Annotated[
         str | None,
         typer.Option(
@@ -1338,7 +1338,7 @@ def benchmark_face_estimators(
             "--output-root",
             help="Root directory for persisted benchmark artifacts.",
         ),
-    ] = Path("reports/out"),
+    ] = Path("products/lidar/reports/out"),
     run_id: Annotated[
         str | None,
         typer.Option(

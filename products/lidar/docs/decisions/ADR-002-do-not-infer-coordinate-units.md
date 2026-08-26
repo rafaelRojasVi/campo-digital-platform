@@ -75,9 +75,9 @@ Rejected because useful geometry analysis can still proceed safely in source uni
 ## Related evidence
 
 - `docs/coordinate-systems.md`
-- `docs/datasets/v01_MG_23jun2026.md`
-- `docs/findings/cubicacion_accuracy_problem.md`
-- `docs/es/preguntas-campo-digital.md`
+- `products/lidar/docs/datasets/v01_MG_23jun2026.md`
+- `products/lidar/docs/findings/cubicacion_accuracy_problem.md`
+- `products/lidar/docs/es/preguntas-campo-digital.md`
 
 <!-- DOC_NAV_START -->
 

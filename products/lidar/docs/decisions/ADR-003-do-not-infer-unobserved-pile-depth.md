@@ -161,11 +161,11 @@ The command must not infer `D` from the current LAS.
 
 ## Related evidence
 
-- `docs/experiments/EXP-003-timber-stack-roi-and-observability.md`
-- `docs/experiments/EXP-005-front-cross-section-and-depth-sensitivity.md`
-- `docs/decisions/ADR-002-do-not-infer-coordinate-units.md`
-- `docs/findings/cubicacion_accuracy_problem.md`
-- `docs/es/preguntas-campo-digital.md`
+- `products/lidar/docs/experiments/EXP-003-timber-stack-roi-and-observability.md`
+- `products/lidar/docs/experiments/EXP-005-front-cross-section-and-depth-sensitivity.md`
+- `products/lidar/docs/decisions/ADR-002-do-not-infer-coordinate-units.md`
+- `products/lidar/docs/findings/cubicacion_accuracy_problem.md`
+- `products/lidar/docs/es/preguntas-campo-digital.md`
 
 ## Future reconsideration
 

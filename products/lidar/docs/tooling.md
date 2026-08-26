@@ -159,7 +159,7 @@ Launch it from WSL:
 Open a WSL-hosted LAS from the terminal:
 
 ```bash
-LAS="$(realpath data/raw/v01_MG_23jun2026/v01_MG_23jun2026.las)"
+LAS="$(realpath products/lidar/data/raw/v01_MG_23jun2026/v01_MG_23jun2026.las)"
 WIN_LAS="$(wslpath -w "$LAS")"
 "/mnt/c/Program Files/CloudCompare/CloudCompare.exe" "$WIN_LAS"
 ```
@@ -176,7 +176,7 @@ must not be confused with changing the source coordinate system or permanently
 transforming the LAS. Do not overwrite the private source LAS after interactive
 CloudCompare operations.
 
-See `docs/datasets/v01_MG_23jun2026.md` for the corresponding real-data
+See `products/lidar/docs/datasets/v01_MG_23jun2026.md` for the corresponding real-data
 forensic baseline.
 
 References:

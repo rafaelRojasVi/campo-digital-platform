@@ -77,7 +77,7 @@ def test_measurement_run_serializes_structured_pipeline_state() -> None:
         artifacts=[
             MeasurementArtifact(
                 kind="front_profile",
-                path="reports/out/run-real-001/front-profile.png",
+                path="products/lidar/reports/out/run-real-001/front-profile.png",
                 media_type="image/png",
             )
         ],
