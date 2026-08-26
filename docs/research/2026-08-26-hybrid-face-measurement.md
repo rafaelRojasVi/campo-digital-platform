@@ -177,7 +177,7 @@ in this repository:
    pile, giving a reference area `A_ref` for evaluation — this is the same
    kind of reference the existing face-area comparison contract already
    expects (see
-   [`src/lidar_core/face_area_reference.py`](../../src/lidar_core/face_area_reference.py)
+   [`src/lidar_core/face_area_reference.py`](../../products/lidar/src/lidar_core/face_area_reference.py)
    and
    [EXP-008](../experiments/EXP-008-reference-validation-prelocalized-measurement.md)).
 

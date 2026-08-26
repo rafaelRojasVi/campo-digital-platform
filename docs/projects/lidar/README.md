@@ -20,10 +20,10 @@ The LiDAR product owns:
 The validated implementation currently remains in the historical package
 layout:
 
-- `src/lidar_core`
-- `src/lidar_io`
-- `src/lidar_volume`
-- `src/lidar_cli`
+- `products/lidar/src/lidar_core`
+- `products/lidar/src/lidar_io`
+- `products/lidar/src/lidar_volume`
+- `products/lidar/src/lidar_cli`
 - `apps/api`
 - `apps/viewer`
 

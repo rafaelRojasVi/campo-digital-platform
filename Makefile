@@ -19,7 +19,7 @@ test:
 	uv run pytest
 
 test-api:
-	uv run pytest tests/test_api.py
+	uv run pytest apps/api/tests/test_lidar_api.py
 
 docs-check:
 	uv run python scripts/check_doc_links.py
