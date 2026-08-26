@@ -19,7 +19,7 @@ The current validated LiDAR implementation still uses:
 - one Python environment;
 - `lidar_core`, `lidar_io`, `lidar_volume`, and `lidar_cli` under `src/`;
 - `apps/api`;
-- `apps/viewer`.
+- `products/lidar/dashboard`.
 
 This is the current implementation state, not the final monorepo layout.
 
@@ -50,7 +50,7 @@ lidar_cli     Typer CLI wiring the above together. Depends on all three.
 of ROIs/results, SQLAlchemy + Alembic for schema/migrations, object
 storage (e.g. S3-compatible) for LAS/LAZ files themselves, a job queue
 (e.g. Celery/RQ/arq) for long-running volume computations, and a real web
-viewer (`apps/viewer`) built on a 3D web rendering stack. None of this
+viewer (`products/lidar/dashboard`) built on a 3D web rendering stack. None of this
 exists yet -- only `/health` is wired up in `apps/api`.
 
 ## Why PDAL is a subprocess dependency, not a Python binding

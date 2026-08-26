@@ -14,7 +14,7 @@ Terminal 1 — API:
 
 Terminal 2 — Viewer:
 
-    cd apps/viewer
+    cd products/lidar/dashboard
     npm run dev
 
 Open the Vite URL printed in the terminal.

@@ -77,7 +77,7 @@ The validated LiDAR implementation remains temporarily in its historical
 layout:
 
     apps/api
-    apps/viewer
+    products/lidar/dashboard
 
     products/lidar/src/lidar_core
     products/lidar/src/lidar_io

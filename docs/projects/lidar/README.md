@@ -25,7 +25,7 @@ layout:
 - `products/lidar/src/lidar_volume`
 - `products/lidar/src/lidar_cli`
 - `apps/api`
-- `apps/viewer`
+- `products/lidar/dashboard`
 
 These paths will be migrated incrementally as part of the monorepo transition.
 

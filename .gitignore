@@ -49,7 +49,6 @@ htmlcov/
 reports/out/**
 
 # Local presentation assets — never commit client imagery
-apps/viewer/public/local-demo/
 
 # Product-first LiDAR private/generated data
 products/lidar/data/raw/**
