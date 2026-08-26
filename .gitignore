@@ -47,3 +47,6 @@ htmlcov/
 
 # Generated measurement/report artifacts - may contain client-derived data
 reports/out/**
+
+# Local presentation assets — never commit client imagery
+apps/viewer/public/local-demo/
