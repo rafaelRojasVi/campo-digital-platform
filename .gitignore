@@ -50,3 +50,15 @@ reports/out/**
 
 # Local presentation assets — never commit client imagery
 apps/viewer/public/local-demo/
+
+# Product-first LiDAR private/generated data
+products/lidar/data/raw/**
+products/lidar/data/interim/**
+products/lidar/data/reference/private/**
+!products/lidar/data/raw/.gitkeep
+!products/lidar/data/interim/.gitkeep
+!products/lidar/data/processed/.gitkeep
+!products/lidar/data/reference/.gitkeep
+
+products/lidar/reports/out/**
+products/lidar/dashboard/public/local-demo/

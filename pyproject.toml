@@ -1,7 +1,7 @@
 [project]
-name = "campo-digital-lidar"
+name = "campo-digital-platform"
 version = "0.1.0"
-description = "LiDAR/point-cloud engineering PoC for Campo Digital timber-stack volume measurement"
+description = "Multi-product geospatial and forestry software platform for Campo Digital"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [

@@ -1,25 +1,35 @@
-# Architecture
+# LiDAR Implementation Architecture
 
-## Layout decision: single project, src-layout, NOT a true uv workspace
+## Repository architecture transition
 
-The spec allowed either a uv workspace of independently-publishable
-packages, or a simpler single-project layout. This repo uses the latter:
+The repository began as a single Python `src/`-layout project dedicated to
+the LiDAR proof-of-concept.
 
-- One root `pyproject.toml`, one `uv.lock`, one venv.
-- Four import-only Python packages under `src/`: `lidar_core`, `lidar_io`,
-  `lidar_volume`, `lidar_cli`, each a plain package directory (no nested
-  `pyproject.toml`).
-- `apps/api` is a separate FastAPI app that imports the `src/` packages
-  from its own path insertion (see `tests/test_api.py`); it is not part
-  of the installed package set.
+It is now transitioning into the `campo-digital-platform` monorepo with three
+bounded product contexts:
 
-**Why not a uv workspace:** none of these packages need independent
-versioning, independent publishing, or independent dependency sets at this
-stage -- they are tightly coupled layers of one PoC. A workspace would add
-four `pyproject.toml` files and cross-package path dependencies for no
-current benefit. If/when `lidar_core` needs to be published standalone
-(e.g. as a library other Campo Digital tools consume), converting to a
-workspace is a mechanical refactor, not a redesign.
+1. LiDAR / Cubicación
+2. Gestión Predial Forestal / QGIS
+3. Transelect
+
+The current validated LiDAR implementation still uses:
+
+- one root `pyproject.toml`;
+- one `uv.lock`;
+- one Python environment;
+- `lidar_core`, `lidar_io`, `lidar_volume`, and `lidar_cli` under `src/`;
+- `apps/api`;
+- `apps/viewer`.
+
+This is the current implementation state, not the final monorepo layout.
+
+The target architecture and migration sequence are defined in:
+
+- `docs/platform/monorepo.md`
+- `docs/platform/product-boundaries.md`
+
+The migration must preserve validated LiDAR behavior while workspace,
+application, and service boundaries are introduced incrementally.
 
 ## Package boundaries
 

@@ -47,7 +47,7 @@ For later shells:
 ```bash
 source ~/.zshrc
 micromamba activate pdal-cli
-cd /home/rafael/dev/freelance/campo-digital-lidar
+cd /home/rafael/dev/freelance/campo-digital-platform
 ```
 
 The repository deliberately uses the PDAL **CLI** boundary:

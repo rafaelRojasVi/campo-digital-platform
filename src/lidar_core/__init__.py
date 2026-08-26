@@ -1,1 +1,1 @@
-"""Core domain models and geometry primitives for campo-digital-lidar."""
+"""Core domain models and geometry primitives for Campo Digital LiDAR."""
