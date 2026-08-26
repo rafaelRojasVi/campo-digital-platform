@@ -1,0 +1,78 @@
+version: 1
+
+source_systems:
+  campo_digital_onedrive:
+    kind: filesystem_mirror
+    root_env: CAMPO_DIGITAL_SOURCE_ROOT
+    access: read_only
+    description: >
+      External Campo Digital collaboration source containing GIS data,
+      spreadsheets, reports, point clouds, project context, and shared
+      resources. Source files are never committed to Git.
+
+projects:
+  lidar:
+    display_name: "LiDAR / Cubicación"
+    bounded_context: lidar
+    repository_root: "products/lidar"
+    source_paths: []
+    notes:
+      - "Exact OneDrive path still to be confirmed."
+      - "Owns LAS/LAZ point-cloud measurement workflows."
+    expected_extensions:
+      - ".las"
+      - ".laz"
+      - ".pdf"
+      - ".txt"
+
+  forestry:
+    display_name: "Gestión Predial Forestal / QGIS"
+    bounded_context: forestry
+    repository_root: "products/forestry"
+    source_paths:
+      - "01_Gestion_Predial_Forestal"
+    expected_extensions:
+      - ".shp"
+      - ".shx"
+      - ".dbf"
+      - ".prj"
+      - ".gpkg"
+      - ".qgz"
+      - ".qgs"
+      - ".tif"
+      - ".tiff"
+      - ".xlsx"
+      - ".csv"
+      - ".pdf"
+
+  transelect:
+    display_name: "Proyecto Transelect"
+    bounded_context: transelect
+    repository_root: "products/transelect"
+    source_paths:
+      - "03_Proyecto_Transelect"
+    notes:
+      - >
+        Domain model intentionally remains undefined until its source
+        material and operating workflow are reviewed.
+
+shared_sources:
+  customer_mapping_and_geomatics:
+    source_paths:
+      - "02_Clientes_Mapeo_y_Geomatica"
+    notes:
+      - >
+        Product ownership remains unclassified until the source contents
+        and operating purpose are reviewed.
+
+  application_development:
+    source_paths:
+      - "04_Desarrollo_de_Aplicaciones"
+
+  shared_resources:
+    source_paths:
+      - "05_Recursos_Compartidos"
+
+archive:
+  source_paths:
+    - "99_Archivo_Historico"
