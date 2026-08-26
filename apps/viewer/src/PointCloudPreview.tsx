@@ -40,6 +40,7 @@ interface PointCloudPreviewProps {
   runId: string
   plyPath: string
   manifestPath: string
+  language: 'es' | 'en'
 }
 
 type ViewerState =
@@ -95,6 +96,7 @@ export default function PointCloudPreview({
   runId,
   plyPath,
   manifestPath,
+  language,
 }: PointCloudPreviewProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
   const [viewerState, setViewerState] = useState<ViewerState>({
@@ -175,8 +177,12 @@ export default function PointCloudPreview({
           throw new Error('Point-cloud preview contains no vertices')
         }
 
+        const hasVertexColors =
+          geometry.hasAttribute('color')
+
         const material = new THREE.PointsMaterial({
-          color: 0xd8f3df,
+          color: hasVertexColors ? 0xffffff : 0xd8f3df,
+          vertexColors: hasVertexColors,
           size: 0.055,
           sizeAttenuation: true,
         })
@@ -319,7 +325,11 @@ export default function PointCloudPreview({
       <div className="point-cloud-stage" ref={mountRef} />
 
       <div className="point-cloud-overlay">
-        {viewerState.status === 'loading' && <span>Loading 3D preview…</span>}
+        {viewerState.status === 'loading' && (
+          <span>
+            {language === 'es' ? 'Cargando vista 3D…' : 'Loading 3D preview…'}
+          </span>
+        )}
 
         {viewerState.status === 'error' && (
           <span className="point-cloud-error">{viewerState.message}</span>
@@ -328,21 +338,33 @@ export default function PointCloudPreview({
         {viewerState.status === 'ready' && (
           <>
             <span>
-              {viewerState.manifest.preview_point_count.toLocaleString()} preview
-              points
+              {viewerState.manifest.preview_point_count.toLocaleString(
+                language === 'es' ? 'es-CL' : 'en-US',
+              )}{' '}
+              {language === 'es' ? 'puntos de vista 3D' : 'preview points'}
             </span>
             <span>
-              from{' '}
-              {viewerState.manifest.source_point_count.toLocaleString()} selected
-              points
+              {language === 'es' ? 'de ' : 'from '}
+              {viewerState.manifest.source_point_count.toLocaleString(
+                language === 'es' ? 'es-CL' : 'en-US',
+              )}{' '}
+              {language === 'es' ? 'puntos seleccionados' : 'selected points'}
             </span>
-            <span>{viewerState.manifest.coordinate_units}</span>
+            <span>
+              {viewerState.manifest.coordinate_units === 'source_units'
+                ? language === 'es'
+                  ? 'unidades de origen'
+                  : 'source units'
+                : viewerState.manifest.coordinate_units}
+            </span>
           </>
         )}
       </div>
 
       <div className="point-cloud-help">
-        Drag to orbit · wheel to zoom · right-drag to pan
+        {language === 'es'
+          ? 'Arrastrar: rotar · rueda: zoom · botón derecho: desplazar'
+          : 'Drag to orbit · wheel to zoom · right-drag to pan'}
       </div>
     </div>
   )

@@ -353,6 +353,7 @@ def run_timber_measurement(
         timber_xyz,
         cross_section_result,
         run_directory,
+        rgb=(normalized_rgb.rgb[timber_mask] if normalized_rgb is not None else None),
     )
 
     artifacts = [

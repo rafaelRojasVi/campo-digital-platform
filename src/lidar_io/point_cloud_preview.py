@@ -4,6 +4,10 @@ The preview is derived from the already-selected timber-stack points.
 It is intentionally bounded in size, deterministic, rebased around a
 local origin, and stored only under the ignored measurement-output tree.
 
+When normalized LAS RGB is available, the preview preserves that color
+information for browser inspection. RGB is visual evidence only and does
+not affect measurement semantics.
+
 It is an inspection artifact, not a new measurement result.
 """
 
@@ -42,8 +46,33 @@ def _validate_xyz(xyz: np.ndarray) -> np.ndarray:
     return points
 
 
-def _sample_points(
-    xyz: np.ndarray,
+def _validate_rgb(
+    rgb: np.ndarray | None,
+    *,
+    point_count: int,
+) -> np.ndarray | None:
+    if rgb is None:
+        return None
+
+    colors = np.asarray(
+        rgb,
+        dtype=np.float64,
+    )
+
+    if colors.ndim != 2 or colors.shape != (point_count, 3):
+        raise ValueError("rgb must have shape (N, 3) matching xyz")
+
+    if not np.isfinite(colors).all():
+        raise ValueError("rgb must contain only finite values")
+
+    if ((colors < 0.0) | (colors > 1.0)).any():
+        raise ValueError("rgb values must be normalized to [0, 1]")
+
+    return colors
+
+
+def _sample_indices(
+    point_count: int,
     *,
     max_points: int,
     seed: int,
@@ -51,22 +80,45 @@ def _sample_points(
     if max_points < 1:
         raise ValueError("max_points must be >= 1")
 
-    if len(xyz) <= max_points:
-        return xyz
+    if point_count <= max_points:
+        return np.arange(
+            point_count,
+            dtype=np.int64,
+        )
 
     rng = np.random.default_rng(seed)
 
     indices = rng.choice(
-        len(xyz),
+        point_count,
         size=max_points,
         replace=False,
     )
+
     indices.sort()
+
+    return indices
+
+
+def _sample_points(
+    xyz: np.ndarray,
+    *,
+    max_points: int,
+    seed: int,
+) -> np.ndarray:
+    """Backward-compatible deterministic XYZ sampler."""
+
+    indices = _sample_indices(
+        len(xyz),
+        max_points=max_points,
+        seed=seed,
+    )
 
     return xyz[indices]
 
 
-def _bounds_payload(xyz: np.ndarray) -> dict[str, list[float]]:
+def _bounds_payload(
+    xyz: np.ndarray,
+) -> dict[str, list[float]]:
     return {
         "min": xyz.min(axis=0).astype(float).tolist(),
         "max": xyz.max(axis=0).astype(float).tolist(),
@@ -76,7 +128,13 @@ def _bounds_payload(xyz: np.ndarray) -> dict[str, list[float]]:
 def _write_binary_ply(
     path: Path,
     local_xyz: np.ndarray,
+    rgb: np.ndarray | None = None,
 ) -> None:
+    color_properties = ""
+
+    if rgb is not None:
+        color_properties = "property uchar red\nproperty uchar green\nproperty uchar blue\n"
+
     header = (
         "ply\n"
         "format binary_little_endian 1.0\n"
@@ -85,17 +143,58 @@ def _write_binary_ply(
         "property float x\n"
         "property float y\n"
         "property float z\n"
+        f"{color_properties}"
         "end_header\n"
     ).encode("ascii")
 
-    positions = np.asarray(
-        local_xyz,
-        dtype="<f4",
+    if rgb is None:
+        positions = np.asarray(
+            local_xyz,
+            dtype="<f4",
+        )
+
+        with path.open("wb") as handle:
+            handle.write(header)
+            handle.write(positions.tobytes(order="C"))
+
+        return
+
+    rgb_uint8 = np.clip(
+        np.rint(rgb * 255.0),
+        0,
+        255,
+    ).astype(
+        np.uint8,
+        copy=False,
     )
+
+    vertex_dtype = np.dtype(
+        [
+            ("x", "<f4"),
+            ("y", "<f4"),
+            ("z", "<f4"),
+            ("red", "u1"),
+            ("green", "u1"),
+            ("blue", "u1"),
+        ]
+    )
+
+    vertices = np.empty(
+        len(local_xyz),
+        dtype=vertex_dtype,
+    )
+
+    vertices["x"] = local_xyz[:, 0]
+    vertices["y"] = local_xyz[:, 1]
+    vertices["z"] = local_xyz[:, 2]
+
+    vertices["red"] = rgb_uint8[:, 0]
+    vertices["green"] = rgb_uint8[:, 1]
+    vertices["blue"] = rgb_uint8[:, 2]
 
     with path.open("wb") as handle:
         handle.write(header)
-        handle.write(positions.tobytes(order="C"))
+        handle.write(vertices.tobytes(order="C"))
 
 
 def write_timber_stack_preview_artifacts(
@@ -103,6 +202,7 @@ def write_timber_stack_preview_artifacts(
     estimate: FrontCrossSectionEstimate,
     run_directory: Path,
     *,
+    rgb: np.ndarray | None = None,
     max_points: int = DEFAULT_MAX_PREVIEW_POINTS,
     seed: int = DEFAULT_PREVIEW_SEED,
 ) -> tuple[MeasurementArtifact, MeasurementArtifact]:
@@ -110,11 +210,20 @@ def write_timber_stack_preview_artifacts(
 
     points = _validate_xyz(xyz)
 
-    sampled = _sample_points(
-        points,
+    colors = _validate_rgb(
+        rgb,
+        point_count=len(points),
+    )
+
+    sample_indices = _sample_indices(
+        len(points),
         max_points=max_points,
         seed=seed,
     )
+
+    sampled = points[sample_indices]
+
+    sampled_rgb = colors[sample_indices] if colors is not None else None
 
     run_directory.mkdir(
         parents=True,
@@ -131,11 +240,13 @@ def write_timber_stack_preview_artifacts(
     local_sampled = sampled - origin
 
     ply_path = run_directory / TIMBER_STACK_PREVIEW_FILENAME
+
     manifest_path = run_directory / TIMBER_STACK_PREVIEW_MANIFEST_FILENAME
 
     _write_binary_ply(
         ply_path,
         local_sampled,
+        sampled_rgb,
     )
 
     longitudinal_axis = np.asarray(
@@ -166,9 +277,13 @@ def write_timber_stack_preview_artifacts(
         "coordinate_space": "rebased_source_coordinates",
         "position_encoding": "float32",
         "ply_encoding": "binary_little_endian",
-        "origin_source_coordinates": origin.astype(float).tolist(),
+        "has_rgb": sampled_rgb is not None,
+        "color_encoding": (
+            "rgb_uint8_from_normalized_las_rgb" if sampled_rgb is not None else None
+        ),
+        "origin_source_coordinates": (origin.astype(float).tolist()),
         "source_bounds": _bounds_payload(points),
-        "preview_local_bounds": _bounds_payload(local_sampled),
+        "preview_local_bounds": (_bounds_payload(local_sampled)),
         "measurement_frame": {
             "center_xy_source": (
                 np.asarray(
@@ -178,8 +293,8 @@ def write_timber_stack_preview_artifacts(
                 .astype(float)
                 .tolist()
             ),
-            "longitudinal_axis_xy": longitudinal_axis.astype(float).tolist(),
-            "transverse_axis_xy": transverse_axis.astype(float).tolist(),
+            "longitudinal_axis_xy": (longitudinal_axis.astype(float).tolist()),
+            "transverse_axis_xy": (transverse_axis.astype(float).tolist()),
         },
     }
 
@@ -198,8 +313,9 @@ def write_timber_stack_preview_artifacts(
         path=TIMBER_STACK_PREVIEW_FILENAME,
         media_type="application/octet-stream",
         description=(
-            "Deterministically sampled and locally rebased timber-stack "
-            "point cloud for read-only 3D inspection."
+            "Deterministically sampled, locally rebased timber-stack "
+            "point cloud for read-only 3D inspection. LAS RGB is "
+            "preserved when available."
         ),
     )
 
@@ -208,9 +324,12 @@ def write_timber_stack_preview_artifacts(
         path=TIMBER_STACK_PREVIEW_MANIFEST_FILENAME,
         media_type="application/json",
         description=(
-            "Coordinate, sampling, bounds, and measurement-frame metadata "
-            "for the timber-stack 3D preview."
+            "Coordinate, sampling, RGB availability, bounds, and "
+            "measurement-frame metadata for the timber-stack 3D preview."
         ),
     )
 
-    return ply_artifact, manifest_artifact
+    return (
+        ply_artifact,
+        manifest_artifact,
+    )

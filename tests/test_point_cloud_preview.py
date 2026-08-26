@@ -61,6 +61,41 @@ def _read_ply_positions(path) -> np.ndarray:
     return positions.reshape(count, 3)
 
 
+def _read_ply_positions_and_colors(
+    path,
+) -> tuple[np.ndarray, np.ndarray]:
+    payload = path.read_bytes()
+    header, body = payload.split(b"end_header\n", 1)
+    header_text = header.decode("ascii")
+
+    vertex_line = next(
+        line for line in header_text.splitlines() if line.startswith("element vertex ")
+    )
+    count = int(vertex_line.split()[-1])
+
+    assert "property uchar red" in header_text
+
+    vertex_dtype = np.dtype(
+        [
+            ("x", "<f4"),
+            ("y", "<f4"),
+            ("z", "<f4"),
+            ("red", "u1"),
+            ("green", "u1"),
+            ("blue", "u1"),
+        ]
+    )
+
+    vertices = np.frombuffer(body, dtype=vertex_dtype, count=count)
+
+    positions = np.column_stack([vertices["x"], vertices["y"], vertices["z"]]).astype(np.float32)
+    colors = np.column_stack([vertices["red"], vertices["green"], vertices["blue"]]).astype(
+        np.uint8
+    )
+
+    return positions, colors
+
+
 def test_preview_artifacts_are_bounded_and_rebased(tmp_path) -> None:
     ply_artifact, manifest_artifact = write_timber_stack_preview_artifacts(
         _points(),
@@ -90,6 +125,8 @@ def test_preview_artifacts_are_bounded_and_rebased(tmp_path) -> None:
     assert manifest["coordinate_units"] == "source_units"
     assert manifest["coordinate_space"] == "rebased_source_coordinates"
     assert manifest["position_encoding"] == "float32"
+    assert manifest["has_rgb"] is False
+    assert manifest["color_encoding"] is None
     assert manifest["sampling"] == {
         "method": "uniform_without_replacement",
         "max_points": 100,
@@ -189,4 +226,77 @@ def test_preview_rejects_non_positive_limit(tmp_path) -> None:
             _estimate(),
             tmp_path,
             max_points=0,
+        )
+
+
+def test_preview_includes_rgb_when_provided(tmp_path) -> None:
+    points = _points()[:50]
+
+    rgb = np.zeros((50, 3))
+    rgb[:, 0] = np.linspace(0.0, 1.0, 50)
+    rgb[:, 1] = np.linspace(1.0, 0.0, 50)
+    rgb[:, 2] = 0.5
+
+    ply_artifact, manifest_artifact = write_timber_stack_preview_artifacts(
+        points,
+        _estimate(),
+        tmp_path,
+        rgb=rgb,
+        max_points=50,
+    )
+
+    manifest = json.loads(
+        (tmp_path / manifest_artifact.path).read_text(
+            encoding="utf-8",
+        )
+    )
+
+    assert manifest["has_rgb"] is True
+    assert manifest["color_encoding"] == "rgb_uint8_from_normalized_las_rgb"
+
+    positions, colors = _read_ply_positions_and_colors(
+        tmp_path / ply_artifact.path,
+    )
+
+    assert positions.shape == (50, 3)
+    assert colors.shape == (50, 3)
+    assert colors.dtype == np.uint8
+
+    expected_colors = np.clip(
+        np.rint(rgb * 255.0),
+        0,
+        255,
+    ).astype(np.uint8)
+
+    assert np.array_equal(colors, expected_colors)
+
+
+def test_preview_rejects_mismatched_rgb_shape(tmp_path) -> None:
+    with pytest.raises(
+        ValueError,
+        match="rgb must have shape",
+    ):
+        write_timber_stack_preview_artifacts(
+            _points(),
+            _estimate(),
+            tmp_path,
+            rgb=np.zeros((5, 3)),
+        )
+
+
+def test_preview_rejects_out_of_range_rgb(tmp_path) -> None:
+    points = _points()
+
+    rgb = np.zeros((len(points), 3))
+    rgb[0, 0] = 1.5
+
+    with pytest.raises(
+        ValueError,
+        match=r"normalized to \[0, 1\]",
+    ):
+        write_timber_stack_preview_artifacts(
+            points,
+            _estimate(),
+            tmp_path,
+            rgb=rgb,
         )
