@@ -517,3 +517,13 @@ The central engineering result of this experiment is not a final area number.
 It is a validation architecture in which localization, geometry, units,
 reference accuracy, volume, and commercial semantics cannot silently substitute
 for one another.
+
+<!-- DOC_NAV_START -->
+
+---
+
+### Documentation navigation
+
+[Project README](../../README.md) · [Docs index](../README.md) · [Findings](../findings/cubicacion_accuracy_problem.md) · [Experiments](.) · [Decisions](../decisions) · [Spanish docs](../es/README.md) · [Estado técnico](../es/estado-proyecto.md) · [Preguntas Campo Digital](../es/preguntas-campo-digital.md)
+
+<!-- DOC_NAV_END -->
