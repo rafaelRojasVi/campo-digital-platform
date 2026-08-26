@@ -70,7 +70,13 @@ What already exists, deterministically, with no ML component:
   blocks error metrics unless same-pile confirmation and compatible units are
   explicit (`src/lidar_core/face_area_reference.py`,
   [EXP-008](experiments/EXP-008-reference-validation-prelocalized-measurement.md));
-- a read-only, bilingual measurement console (viewer) presenting the above.
+- a read-only, bilingual measurement console (viewer) presenting the above;
+- the shared benchmark architecture from
+  [ADR-004](decisions/ADR-004-hybrid-measurement-experiment-architecture.md)
+  (common projected evidence, mask/contour estimator interfaces, one shared
+  polygon-measurement path), implemented and confirmed on real data to
+  reproduce the scanline/raster figures above exactly
+  ([EXP-009](experiments/EXP-009-shared-estimator-benchmark-infrastructure.md)).
 
 What does not exist yet: any 2D or 3D machine-learning component, any
 labeled training data, and any same-pile Campo Digital reference measurement
@@ -238,6 +244,7 @@ These are deliberately deferred, independent of which architecture wins:
 - [`research/2026-08-26-hybrid-face-measurement.md`](research/2026-08-26-hybrid-face-measurement.md) — the external research note this roadmap operationalizes.
 - [ADR-004 — shared experiment architecture](decisions/ADR-004-hybrid-measurement-experiment-architecture.md).
 - [EXP-006](experiments/EXP-006-projected-face-raster-area.md), [EXP-007](experiments/EXP-007-gs100g-boundary-estimator-comparison.md), [EXP-008](experiments/EXP-008-reference-validation-prelocalized-measurement.md) — the geometry-tournament work Phase 1 builds on.
+- [EXP-009](experiments/EXP-009-shared-estimator-benchmark-infrastructure.md) — the shared benchmark architecture's first real-data reproducibility check.
 - [`findings/cubicacion_accuracy_problem.md`](findings/cubicacion_accuracy_problem.md) — why accuracy claims remain blocked until reference validation.
 - [`es/preguntas-campo-digital.md`](es/preguntas-campo-digital.md) — the open questions for Campo Digital that gate several exit criteria above.
 
