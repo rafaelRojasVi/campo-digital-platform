@@ -33,6 +33,30 @@ Claude project instructions are defined in:
 
 ---
 
+## Roadmap and research
+
+The detailed, phase-by-phase experiment roadmap (geometry tournament, 2D/2.5D
+tournament, 3D tournament, architecture ablation, validated hybrid,
+productionization) belongs in:
+
+- [`roadmap.md`](roadmap.md)
+
+It expands one item of the top-level project roadmap in
+[`../README.md`](../README.md#roadmap) and does not replace it. It currently
+treats a hybrid geometry+ML architecture as a leading hypothesis to be tested,
+not a validated conclusion.
+
+External research notes (literature/tooling surveys informing the roadmap,
+not this project's own experiments) belong in:
+
+- [`research/`](research/)
+
+Current note:
+
+- [Hybrid geometry + ML face-measurement architecture (2026-08-26)](research/2026-08-26-hybrid-face-measurement.md)
+
+---
+
 ## Dataset records
 
 Dataset-specific forensic evidence belongs in:
