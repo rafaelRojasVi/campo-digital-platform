@@ -1,0 +1,6 @@
+title = "gitleaks config for campo-digital-platform"
+
+[extend]
+# Inherit Gitleaks' maintained default rules rather than duplicating
+# detection rules inside this repository.
+useDefault = true

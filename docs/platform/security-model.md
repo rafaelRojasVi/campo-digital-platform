@@ -65,7 +65,26 @@ Source snapshots and private generated artifacts are private by default. Browser
 
 ## Secrets
 
-Local: ignored environment/configuration files. Production candidate: managed secret storage such as Secret Manager. Secrets never belong in Git, documentation, browser bundles, or normal logs.
+Local: ignored environment/configuration files. Production candidate: managed
+secret storage such as Secret Manager. Secrets never belong in Git,
+documentation, browser bundles, or normal logs.
+
+Repository history is scanned with Gitleaks using its maintained default rule
+set. The scanner version and downloaded release checksum are pinned by
+`scripts/check_secrets.sh`. Findings are redacted so detected credential values
+are not copied into CI logs.
+
+A real secret finding must be treated as a credential incident: rotate or
+revoke the credential and assess whether repository-history remediation is
+required. A false positive may be allowlisted only after inspection, and the
+allowlist must be scoped as narrowly as practical.
+
+**RESULT (2026-08-27)** — the initial full-history baseline scanned 61 commits
+(approximately 2.09 MB) with Gitleaks 8.30.1 and found no leaks. Therefore the
+repository begins automated secret scanning without an allowlist.
+
+Live dependency-advisory checks are intentionally separate from this repository
+quality gate because they depend on external vulnerability databases.
 
 ## Auditability
 

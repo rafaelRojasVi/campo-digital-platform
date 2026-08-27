@@ -28,6 +28,13 @@ Executable product dependency rules are checked with:
 
 The canonical `make check` gate includes this architecture check.
 
+Full Git history can be scanned for accidentally committed credentials with:
+
+    make secret-check
+
+Secret scanning is intentionally separate from `make check` because obtaining
+the pinned Gitleaks binary requires network access.
+
 ## External data
 
 Campo Digital source/client data remains outside Git.
