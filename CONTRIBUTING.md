@@ -35,6 +35,14 @@ Full Git history can be scanned for accidentally committed credentials with:
 Secret scanning is intentionally separate from `make check` because obtaining
 the pinned Gitleaks binary requires network access.
 
+Supported runtime dependencies can be checked against current vulnerability
+advisories with:
+
+    make dependency-audit
+
+Dependency auditing is also separate from `make check` because advisory data is
+external and changes independently of the repository.
+
 ## External data
 
 Campo Digital source/client data remains outside Git.

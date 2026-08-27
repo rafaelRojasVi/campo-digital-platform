@@ -240,7 +240,6 @@ name = "campo-digital-platform"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "jupyterlab" },
     { name = "laspy", extra = ["lazrs"] },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -256,6 +255,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+analysis = [
+    { name = "jupyterlab" },
+]
 api = [
     { name = "alembic" },
     { name = "fastapi" },
@@ -283,7 +285,7 @@ dev = [
 requires-dist = [
     { name = "alembic", marker = "extra == 'api'", specifier = ">=1.13" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.111" },
-    { name = "jupyterlab", specifier = ">=4.2" },
+    { name = "jupyterlab", marker = "extra == 'analysis'", specifier = ">=4.2" },
     { name = "laspy", extras = ["lazrs"], specifier = ">=2.5" },
     { name = "matplotlib", specifier = ">=3.9" },
     { name = "numpy", specifier = ">=1.26" },
@@ -303,7 +305,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.30" },
 ]
-provides-extras = ["geometry-extra", "api"]
+provides-extras = ["analysis", "geometry-extra", "api"]
 
 [package.metadata.requires-dev]
 dev = [

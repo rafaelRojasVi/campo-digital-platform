@@ -17,10 +17,12 @@ dependencies = [
   "typer>=0.12",
   "rich>=13.7",
   "matplotlib>=3.9",
-  "jupyterlab>=4.2",
 ]
 
 [project.optional-dependencies]
+analysis = [
+  "jupyterlab>=4.2",
+]
 geometry-extra = [
   "open3d>=0.18",
   "pyvista>=0.44",
