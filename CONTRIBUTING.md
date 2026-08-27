@@ -22,6 +22,12 @@ Product-specific work belongs under the corresponding product root:
 
 Do not place product-specific business logic in generic shared directories.
 
+Executable product dependency rules are checked with:
+
+    make architecture-check
+
+The canonical `make check` gate includes this architecture check.
+
 ## External data
 
 Campo Digital source/client data remains outside Git.
