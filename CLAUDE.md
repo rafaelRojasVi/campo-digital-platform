@@ -1,6 +1,6 @@
 # Campo Digital Platform — Claude project instructions
 
-This repository is the Campo Digital multi-product platform monorepo. It contains LiDAR / Cubicación, Gestión Predial Forestal / QGIS, and Transelect as separate bounded product contexts.
+This repository is the Campo Digital multi-product platform monorepo. It contains LiDAR / Cubicación, Gestión Predial Forestal / QGIS, and Transelec as separate bounded product contexts.
 
 For all documentation work, follow:
 
@@ -21,7 +21,7 @@ This repository now contains three bounded product contexts:
 
 1. LiDAR / Cubicación
 2. Gestión Predial Forestal / QGIS
-3. Transelect
+3. Transelec
 
 Do not mix product-specific domain models merely because they coexist in the
 same monorepo.
@@ -29,6 +29,27 @@ same monorepo.
 Canonical product boundaries are documented in:
 
 `docs/platform/product-boundaries.md`
+
+## Canonical platform documentation
+
+Before changing shared platform architecture, persistence, source ingestion,
+security, environments, or product integration sequencing, read:
+
+- `docs/platform/README.md`
+- `docs/platform/system-overview.md`
+- `docs/platform/roadmap.md`
+- `docs/platform/production-platform-v1.md`
+- `docs/platform/source-ingestion.md`
+- `docs/platform/client-data-organization.md`
+- `docs/platform/security-model.md`
+- `docs/platform/environments-and-costs.md`
+
+Treat `docs/research/` as dated supporting evidence, not canonical
+architecture. Provider capabilities, regions, limits, and pricing may become
+stale and must be re-verified before provisioning.
+
+The stakeholder/project spelling is `Transelec`. The repository product path
+currently remains `products/transelect/`; do not rename that path implicitly.
 
 ## External Campo Digital source data
 
