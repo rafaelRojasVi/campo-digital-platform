@@ -93,7 +93,7 @@ repository quality gates.
 
 The current blocking audit surface is:
 
-- the locked Python base runtime plus API extra;
+- the locked Python base runtime plus API and Transelec extras;
 - the locked optional geometry stack;
 - production dependencies of the LiDAR dashboard.
 

@@ -23,7 +23,7 @@ Owns:
 The existing LiDAR methodology, experiments, scientific evidence, and safety
 guardrails remain authoritative for this context.
 
-It does not own forestry stand management or Transelect business logic.
+It does not own forestry stand management or Transelec business logic.
 
 ## 2. Gestión Predial Forestal / QGIS
 
@@ -46,18 +46,18 @@ Partial operations must preserve the original rodal geometry and record their
 own operation geometry so original, harvested, and remaining areas remain
 auditable.
 
-## 3. Transelect
+## 3. Transelec
 
-Transelect is a separate bounded context.
+Transelec is a separate bounded context.
 
 Its current source material is expected under:
 
-`03_Proyecto_Transelect`
+`03_Proyecto_Transelec`
 
 Its entities and workflow must not be inferred from either the LiDAR or
 Forestry domains.
 
-Its domain model will be derived from the actual Transelect source material.
+Its domain model will be derived from the actual Transelec source material.
 
 ## Shared platform capabilities
 
@@ -88,7 +88,7 @@ Examples:
 - `HarvestArea` belongs to Forestry.
 - `PointCloud` belongs to LiDAR.
 - `FaceMeasurement` belongs to LiDAR.
-- Transelect entities belong to Transelect.
+- Transelec entities belong to Transelec.
 
 Do not create a generic shared business-domain package merely because this is
 a monorepo.

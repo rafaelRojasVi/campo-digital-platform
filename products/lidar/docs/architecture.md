@@ -10,7 +10,7 @@ bounded product contexts:
 
 1. LiDAR / Cubicación
 2. Gestión Predial Forestal / QGIS
-3. Transelect
+3. Transelec
 
 The current validated LiDAR implementation still uses:
 

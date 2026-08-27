@@ -7,6 +7,12 @@ Planning roadmap.
 This document orders platform work by dependency and evidence. It is not a
 calendar commitment and does not replace product-specific roadmaps.
 
+**Priority update (2026-08-27)** — Transelec source/domain integration is being
+advanced ahead of the previously listed product order because the stakeholder
+identified it as the current operational priority and supplied a refined
+workbook/dashboard source pair. The existing LiDAR and Forestry roadmap scopes
+remain valid; this changes implementation priority, not product boundaries.
+
 ## Guiding principle
 
 Campo Digital is one company platform with three bounded products:

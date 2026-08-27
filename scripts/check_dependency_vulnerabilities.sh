@@ -14,7 +14,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 cd "$repo_root"
 
-echo "=== Python runtime + API dependencies ==="
+echo "=== Python runtime + API + Transelec dependencies ==="
 
 uv export \
   --quiet \
@@ -24,6 +24,7 @@ uv export \
   --no-header \
   --no-annotate \
   --extra api \
+  --extra transelec \
   --no-hashes \
   --format requirements-txt \
   -o "$tmp_dir/runtime-api.txt"

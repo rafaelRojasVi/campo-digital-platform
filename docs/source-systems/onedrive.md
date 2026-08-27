@@ -15,7 +15,7 @@ Known top-level structure:
 
 - `01_Gestion_Predial_Forestal`
 - `02_Clientes_Mapeo_y_Geomatica`
-- `03_Proyecto_Transelect`
+- `03_Proyecto_Transelec`
 - `04_Desarrollo_de_Aplicaciones`
 - `05_Recursos_Compartidos`
 - `99_Archivo_Historico`

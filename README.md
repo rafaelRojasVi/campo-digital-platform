@@ -43,9 +43,9 @@ Forestry GIS product for:
 
 Status: architecture/domain foundation.
 
-### Transelect
+### Transelec
 
-Independent application domain for the Campo Digital Transelect project.
+Independent application domain for the Campo Digital Transelec project.
 
 Status: requirements discovery from source material.
 
