@@ -23,6 +23,9 @@ dependencies = [
 analysis = [
   "jupyterlab>=4.2",
 ]
+transelec = [
+  "python-calamine>=0.8,<0.9",
+]
 geometry-extra = [
   "open3d>=0.18",
   "pyvista>=0.44",
@@ -52,6 +55,7 @@ packages = [
   "products/lidar/src/lidar_io",
   "products/lidar/src/lidar_volume",
   "products/lidar/src/lidar_cli",
+  "products/transelect/src/transelec_ingestion",
 ]
 
 [dependency-groups]
@@ -62,19 +66,20 @@ dev = [
   "pre-commit>=3.8",
   "mypy>=1.11",
   "httpx>=0.27",
+  "xlsxwriter>=3.2,<4",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["products/lidar/src", "products/lidar/tests", "apps"]
+src = ["products/lidar/src", "products/lidar/tests", "products/transelect/src", "products/transelect/tests", "apps"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
 python_version = "3.12"
-mypy_path = "products/lidar/src"
+mypy_path = "products/lidar/src:products/transelect/src"
 explicit_package_bases = true
 ignore_missing_imports = true
 warn_unused_ignores = true
@@ -82,9 +87,9 @@ disallow_untyped_defs = false
 exclude = ["products/lidar/notebooks", "external"]
 
 [tool.pytest.ini_options]
-testpaths = ["products/lidar/tests", "apps/api/tests", "tests"]
+testpaths = ["products/lidar/tests", "products/transelect/tests", "apps/api/tests", "tests"]
 pythonpath = ["."]
 addopts = "-ra"
 
 [tool.coverage.run]
-source = ["products/lidar/src"]
+source = ["products/lidar/src", "products/transelect/src"]

@@ -46,11 +46,11 @@ projects:
       - ".pdf"
 
   transelect:
-    display_name: "Proyecto Transelect"
+    display_name: "Proyecto Transelec"
     bounded_context: transelect
     repository_root: "products/transelect"
     source_paths:
-      - "03_Proyecto_Transelect"
+      - "03_Proyecto_Transelec"
     notes:
       - >
         Domain model intentionally remains undefined until its source

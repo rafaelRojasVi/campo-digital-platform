@@ -6,7 +6,7 @@ Campo Digital is a product-first monorepo with three bounded product contexts:
 
 1. LiDAR / Cubicación
 2. Gestión Predial Forestal / QGIS
-3. Transelect
+3. Transelec
 
 The repository uses a modular-monolith backend and separate product-owned
 frontends.
@@ -69,7 +69,7 @@ Examples:
 
 - LiDAR geometry belongs under `products/lidar/`.
 - Forestry rodal logic belongs under `products/forestry/`.
-- Transelect business logic belongs under `products/transelect/`.
+- Transelec business logic belongs under `products/transelect/`.
 
 Platform-level directories contain only genuinely cross-product concerns.
 
@@ -162,5 +162,5 @@ OneDrive remains a collaboration/source system, not the production database.
 3. Re-establish the full LiDAR quality baseline.
 4. Introduce workspace tooling and executable architecture checks.
 5. Add Forestry foundations.
-6. Add Transelect after its real workflow is understood.
+6. Add Transelec after its real workflow is understood.
 7. Add production persistence and ingestion infrastructure.

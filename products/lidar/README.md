@@ -44,7 +44,7 @@ The shared FastAPI composition layer remains under:
     apps/api/
 
 Its current LiDAR HTTP surface consumes the LiDAR packages but the API itself
-remains platform infrastructure so Forestry and Transelect can later expose
+remains platform infrastructure so Forestry and Transelec can later expose
 their own bounded API modules through the same application.
 
 ## Scientific documentation

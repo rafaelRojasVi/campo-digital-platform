@@ -8,7 +8,7 @@ There are three bounded products:
 
 - LiDAR / Cubicación
 - Gestión Predial Forestal / QGIS
-- Transelect
+- Transelec
 
 ## Product boundary
 
