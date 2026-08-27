@@ -1,4 +1,4 @@
-.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check check db-test-up db-test-reset db-test-down migration-check persistence-check
+.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check
 
 setup:
 	uv sync --all-extras --dev
@@ -29,6 +29,9 @@ architecture-check:
 
 secret-check:
 	./scripts/check_secrets.sh
+
+dependency-audit:
+	./scripts/check_dependency_vulnerabilities.sh
 
 check: format-check lint typecheck architecture-check test docs-check
 

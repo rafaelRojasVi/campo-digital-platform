@@ -86,6 +86,36 @@ repository begins automated secret scanning without an allowlist.
 Live dependency-advisory checks are intentionally separate from this repository
 quality gate because they depend on external vulnerability databases.
 
+## Dependency vulnerability scanning
+
+Supported runtime dependency graphs are checked separately from deterministic
+repository quality gates.
+
+The current blocking audit surface is:
+
+- the locked Python base runtime plus API extra;
+- the locked optional geometry stack;
+- production dependencies of the LiDAR dashboard.
+
+Python dependency versions come from `uv.lock`; `pip-audit` inspects an exported
+locked graph rather than resolving an independent application dependency graph.
+The audit tool version is pinned by
+`scripts/check_dependency_vulnerabilities.sh`.
+
+Dashboard production dependencies are audited from the committed npm lockfile.
+
+These checks depend on live vulnerability advisory services, so their results
+may change without a repository change. They therefore run in dedicated
+Security CI, including a scheduled weekly scan, and are intentionally excluded
+from the deterministic `make check` gate.
+
+Notebook tooling is an explicit `analysis` extra rather than part of the normal
+application runtime dependency surface.
+
+**RESULT (2026-08-27)** — the initial Python runtime/API, optional geometry, and
+LiDAR dashboard production dependency baselines reported no known
+vulnerabilities.
+
 ## Auditability
 
 The platform should be able to answer which source snapshot produced a state, which ingestion run processed it, which user made an important operational change, when it happened, and which artifacts were generated from it.
