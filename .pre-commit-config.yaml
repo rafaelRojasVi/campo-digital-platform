@@ -1,14 +1,26 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+  - repo: local
     hooks:
-      - id: ruff
-        args: [--fix]
+      - id: ruff-check
+        name: Ruff lint
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+
       - id: ruff-format
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.2
-    hooks:
+        name: Ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+
       - id: mypy
-        additional_dependencies: [pydantic>=2.7]
+        name: Mypy
+        entry: uv run mypy .
+        language: system
         pass_filenames: false
-        args: ["."]
+
+      - id: architecture-boundaries
+        name: Architecture boundaries
+        entry: uv run python scripts/check_architecture_boundaries.py
+        language: system
+        pass_filenames: false

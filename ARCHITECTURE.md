@@ -17,11 +17,24 @@ belong under:
 
     products/<product>/
 
-Current product roots:
+Bounded product contexts:
+
+    lidar
+    forestry
+    transelect
+
+Materialized product roots are created only when product-owned implementation
+exists. Currently:
 
     products/lidar/
+
+Future Forestry and Transelec implementation belongs under:
+
     products/forestry/
     products/transelect/
+
+Their absence from the current tree does not change the bounded-context
+ownership rule.
 
 ## Shared API
 
@@ -71,8 +84,17 @@ Raw private client datasets never belong in Git.
 
 Architecture documentation describes the intended system.
 
-Executable architecture checks will enforce dependency rules so architectural
-drift fails locally and in CI.
+`scripts/check_architecture_boundaries.py` enforces the current Python
+dependency boundaries locally and in CI through `make architecture-check`
+and the canonical `make check` gate.
+
+For every materialized `products/<product>/src` tree, product-owned Python
+code must not import FastAPI, the `app` API package, or another product's
+top-level Python packages. The shared API may adapt and import product
+packages.
+
+These checks intentionally enforce established product boundaries without
+inventing unsupported internal layering rules inside a product.
 
 ## Canonical details
 

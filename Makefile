@@ -1,4 +1,4 @@
-.PHONY: setup lint format format-check typecheck test test-api docs-check check db-test-up db-test-reset db-test-down migration-check persistence-check
+.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check check db-test-up db-test-reset db-test-down migration-check persistence-check
 
 setup:
 	uv sync --all-extras --dev
@@ -24,7 +24,10 @@ test-api:
 docs-check:
 	uv run python scripts/check_doc_links.py
 
-check: format-check lint typecheck test docs-check
+architecture-check:
+	uv run python scripts/check_architecture_boundaries.py
+
+check: format-check lint typecheck architecture-check test docs-check
 
 db-test-up:
 	docker compose up -d --wait postgres-test
