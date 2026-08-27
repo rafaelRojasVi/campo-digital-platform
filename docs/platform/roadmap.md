@@ -80,7 +80,9 @@ Current implementation status (2026-08-27):
 - **FACT** — `/health` is dependency-free liveness and `/ready` checks PostgreSQL readiness;
 - **FACT** — destructive migration validation is restricted to a dedicated `_test` database;
 - **FACT** — real PostGIS integration tests and dedicated persistence CI are implemented;
-- **LIMITATION** — product persistence, source snapshots, artifact storage, and job execution boundaries are not yet implemented.
+- **FACT** — provider-neutral source provenance now distinguishes source systems, assets, immutable SHA-256 snapshots, and observations;
+- **FACT** — migration `0002` persists that provenance model with database-level identity, integrity, and deletion-safety constraints;
+- **LIMITATION** — product persistence, artifact storage, ingestion runs, schema contracts, classification, and job execution boundaries are not yet implemented.
 
 Exit condition:
 

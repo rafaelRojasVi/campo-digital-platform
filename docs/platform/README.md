@@ -36,6 +36,7 @@ Product-specific implementation truth remains inside each product boundary. Plat
 ## Architecture decisions
 
 - [ADR-001 — Managed production platform](../adr/ADR-001-managed-production-platform.md)
+- [ADR-002 — Source provenance identity](../adr/ADR-002-source-provenance-identity.md)
 
 ## Research
 
