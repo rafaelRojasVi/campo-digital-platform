@@ -2,10 +2,12 @@
 
 ## Status
 
-Proposed.
+Production target: **Proposed**.
+
+Local persistence foundation: **Implemented (2026-08-27)**.
 
 This document defines the current target production architecture for Campo
-Digital. Infrastructure has not yet been provisioned.
+Digital. Managed production infrastructure has not yet been provisioned.
 
 Provider pricing and comparative research are non-canonical and live under
 `docs/research/`.
@@ -104,8 +106,9 @@ transelec
 lidar
 ```
 
-The exact PostgreSQL schema/table layout will be defined when persistence is
-implemented.
+The first Git-tracked migration now ensures PostGIS and establishes an empty
+`platform` schema. Product schemas and business tables remain unimplemented
+until their domain requirements are established.
 
 ## Object-storage strategy
 
@@ -151,7 +154,8 @@ until actual workload/concurrency requirements justify one.
 
 - source access through the read-only synchronized OneDrive mirror;
 - application services locally;
-- local PostgreSQL/PostGIS when persistence development begins;
+- local PostgreSQL/PostGIS through the pinned Docker Compose service;
+- a separate disposable PostgreSQL/PostGIS service for destructive tests;
 - no dependency on production infrastructure for normal development.
 
 ### Staging

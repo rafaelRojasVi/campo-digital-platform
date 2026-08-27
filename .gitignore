@@ -54,3 +54,8 @@ products/lidar/data/reference/private/**
 
 products/lidar/reports/out/**
 products/lidar/dashboard/public/local-demo/
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example

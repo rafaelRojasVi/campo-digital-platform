@@ -1,0 +1,93 @@
+name: Persistence CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: persistence-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  persistence:
+    name: PostgreSQL / PostGIS
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5@sha256:624f5195b91d424dbebf018890148cc0e5a3e80db5467da8b53cc2ed2ce49216
+        env:
+          POSTGRES_DB: campo_digital_test
+          POSTGRES_USER: campo_digital_test
+          POSTGRES_PASSWORD: campo_digital_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U campo_digital_test -d campo_digital_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      APP_ENV: test
+      POSTGRES_DB: campo_digital_test
+      POSTGRES_USER: campo_digital_test
+      POSTGRES_PASSWORD: campo_digital_test
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+      PYTHONPATH: apps/api
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+
+      - name: Install Python
+        run: uv python install 3.12.13
+
+      - name: Sync locked dependencies
+        run: uv sync --frozen --all-extras --dev
+
+      - name: Verify PostGIS service
+        run: |
+          uv run python - <<'PY'
+          from sqlalchemy import create_engine, text
+
+          from app.config import Settings
+
+          settings = Settings()
+          engine = create_engine(settings.database_url)
+
+          try:
+              with engine.connect() as connection:
+                  database = connection.execute(
+                      text("SELECT current_database()")
+                  ).scalar_one()
+                  version = connection.execute(
+                      text("SELECT PostGIS_Version()")
+                  ).scalar_one()
+          finally:
+              engine.dispose()
+
+          assert database == "campo_digital_test"
+          assert version
+          print("database:", database)
+          print("postgis:", version)
+          PY
+
+      - name: Validate migration lifecycle
+        run: uv run python scripts/migration_check.py
+
+      - name: Run real persistence integration tests
+        run: uv run pytest -q apps/api/integration_tests
