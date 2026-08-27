@@ -4,9 +4,10 @@
 
 Active platform contract.
 
-Source provenance and V1 read-only filesystem discovery/fingerprinting are
-implemented. Classification, validation, product ingestion, and artifact
-handling remain future slices.
+Source provenance storage, V1 read-only filesystem discovery/fingerprinting,
+and persistence of discovered provenance observations are implemented.
+Classification, validation, product ingestion, and artifact handling remain
+future slices.
 
 ## Purpose
 
