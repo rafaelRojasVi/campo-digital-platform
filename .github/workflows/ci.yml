@@ -5,42 +5,62 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: Python
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          version: "0.10.10"
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
 
-      - name: Set up Python
-        run: uv python install 3.12
+      - name: Install Python
+        run: uv python install 3.12.13
 
-      - name: Sync dependencies
-        run: uv sync --all-extras --dev
+      - name: Sync locked dependencies
+        run: uv sync --frozen --all-extras --dev
 
-      - name: ruff format check
+      - name: Ruff format check
         run: uv run ruff format --check .
 
-      - name: ruff lint
+      - name: Ruff lint
         run: uv run ruff check .
 
-      - name: mypy
+      - name: Mypy
         run: uv run mypy .
 
-      - name: pytest (synthetic data only, no network/private data)
+      - name: Pytest
         run: uv run pytest --cov
 
+      - name: Documentation links
+        run: uv run python scripts/check_doc_links.py
+
   viewer:
-    runs-on: ubuntu-latest
+    name: LiDAR viewer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "20"
           cache: npm

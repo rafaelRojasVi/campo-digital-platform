@@ -33,7 +33,7 @@ Naming alignment is a separate explicit decision.
 
 ## Phase 0 — Architecture evidence
 
-**Current phase.**
+**Status: completed foundation.**
 
 Establish the durable platform contracts before introducing persistence or
 production infrastructure.
@@ -56,6 +56,8 @@ established, proposed, and still unknown.
 
 ## Phase 1 — Local platform foundation
 
+**Current phase.**
+
 Build the provider-neutral foundation locally.
 
 Scope:
@@ -69,6 +71,16 @@ Scope:
 - job/use-case execution boundary;
 - architecture checks;
 - reproducible local developer workflow.
+
+Current implementation status (2026-08-27):
+
+- **FACT** — local PostgreSQL 17 / PostGIS 3.5 development and disposable test services are implemented;
+- **FACT** — typed database configuration, SQLAlchemy infrastructure, and Alembic migrations are implemented;
+- **FACT** — migration `0001` ensures PostGIS and establishes the empty `platform` schema;
+- **FACT** — `/health` is dependency-free liveness and `/ready` checks PostgreSQL readiness;
+- **FACT** — destructive migration validation is restricted to a dedicated `_test` database;
+- **FACT** — real PostGIS integration tests and dedicated persistence CI are implemented;
+- **LIMITATION** — product persistence, source snapshots, artifact storage, and job execution boundaries are not yet implemented.
 
 Exit condition:
 

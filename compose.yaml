@@ -1,0 +1,38 @@
+name: campo-digital
+
+services:
+  postgres:
+    image: postgis/postgis:17-3.5@sha256:624f5195b91d424dbebf018890148cc0e5a3e80db5467da8b53cc2ed2ce49216
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-campo_digital}
+      POSTGRES_USER: ${POSTGRES_USER:-campo_digital}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+
+  postgres-test:
+    image: postgis/postgis:17-3.5@sha256:624f5195b91d424dbebf018890148cc0e5a3e80db5467da8b53cc2ed2ce49216
+    environment:
+      POSTGRES_DB: campo_digital_test
+      POSTGRES_USER: campo_digital_test
+      POSTGRES_PASSWORD: campo_digital_test
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campo_digital_test -d campo_digital_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
+volumes:
+  postgres_data:
