@@ -43,6 +43,20 @@ advisories with:
 Dependency auditing is also separate from `make check` because advisory data is
 external and changes independently of the repository.
 
+## Toolchain
+
+Python is constrained by `pyproject.toml` and resolved through `uv.lock`.
+The required uv version is declared in `pyproject.toml`.
+
+The repository Node version is declared once in `.node-version`. GitHub Actions
+and local development should use that version. The LiDAR dashboard declares its
+supported Node/npm range and package-manager version in `package.json`.
+
+Do not silently introduce a second independent tool-version authority.
+
+Dependency updates are proposed through Dependabot for uv, npm, and GitHub
+Actions and remain subject to the normal pull-request validation gates.
+
 ## External data
 
 Campo Digital source/client data remains outside Git.
