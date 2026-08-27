@@ -7,7 +7,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
 
 API_ROOT = Path(__file__).resolve().parents[1]
 
@@ -40,3 +40,18 @@ def integration_engine(
         yield engine
     finally:
         engine.dispose()
+
+
+@pytest.fixture
+def integration_connection(
+    integration_engine: Engine,
+) -> Generator[Connection, None, None]:
+    """Provide a real connection rolled back after each integration test."""
+
+    with integration_engine.connect() as connection:
+        transaction = connection.begin()
+
+        try:
+            yield connection
+        finally:
+            transaction.rollback()

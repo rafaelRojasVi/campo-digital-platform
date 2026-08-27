@@ -32,20 +32,40 @@ not filename alone.
 
 ### Source snapshot
 
-An immutable observation of source content at a point in time.
+An immutable content version of a resolved source asset.
 
-A snapshot should preserve metadata such as:
+A snapshot preserves content-level metadata such as:
 
 - source asset identity;
+- size;
+- SHA-256 content fingerprint, represented in V1 as 64 lowercase hexadecimal characters.
+
+For the same resolved source asset, identical content should resolve to the
+same snapshot.
+
+### Source observation
+
+A record of when and where a source snapshot was observed.
+
+An observation may preserve metadata such as:
+
 - source path;
 - filename;
 - observed timestamp;
 - source-modified timestamp;
-- size;
-- media/file type;
-- SHA-256 or equivalent content fingerprint;
-- product classification;
-- validation/ingestion state.
+- media/file type.
+
+Observations are separate from immutable content identity so that path,
+filename, or source metadata changes do not require a new snapshot when the
+logical source asset and content are otherwise unchanged.
+
+The current filesystem-mirror implementation uses root-relative path as a
+provisional source-asset identity. It cannot prove rename or move equivalence.
+A future provider integration may use stable provider item identifiers.
+
+Product classification, validation state, ingestion state, and schema-contract
+evaluation belong to later ingestion stages rather than source-content
+identity.
 
 ### Schema contract
 
