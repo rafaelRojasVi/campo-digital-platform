@@ -83,7 +83,8 @@ Current implementation status (2026-08-27):
 - **FACT** — provider-neutral source provenance now distinguishes source systems, assets, immutable SHA-256 snapshots, and observations;
 - **FACT** — migration `0002` persists that provenance model with database-level identity, integrity, and deletion-safety constraints;
 - **FACT** — V1 read-only filesystem discovery and SHA-256 fingerprinting are implemented using normalized root-relative source paths with path-escape and symbolic-link rejection;
-- **LIMITATION** — discovery does not yet persist provenance observations; product persistence, artifact storage, ingestion runs, schema contracts, classification, and job execution boundaries are not yet implemented.
+- **FACT** — discovered filesystem provenance can be persisted transactionally while reusing source-system, source-asset, and content-snapshot identities and appending observation history;
+- **LIMITATION** — product persistence, artifact storage, ingestion runs, schema contracts, classification, and job execution boundaries are not yet implemented.
 
 Exit condition:
 
