@@ -39,10 +39,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = [
-  "src/lidar_core",
-  "src/lidar_io",
-  "src/lidar_volume",
-  "src/lidar_cli",
+  "products/lidar/src/lidar_core",
+  "products/lidar/src/lidar_io",
+  "products/lidar/src/lidar_volume",
+  "products/lidar/src/lidar_cli",
 ]
 
 [dependency-groups]
@@ -58,23 +58,23 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "apps", "tests"]
+src = ["products/lidar/src", "products/lidar/tests", "apps"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
 python_version = "3.12"
-mypy_path = "src"
+mypy_path = "products/lidar/src"
 explicit_package_bases = true
 ignore_missing_imports = true
 warn_unused_ignores = true
 disallow_untyped_defs = false
-exclude = ["notebooks", "external"]
+exclude = ["products/lidar/notebooks", "external"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["products/lidar/tests", "apps/api/tests"]
 addopts = "-ra"
 
 [tool.coverage.run]
-source = ["src"]
+source = ["products/lidar/src"]

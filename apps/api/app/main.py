@@ -18,7 +18,7 @@ app = FastAPI(
     version="0.2.0",
 )
 
-DEFAULT_OUTPUT_ROOT = Path("reports/out")
+DEFAULT_OUTPUT_ROOT = Path("products/lidar/reports/out")
 
 
 def get_output_root() -> Path:

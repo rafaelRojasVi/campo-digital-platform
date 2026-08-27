@@ -122,13 +122,13 @@ Results must identify enough context to reproduce or interpret them.
 
 ## Documentation destinations
 
-### `docs/findings/`
+### `products/lidar/docs/findings/`
 
 Durable cross-cutting technical findings.
 
 Use when the result changes our understanding of the problem.
 
-### `docs/datasets/`
+### `products/lidar/docs/datasets/`
 
 Dataset-specific forensic records.
 
@@ -143,7 +143,7 @@ Use for:
 - acquisition metadata;
 - dataset-specific anomalies.
 
-### `docs/experiments/`
+### `products/lidar/docs/experiments/`
 
 One record per meaningful experiment.
 
@@ -155,7 +155,7 @@ Use names such as:
 
 `EXP-003-timber-stack-roi.md`
 
-### `docs/decisions/`
+### `products/lidar/docs/decisions/`
 
 Architecture/engineering decision records.
 
@@ -163,13 +163,13 @@ Use names such as:
 
 `ADR-001-use-observed-las-bounds.md`
 
-### `docs/journal/`
+### `products/lidar/docs/journal/`
 
 Concise chronological engineering log.
 
 This records what happened during development without replacing formal experiment or decision records.
 
-### `docs/es/`
+### `products/lidar/docs/es/`
 
 Spanish collaboration/stakeholder documentation.
 
@@ -249,7 +249,7 @@ Never commit:
 - client-identifying raw outputs;
 - private reference measurements without explicit approval.
 
-`data/raw/` and `data/interim/` are local working areas.
+`products/lidar/data/raw/` and `products/lidar/data/interim/` are local working areas.
 
 Before committing a derived report from client data, review whether it reveals sensitive information.
 
@@ -339,12 +339,9 @@ When asked to document the current work:
 - show the proposed documentation diff for review;
 - do not commit unless explicitly instructed.
 
-<!-- DOC_NAV_START -->
+## Related documentation
 
----
+[Platform documentation](README.md) ·
+[LiDAR product](../products/lidar/README.md) ·
+[LiDAR engineering documentation](../products/lidar/docs/README.md)
 
-### Documentation navigation
-
-[Project README](../README.md) · [Docs index](README.md) · [Findings](findings/cubicacion_accuracy_problem.md) · [Experiments](experiments) · [Decisions](decisions) · [Spanish docs](es/README.md) · [Estado técnico](es/estado-proyecto.md) · [Preguntas Campo Digital](es/preguntas-campo-digital.md)
-
-<!-- DOC_NAV_END -->

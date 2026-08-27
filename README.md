@@ -23,10 +23,10 @@ product.
 
 See:
 
-- `docs/projects/lidar/`
-- `docs/roadmap.md`
-- `docs/experiments/`
-- `docs/decisions/`
+- `products/lidar/`
+- `products/lidar/docs/roadmap.md`
+- `products/lidar/docs/experiments/`
+- `products/lidar/docs/decisions/`
 
 ### Gestión Predial Forestal / QGIS
 
@@ -77,12 +77,12 @@ The validated LiDAR implementation remains temporarily in its historical
 layout:
 
     apps/api
-    apps/viewer
+    products/lidar/dashboard
 
-    src/lidar_core
-    src/lidar_io
-    src/lidar_volume
-    src/lidar_cli
+    products/lidar/src/lidar_core
+    products/lidar/src/lidar_io
+    products/lidar/src/lidar_volume
+    products/lidar/src/lidar_cli
 
 These paths will be migrated incrementally rather than through one high-risk
 rewrite.
@@ -142,6 +142,6 @@ Never commit:
 
 The LiDAR bounded-context entry point is:
 
-`docs/projects/lidar/README.md`
+`products/lidar/README.md`
 
 The original pre-monorepo repository state remains preserved in Git history at commit `423932c862c1a46bcc7b197c7529fe3b8635ad95`.
