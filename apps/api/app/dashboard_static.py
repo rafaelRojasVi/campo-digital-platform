@@ -21,9 +21,6 @@ DEFAULT_DIST_DIR = (
     Path(__file__).resolve().parents[3] / "products" / "transelect" / "dashboard" / "dist"
 )
 
-_RESERVED_PREFIXES = ("api/", "transelec/")
-_RESERVED_PATHS = frozenset({"health", "ready"})
-
 
 def _dist_dir_from_environment() -> Path | None:
     configured = os.environ.get("CAMPO_TRANSELEC_DASHBOARD_DIST", "").strip()
@@ -40,8 +37,14 @@ def _resolve_within(dist_dir: Path, relative_path: str) -> Path | None:
     return candidate
 
 
-def mount_dashboard(app: FastAPI) -> None:
-    """Mount the built React dashboard, if present, as the same-origin UI."""
+def mount_dashboard(app: FastAPI, *, reserved_root_segments: frozenset[str]) -> None:
+    """Mount the built React dashboard, if present, as the same-origin UI.
+
+    `reserved_root_segments` must list the first path segment of every other
+    router mounted on `app` (e.g. `{"runs", "transelec", "api", "health",
+    "ready"}`) so the SPA catch-all never swallows an unmatched path that
+    belongs to another router's namespace instead of returning its own 404.
+    """
 
     dist_dir = _dist_dir_from_environment()
 
@@ -61,11 +64,13 @@ def mount_dashboard(app: FastAPI) -> None:
     def serve_dashboard(full_path: str) -> FileResponse:
         """SPA fallback: serve a build file if it exists, else index.html."""
 
-        if full_path in _RESERVED_PATHS or full_path.startswith(_RESERVED_PREFIXES):
-            raise HTTPException(status_code=404)
-
         if not full_path:
             return FileResponse(dist_dir / "index.html")
+
+        first_segment = full_path.split("/", 1)[0]
+
+        if first_segment in reserved_root_segments:
+            raise HTTPException(status_code=404)
 
         candidate = _resolve_within(dist_dir, full_path)
 

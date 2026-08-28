@@ -32,7 +32,18 @@ def _client_with_mounted_dashboard(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    mount_dashboard(app)
+    @app.get("/api/transelec/summary")
+    def api_summary() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/runs")
+    def runs() -> dict[str, str]:
+        return {"status": "ok"}
+
+    mount_dashboard(
+        app,
+        reserved_root_segments=frozenset({"health", "api", "runs"}),
+    )
 
     return TestClient(app)
 
@@ -44,7 +55,7 @@ def test_mount_dashboard_is_a_noop_when_no_dist_directory_exists(
     monkeypatch.setenv("CAMPO_TRANSELEC_DASHBOARD_DIST", str(tmp_path / "does-not-exist"))
 
     app = FastAPI()
-    mount_dashboard(app)
+    mount_dashboard(app, reserved_root_segments=frozenset())
 
     client = TestClient(app)
     response = client.get("/")
@@ -107,6 +118,25 @@ def test_unmatched_api_prefixed_path_returns_404_not_the_spa_shell(
     client = _client_with_mounted_dashboard(tmp_path, monkeypatch)
 
     response = client.get("/api/does-not-exist")
+
+    assert response.status_code == 404
+    assert "spa-shell" not in response.text
+
+
+def test_unmatched_path_under_another_routers_root_returns_404(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The SPA fallback must never swallow another router's namespace.
+
+    Regression test: this app also hosts routers with top-level roots like
+    `/runs/...`; an unmatched sub-path there must 404, not silently render
+    the dashboard shell with a 200.
+    """
+
+    client = _client_with_mounted_dashboard(tmp_path, monkeypatch)
+
+    response = client.get("/runs/some-id/not-a-real-artifact-path")
 
     assert response.status_code == 404
     assert "spa-shell" not in response.text

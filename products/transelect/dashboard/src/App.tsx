@@ -14,6 +14,7 @@ import {
   type TranselecSnapshotRecord,
   type TranselecSummary,
 } from './api'
+import { MultiSelectField } from './MultiSelectField'
 
 const numberFormatter = new Intl.NumberFormat('es-CL')
 const surfaceFormatter = new Intl.NumberFormat('es-CL', {
@@ -94,6 +95,22 @@ function DatabaseIcon() {
   )
 }
 
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 4v12m0 0-4.5-4.5M12 16l4.5-4.5M5 18.5V20h14v-1.5" />
+    </svg>
+  )
+}
+
+function PrintIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 9V4h12v5M6 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1M6 14h12v6H6z" />
+    </svg>
+  )
+}
+
 function StatusPills({
   statuses,
   compact = false,
@@ -125,9 +142,11 @@ function App() {
   const [snapshotHistoryAvailable, setSnapshotHistoryAvailable] = useState(true)
 
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('')
-  const [sector, setSector] = useState('')
-  const [empresa, setEmpresa] = useState('')
+  const [status, setStatus] = useState<string[]>([])
+  const [sector, setSector] = useState<string[]>([])
+  const [empresa, setEmpresa] = useState<string[]>([])
+  const [pas, setPas] = useState<string[]>([])
+  const [tipoPropietario, setTipoPropietario] = useState<string[]>([])
 
   const [selectedPmf, setSelectedPmf] = useState<string | null>(null)
   const [pmfDetail, setPmfDetail] = useState<PmfDetail | null>(null)
@@ -160,7 +179,14 @@ function App() {
     [summary],
   )
 
-  const filtersActive = Boolean(search || status || sector || empresa)
+  const filtersActive = Boolean(
+    search ||
+      status.length ||
+      sector.length ||
+      empresa.length ||
+      pas.length ||
+      tipoPropietario.length,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -205,9 +231,11 @@ function App() {
     const handle = window.setTimeout(() => {
       listPmfs({
         search: search.trim() || undefined,
-        status: status || undefined,
-        sector: sector || undefined,
-        empresa: empresa || undefined,
+        status,
+        sector,
+        empresa,
+        pas,
+        tipoPropietario,
       })
         .then((result) => {
           if (!cancelled) {
@@ -229,7 +257,7 @@ function App() {
       cancelled = true
       window.clearTimeout(handle)
     }
-  }, [search, status, sector, empresa, refreshToken])
+  }, [search, status, sector, empresa, pas, tipoPropietario, refreshToken])
 
   useEffect(() => {
     if (selectedPmf === null) return
@@ -277,9 +305,58 @@ function App() {
 
   const clearFilters = () => {
     setSearch('')
-    setStatus('')
-    setSector('')
-    setEmpresa('')
+    setStatus([])
+    setSector([])
+    setEmpresa([])
+    setPas([])
+    setTipoPropietario([])
+  }
+
+  const exportCsv = () => {
+    if (!pmfs || pmfs.length === 0) return
+
+    const headers = [
+      'PMF',
+      'Estado(s)',
+      'Predios',
+      'Sector',
+      'Empresa',
+      'Superficie (ha)',
+    ]
+
+    const escapeCell = (value: string) => `"${value.replace(/"/g, '""')}"`
+
+    const rows = pmfs.map((item) =>
+      [
+        item.pmf,
+        item.statuses.join(' / '),
+        String(item.predio_count),
+        item.sectors.join(' / '),
+        item.empresas.join(' / '),
+        item.surface_total === null
+          ? ''
+          : surfaceFormatter.format(item.surface_total),
+      ]
+        .map(escapeCell)
+        .join(','),
+    )
+
+    const csvContent = [headers.map(escapeCell).join(','), ...rows].join(
+      '\r\n',
+    )
+    const blob = new Blob(['﻿', csvContent], {
+      type: 'text/csv;charset=utf-8;',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const timestamp = new Date().toISOString().slice(0, 10)
+
+    link.href = url
+    link.download = `transelec-pmf-${timestamp}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   const handleFileChange = (file: File | null) => {
@@ -580,12 +657,31 @@ function App() {
               <span className="section-kicker">Explorador</span>
               <h2>PMF registrados</h2>
             </div>
-            <span className="record-count">
-              {pmfs ? `${numberFormatter.format(pmfs.length)} resultados` : 'Cargando…'}
-            </span>
+            <div className="records-heading-actions">
+              <span className="record-count">
+                {pmfs ? `${numberFormatter.format(pmfs.length)} resultados` : 'Cargando…'}
+              </span>
+              <button
+                type="button"
+                className="button button-secondary compact"
+                onClick={exportCsv}
+                disabled={!pmfs || pmfs.length === 0}
+              >
+                <DownloadIcon />
+                <span>Exportar CSV</span>
+              </button>
+              <button
+                type="button"
+                className="button button-secondary compact"
+                onClick={() => window.print()}
+              >
+                <PrintIcon />
+                <span>Imprimir</span>
+              </button>
+            </div>
           </div>
 
-          <div className="filter-bar">
+          <div className="filter-bar no-print">
             <label className="search-field">
               <SearchIcon />
               <input
@@ -606,39 +702,37 @@ function App() {
             </label>
 
             <div className="select-group">
-              <label>
-                <span>Estado</span>
-                <select value={status} onChange={(event) => setStatus(event.target.value)}>
-                  <option value="">Todos</option>
-                  {filters?.statuses.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Sector</span>
-                <select value={sector} onChange={(event) => setSector(event.target.value)}>
-                  <option value="">Todos</option>
-                  {filters?.sectors.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Empresa</span>
-                <select value={empresa} onChange={(event) => setEmpresa(event.target.value)}>
-                  <option value="">Todas</option>
-                  {filters?.empresas.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <MultiSelectField
+                label="Estado resumido"
+                options={filters?.statuses ?? []}
+                selected={status}
+                onChange={setStatus}
+              />
+              <MultiSelectField
+                label="Sector"
+                options={filters?.sectors ?? []}
+                selected={sector}
+                onChange={setSector}
+              />
+              <MultiSelectField
+                label="Empresa"
+                options={filters?.empresas ?? []}
+                selected={empresa}
+                onChange={setEmpresa}
+              />
+              <MultiSelectField
+                label="PAS"
+                options={filters?.pas ?? []}
+                selected={pas}
+                onChange={setPas}
+              />
+              <MultiSelectField
+                label="Tipo de propietario"
+                options={filters?.tipos_propietario ?? []}
+                selected={tipoPropietario}
+                onChange={setTipoPropietario}
+                placeholderAll="Todos"
+              />
             </div>
 
             {filtersActive && (
@@ -862,6 +956,10 @@ function App() {
                                 <dt>PAS</dt>
                                 <dd>{row.pas ?? '—'}</dd>
                               </div>
+                              <div>
+                                <dt>Tipo de propietario</dt>
+                                <dd>{row.tipo_propietario ?? '—'}</dd>
+                              </div>
                             </dl>
                             <span className="source-row">
                               Fila de origen {row.source_row_number}
@@ -925,7 +1023,7 @@ function App() {
                     <div>
                       <strong>Publicar nueva versión</strong>
                       <span>
-                        Acepta .xlsx o .xlsm hasta 32 MB. Si el contenido es
+                        Acepta .xlsx o .xlsm hasta 64 MB. Si el contenido es
                         idéntico, no se crea otra versión.
                       </span>
                     </div>

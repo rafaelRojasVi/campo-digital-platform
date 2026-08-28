@@ -41,6 +41,8 @@ export interface TranselecFilterOptions {
   statuses: string[]
   sectors: string[]
   empresas: string[]
+  pas: string[]
+  tipos_propietario: string[]
 }
 
 export interface TranselecSummary {
@@ -113,9 +115,21 @@ export function getFilters(): Promise<TranselecFilterOptions> {
 
 export interface ListPmfsParams {
   search?: string
-  status?: string
-  sector?: string
-  empresa?: string
+  status?: string[]
+  sector?: string[]
+  empresa?: string[]
+  pas?: string[]
+  tipoPropietario?: string[]
+}
+
+function appendMultiSelect(
+  query: URLSearchParams,
+  key: string,
+  values: string[] | undefined,
+): void {
+  for (const value of values ?? []) {
+    query.append(key, value)
+  }
 }
 
 export function listPmfs(
@@ -124,9 +138,11 @@ export function listPmfs(
   const query = new URLSearchParams()
 
   if (params.search) query.set('search', params.search)
-  if (params.status) query.set('status', params.status)
-  if (params.sector) query.set('sector', params.sector)
-  if (params.empresa) query.set('empresa', params.empresa)
+  appendMultiSelect(query, 'status', params.status)
+  appendMultiSelect(query, 'sector', params.sector)
+  appendMultiSelect(query, 'empresa', params.empresa)
+  appendMultiSelect(query, 'pas', params.pas)
+  appendMultiSelect(query, 'tipo_propietario', params.tipoPropietario)
 
   const queryString = query.toString()
 

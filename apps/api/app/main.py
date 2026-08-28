@@ -54,4 +54,10 @@ app.include_router(lidar_router)
 app.include_router(transelec_router, prefix="/transelec")
 app.include_router(transelec_router, prefix="/api/transelec")
 
-mount_dashboard(app)
+# Keep in sync with the top-level path segment of every router included
+# above (plus the built-in health/ready probes) so the dashboard's SPA
+# catch-all never swallows an unmatched path from another router.
+mount_dashboard(
+    app,
+    reserved_root_segments=frozenset({"health", "ready", "runs", "transelec", "api"}),
+)

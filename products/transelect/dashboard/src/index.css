@@ -16,9 +16,12 @@
   --surface: #ffffff;
   --surface-soft: #f5f8f9;
   --canvas: #edf2f3;
-  --accent: #0b766e;
-  --accent-dark: #075c56;
-  --accent-soft: #e3f4f1;
+  --accent: #00697d;
+  --accent-dark: #004b59;
+  --accent-soft: #e1eef1;
+  --lime: #71b230;
+  --lime-dark: #5b9126;
+  --lime-soft: #eef6e2;
   --blue: #2866c7;
   --blue-soft: #eaf1fc;
   --amber: #a96412;
@@ -66,10 +69,10 @@ select {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 3px solid rgba(11, 118, 110, 0.18);
+  outline: 3px solid rgba(0, 105, 125, 0.18);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: rgba(11, 118, 110, 0.18);
+  background: rgba(0, 105, 125, 0.18);
 }
