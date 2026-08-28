@@ -88,9 +88,7 @@ def sanitize_upload_filename(filename: str) -> str:
         raise TranselecWorkbookError("Workbook filename is required")
 
     if Path(normalized).suffix.lower() not in ALLOWED_WORKBOOK_SUFFIXES:
-        raise TranselecWorkbookError(
-            "Workbook must use an .xlsx or .xlsm filename"
-        )
+        raise TranselecWorkbookError("Workbook must use an .xlsx or .xlsm filename")
 
     return normalized
 
@@ -148,18 +146,12 @@ def _snapshot_from_row(row: Any) -> TranselecSnapshotRecord:
     return TranselecSnapshotRecord(
         source_snapshot_id=int(mapping["source_snapshot_id"]),
         filename=str(mapping["filename"]),
-        media_type=(
-            str(mapping["media_type"])
-            if mapping["media_type"] is not None
-            else None
-        ),
+        media_type=(str(mapping["media_type"]) if mapping["media_type"] is not None else None),
         content_sha256=str(mapping["content_sha256"]),
         byte_size=int(mapping["byte_size"]),
         business_rows=int(mapping["business_rows"]),
         distinct_pmf=int(mapping["distinct_pmf"]),
-        distinct_provisional_predio_ids=int(
-            mapping["distinct_provisional_predio_ids"]
-        ),
+        distinct_provisional_predio_ids=int(mapping["distinct_provisional_predio_ids"]),
         surface_total=float(mapping["surface_total"]),
         created_at=mapping["created_at"],
         active=bool(mapping["active"]),
@@ -329,9 +321,7 @@ def persist_validated_workbook(
                 duplicate=False,
             )
     except (SQLAlchemyError, SourceProvenanceError) as exc:
-        raise TranselecSnapshotStoreError(
-            "Unable to persist Transelec workbook snapshot"
-        ) from exc
+        raise TranselecSnapshotStoreError("Unable to persist Transelec workbook snapshot") from exc
 
 
 def list_workbook_snapshots(
@@ -350,9 +340,7 @@ def list_workbook_snapshots(
                 )
             ).all()
     except SQLAlchemyError as exc:
-        raise TranselecSnapshotStoreError(
-            "Unable to list Transelec workbook snapshots"
-        ) from exc
+        raise TranselecSnapshotStoreError("Unable to list Transelec workbook snapshots") from exc
 
     return tuple(_snapshot_from_row(row) for row in rows)
 
@@ -424,6 +412,4 @@ def activate_workbook_snapshot(
 
             return _snapshot_from_row(refreshed)
     except SQLAlchemyError as exc:
-        raise TranselecSnapshotStoreError(
-            "Unable to activate Transelec workbook snapshot"
-        ) from exc
+        raise TranselecSnapshotStoreError("Unable to activate Transelec workbook snapshot") from exc
