@@ -110,6 +110,32 @@ The first Git-tracked migration now ensures PostGIS and establishes an empty
 `platform` schema. Product schemas and business tables remain unimplemented
 until their domain requirements are established.
 
+### Interim placement: Transelec hosted-pilot tables
+
+The Transelec hosted pilot's two snapshot tables
+(`platform.transelec_workbook_snapshot`, `platform.transelec_dashboard_state`,
+migration `0003`) live under the shared `platform` schema with a
+`transelec_` prefix, not under a dedicated `transelec` schema as the logical
+ownership list above implies. This is a deliberate interim pilot placement,
+not the target state:
+
+- one PostgreSQL/PostGIS instance is used, per the database strategy above;
+- shared cross-product source provenance (`platform.source_*`) stays
+  `platform`-owned, as intended;
+- workbook bytes stay outside PostgreSQL entirely, in object storage (see
+  Object-storage strategy below) — only metadata and a storage key live in
+  these tables;
+- a dedicated `transelec` schema and canonical Transelec product tables
+  (confirmed predio/area identity, business status modeling, and so on)
+  remain deferred until Javier's real workflow and the Transelec domain
+  model are confirmed. Today there is no canonical Transelec data model to
+  schema-scope — only a validated source-row projection of the `Resumen`
+  worksheet.
+
+This placement is not precedent for putting future Transelec business
+tables in `platform`. Once a real domain model exists, it belongs in a
+dedicated `transelec` schema per the logical ownership list above.
+
 ## Object-storage strategy
 
 PostgreSQL must not contain large LAS/LAZ files, source ZIP archives, workbook

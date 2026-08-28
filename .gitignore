@@ -59,3 +59,9 @@ products/lidar/dashboard/public/local-demo/
 .env
 .env.*
 !.env.example
+
+# Local content-addressed object store (dev/test only; never committed)
+var/
+
+# playwright-cli session artifacts
+.playwright-cli/

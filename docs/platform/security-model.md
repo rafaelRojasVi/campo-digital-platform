@@ -95,7 +95,8 @@ The current blocking audit surface is:
 
 - the locked Python base runtime plus API and Transelec extras;
 - the locked optional geometry stack;
-- production dependencies of the LiDAR dashboard.
+- production dependencies of the LiDAR dashboard;
+- production dependencies of the Transelec dashboard.
 
 Python dependency versions come from `uv.lock`; `pip-audit` inspects an exported
 locked graph rather than resolving an independent application dependency graph.
@@ -115,6 +116,9 @@ application runtime dependency surface.
 **RESULT (2026-08-27)** — the initial Python runtime/API, optional geometry, and
 LiDAR dashboard production dependency baselines reported no known
 vulnerabilities.
+
+**RESULT (2026-08-28)** — extending the audited surface to the Transelec
+dashboard's production dependencies reported no known vulnerabilities.
 
 ## Auditability
 

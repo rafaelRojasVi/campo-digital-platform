@@ -47,7 +47,12 @@ Status: architecture/domain foundation.
 
 Independent application domain for the Campo Digital Transelec project.
 
-Status: requirements discovery from source material.
+Status: Source Contract V1 is established, and a draft hosted-pilot
+implementation (dashboard, workbook-snapshot persistence, upload/history
+API, deployment packaging) exists on draft PR #47
+(`feat/transelec-hosted-pilot-v1`). Not yet merged to `main`; not deployed.
+
+See `products/transelect/README.md`.
 
 ## Architecture
 

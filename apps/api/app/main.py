@@ -8,15 +8,17 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
+from app.dashboard_static import mount_dashboard
 from app.database import (
     DatabaseUnavailableError,
     check_database_connection,
     get_database_engine,
 )
 from app.routers.lidar import router as lidar_router
+from app.routers.transelec import router as transelec_router
 
 app = FastAPI(
-    title="Campo Digital LiDAR API",
+    title="Campo Digital API",
     version="0.2.0",
 )
 
@@ -49,3 +51,13 @@ def readiness(
 
 
 app.include_router(lidar_router)
+app.include_router(transelec_router, prefix="/transelec")
+app.include_router(transelec_router, prefix="/api/transelec")
+
+# Keep in sync with the top-level path segment of every router included
+# above (plus the built-in health/ready probes) so the dashboard's SPA
+# catch-all never swallows an unmatched path from another router.
+mount_dashboard(
+    app,
+    reserved_root_segments=frozenset({"health", "ready", "runs", "transelec", "api"}),
+)

@@ -46,10 +46,28 @@ class Settings(BaseSettings):
         ge=1,
         le=65535,
     )
+    postgres_unix_socket_path: str | None = Field(
+        default=None,
+        validation_alias="POSTGRES_UNIX_SOCKET_PATH",
+    )
 
     @property
     def database_url(self) -> URL:
-        """Build the SQLAlchemy PostgreSQL URL without manual string assembly."""
+        """Build the SQLAlchemy PostgreSQL URL without manual string assembly.
+
+        When `POSTGRES_UNIX_SOCKET_PATH` is configured (Cloud Run's mounted
+        Cloud SQL socket directory, e.g. `/cloudsql/<connection-name>`),
+        connect over that Unix socket instead of TCP host/port.
+        """
+
+        if self.postgres_unix_socket_path:
+            return URL.create(
+                drivername="postgresql+psycopg",
+                username=self.postgres_user,
+                password=self.postgres_password.get_secret_value(),
+                database=self.postgres_db,
+                query={"host": self.postgres_unix_socket_path},
+            )
 
         return URL.create(
             drivername="postgresql+psycopg",
