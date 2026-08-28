@@ -14,9 +14,10 @@ from app.database import (
     get_database_engine,
 )
 from app.routers.lidar import router as lidar_router
+from app.routers.transelec import router as transelec_router
 
 app = FastAPI(
-    title="Campo Digital LiDAR API",
+    title="Campo Digital API",
     version="0.2.0",
 )
 
@@ -49,3 +50,4 @@ def readiness(
 
 
 app.include_router(lidar_router)
+app.include_router(transelec_router)
