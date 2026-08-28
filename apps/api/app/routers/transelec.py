@@ -175,10 +175,32 @@ async def _read_workbook_body(request: Request) -> bytes:
     "/summary",
     response_model=pmf_view.TranselecSummary,
 )
-def get_summary(rows: ResumenRows) -> pmf_view.TranselecSummary:
-    """Return current PMF/predio/status KPI numbers."""
+def get_summary(
+    rows: ResumenRows,
+    search: str | None = None,
+    status: Annotated[list[str] | None, Query()] = None,
+    sector: Annotated[list[str] | None, Query()] = None,
+    empresa: Annotated[list[str] | None, Query()] = None,
+    pas: Annotated[list[str] | None, Query()] = None,
+    tipo_propietario: Annotated[list[str] | None, Query()] = None,
+) -> pmf_view.TranselecSummary:
+    """Return KPI/status-distribution numbers for the active filter set.
 
-    return pmf_view.build_summary(rows)
+    Accepts the same filter query parameters as `/pmfs` so the KPIs and the
+    PMF table always describe the same filtered selection.
+    """
+
+    filtered_rows = pmf_view.filter_resumen_rows(
+        rows,
+        search=search,
+        status=status,
+        sector=sector,
+        empresa=empresa,
+        pas=pas,
+        tipo_propietario=tipo_propietario,
+    )
+
+    return pmf_view.build_summary(filtered_rows)
 
 
 @router.get(

@@ -106,15 +106,7 @@ async function getJson<T>(path: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export function getSummary(): Promise<TranselecSummary> {
-  return getJson<TranselecSummary>('/transelec/summary')
-}
-
-export function getFilters(): Promise<TranselecFilterOptions> {
-  return getJson<TranselecFilterOptions>('/transelec/filters')
-}
-
-export interface ListPmfsParams {
+export interface ActiveFilters {
   search?: string
   status?: string[]
   sector?: string[]
@@ -133,22 +125,42 @@ function appendMultiSelect(
   }
 }
 
+function activeFiltersQueryString(filters: ActiveFilters): string {
+  const query = new URLSearchParams()
+
+  if (filters.search) query.set('search', filters.search)
+  appendMultiSelect(query, 'status', filters.status)
+  appendMultiSelect(query, 'sector', filters.sector)
+  appendMultiSelect(query, 'empresa', filters.empresa)
+  appendMultiSelect(query, 'pas', filters.pas)
+  appendMultiSelect(query, 'tipo_propietario', filters.tipoPropietario)
+
+  const queryString = query.toString()
+  return queryString ? `?${queryString}` : ''
+}
+
+// Both the KPI/status-distribution summary and the PMF list are filtered by
+// the same active selection, so the dashboard's KPIs never disagree with
+// what the table shows.
+export function getSummary(
+  filters: ActiveFilters = {},
+): Promise<TranselecSummary> {
+  return getJson<TranselecSummary>(
+    `/transelec/summary${activeFiltersQueryString(filters)}`,
+  )
+}
+
+export function getFilters(): Promise<TranselecFilterOptions> {
+  return getJson<TranselecFilterOptions>('/transelec/filters')
+}
+
+export type ListPmfsParams = ActiveFilters
+
 export function listPmfs(
   params: ListPmfsParams = {},
 ): Promise<PmfListItem[]> {
-  const query = new URLSearchParams()
-
-  if (params.search) query.set('search', params.search)
-  appendMultiSelect(query, 'status', params.status)
-  appendMultiSelect(query, 'sector', params.sector)
-  appendMultiSelect(query, 'empresa', params.empresa)
-  appendMultiSelect(query, 'pas', params.pas)
-  appendMultiSelect(query, 'tipo_propietario', params.tipoPropietario)
-
-  const queryString = query.toString()
-
   return getJson<PmfListItem[]>(
-    `/transelec/pmfs${queryString ? `?${queryString}` : ''}`,
+    `/transelec/pmfs${activeFiltersQueryString(params)}`,
   )
 }
 

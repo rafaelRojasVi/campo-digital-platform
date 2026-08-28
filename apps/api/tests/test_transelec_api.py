@@ -97,6 +97,32 @@ def test_summary_returns_kpi_numbers(client: TestClient) -> None:
     assert body["distinct_provisional_predio_ids"] == 2
 
 
+def test_summary_respects_active_filters(client: TestClient) -> None:
+    unfiltered = client.get("/transelec/summary").json()
+    filtered = client.get(
+        "/transelec/summary",
+        params={"sector": "Norte"},
+    ).json()
+
+    assert unfiltered["business_rows"] == 2
+    assert filtered["business_rows"] == 1
+    assert filtered["distinct_pmf"] == 1
+
+
+def test_summary_returns_zero_values_when_filters_match_nothing(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        "/transelec/summary",
+        params={"sector": "No Existe"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["business_rows"] == 0
+    assert body["status_breakdown"] == []
+
+
 def test_filters_returns_distinct_values(client: TestClient) -> None:
     response = client.get("/transelec/filters")
 

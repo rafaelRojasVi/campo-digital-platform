@@ -192,10 +192,9 @@ function App() {
     let cancelled = false
 
     setLoading(true)
-    Promise.all([getSummary(), getFilters()])
-      .then(([summaryResult, filtersResult]) => {
+    getFilters()
+      .then((filtersResult) => {
         if (cancelled) return
-        setSummary(summaryResult)
         setFilters(filtersResult)
         setError(null)
       })
@@ -229,17 +228,21 @@ function App() {
     setListLoading(true)
 
     const handle = window.setTimeout(() => {
-      listPmfs({
+      const activeFilters = {
         search: search.trim() || undefined,
         status,
         sector,
         empresa,
         pas,
         tipoPropietario,
-      })
-        .then((result) => {
+      }
+
+      // KPIs and the PMF table always share the same active filters.
+      Promise.all([listPmfs(activeFilters), getSummary(activeFilters)])
+        .then(([pmfsResult, summaryResult]) => {
           if (!cancelled) {
-            setPmfs(result)
+            setPmfs(pmfsResult)
+            setSummary(summaryResult)
             setError(null)
           }
         })
@@ -629,11 +632,18 @@ function App() {
                 <span>XLSX</span>
               </div>
               <div>
-                <strong>{activeSnapshot?.filename ?? 'Fuente de desarrollo'}</strong>
+                <strong>
+                  {activeSnapshot?.filename ??
+                    (snapshotHistoryAvailable
+                      ? 'Sin planilla publicada'
+                      : 'Fuente de desarrollo')}
+                </strong>
                 <span>
                   {activeSnapshot
                     ? `${formatBytes(activeSnapshot.byte_size)} · versión #${activeSnapshot.source_snapshot_id}`
-                    : 'Sin historial persistido disponible'}
+                    : snapshotHistoryAvailable
+                      ? 'Publique una planilla para comenzar'
+                      : 'Sin historial persistido disponible'}
                 </span>
               </div>
             </div>
@@ -674,7 +684,7 @@ function App() {
               </span>
               <button
                 type="button"
-                className="button button-secondary compact"
+                className="button button-secondary compact no-print"
                 onClick={exportCsv}
                 disabled={!pmfs || pmfs.length === 0}
               >
@@ -683,7 +693,7 @@ function App() {
               </button>
               <button
                 type="button"
-                className="button button-secondary compact"
+                className="button button-secondary compact no-print"
                 onClick={() => window.print()}
               >
                 <PrintIcon />
@@ -765,7 +775,7 @@ function App() {
                     <th>Sector</th>
                     <th>Empresa</th>
                     <th className="numeric">Superficie</th>
-                    <th aria-label="Abrir detalle" />
+                    <th className="row-action" aria-label="Abrir detalle" />
                   </tr>
                 </thead>
                 <tbody>

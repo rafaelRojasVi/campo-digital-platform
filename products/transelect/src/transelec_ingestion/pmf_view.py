@@ -184,7 +184,7 @@ def _row_matches(
     return True
 
 
-def list_pmfs(
+def filter_resumen_rows(
     rows: Iterable[ResumenSourceRow],
     *,
     search: str | None = None,
@@ -193,14 +193,20 @@ def list_pmfs(
     empresa: Sequence[str] | None = None,
     pas: Sequence[str] | None = None,
     tipo_propietario: Sequence[str] | None = None,
-) -> tuple[PmfListItem, ...]:
+) -> tuple[ResumenSourceRow, ...]:
+    """Apply the same search/multi-select filters used by list_pmfs and the KPIs.
+
+    Shared so that the summary (KPIs, status distribution) and the PMF list
+    always reflect the identical active filter set.
+    """
+
     statuses = _normalized_filter_set(status)
     sectors = _normalized_filter_set(sector)
     empresas = _normalized_filter_set(empresa)
     pas_values = _normalized_filter_set(pas)
     tipos_propietario = _normalized_filter_set(tipo_propietario)
 
-    matched = [
+    return tuple(
         row
         for row in rows
         if _row_matches(
@@ -212,7 +218,28 @@ def list_pmfs(
             pas_values=pas_values,
             tipos_propietario=tipos_propietario,
         )
-    ]
+    )
+
+
+def list_pmfs(
+    rows: Iterable[ResumenSourceRow],
+    *,
+    search: str | None = None,
+    status: Sequence[str] | None = None,
+    sector: Sequence[str] | None = None,
+    empresa: Sequence[str] | None = None,
+    pas: Sequence[str] | None = None,
+    tipo_propietario: Sequence[str] | None = None,
+) -> tuple[PmfListItem, ...]:
+    matched = filter_resumen_rows(
+        rows,
+        search=search,
+        status=status,
+        sector=sector,
+        empresa=empresa,
+        pas=pas,
+        tipo_propietario=tipo_propietario,
+    )
 
     grouped: dict[str, list[ResumenSourceRow]] = defaultdict(list)
 
@@ -324,7 +351,27 @@ def get_pmf_detail(rows: Iterable[ResumenSourceRow], pmf: str) -> PmfDetail | No
 
 
 def build_summary(rows: Iterable[ResumenSourceRow]) -> TranselecSummary:
-    evidence = analyze_domain_evidence(rows)
+    """Project KPI/status-distribution evidence, including under active filters.
+
+    A filtered selection can legitimately match zero rows (e.g. a filter
+    combination with no matches); return a zero-valued summary rather than
+    propagating analyze_domain_evidence's "at least one row" requirement,
+    which guards the whole-workbook case instead.
+    """
+
+    materialized_rows = tuple(rows)
+
+    if not materialized_rows:
+        return TranselecSummary(
+            business_rows=0,
+            distinct_pmf=0,
+            distinct_provisional_predio_ids=0,
+            distinct_roles=0,
+            surface_total=0.0,
+            status_breakdown=(),
+        )
+
+    evidence = analyze_domain_evidence(materialized_rows)
 
     return TranselecSummary(
         business_rows=evidence.business_rows,

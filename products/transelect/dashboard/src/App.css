@@ -2254,7 +2254,9 @@
   .alert,
   .no-print,
   .icon-button,
-  .overlay {
+  .overlay,
+  .row-action,
+  .dataset-panel .button-dark {
     display: none !important;
   }
 

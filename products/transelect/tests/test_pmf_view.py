@@ -2,6 +2,7 @@ from typing import Any
 
 from transelec_ingestion.pmf_view import (
     build_summary,
+    filter_resumen_rows,
     get_pmf_detail,
     list_filter_options,
     list_pmfs,
@@ -252,3 +253,34 @@ def test_build_summary_projects_domain_evidence_fields() -> None:
     assert summary.distinct_roles == 1
     assert summary.surface_total == 7.0
     assert summary.status_breakdown == (("Aprobado", 3), ("En tramite", 1))
+
+
+def test_build_summary_is_filter_aware_via_filter_resumen_rows() -> None:
+    """KPIs must reflect the same active filters as the PMF table."""
+
+    filtered = filter_resumen_rows(_rows(), sector=["Norte"])
+    summary = build_summary(filtered)
+
+    assert summary.business_rows == 1
+    assert summary.distinct_pmf == 1
+    assert summary.surface_total == 3.0
+    assert summary.status_breakdown == (("Aprobado", 1),)
+
+
+def test_build_summary_returns_zero_values_for_an_empty_filtered_selection() -> None:
+    filtered = filter_resumen_rows(_rows(), sector=["No Existe"])
+    summary = build_summary(filtered)
+
+    assert summary.business_rows == 0
+    assert summary.distinct_pmf == 0
+    assert summary.distinct_provisional_predio_ids == 0
+    assert summary.distinct_roles == 0
+    assert summary.surface_total == 0.0
+    assert summary.status_breakdown == ()
+
+
+def test_filter_resumen_rows_matches_list_pmfs_row_membership() -> None:
+    filtered = filter_resumen_rows(_rows(), status=["Aprobado"])
+
+    assert {row.pmf for row in filtered} == {"PMF1", "PMF2"}
+    assert sum(1 for row in filtered if row.pmf == "PMF1") == 2
