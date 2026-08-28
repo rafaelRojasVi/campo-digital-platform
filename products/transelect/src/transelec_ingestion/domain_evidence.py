@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from statistics import median
-from typing import Any, Iterable
+from typing import Any
 
 from transelec_ingestion.xlsx_contract import (
     RESUMEN_COLUMNS,
     ResumenSourceRow,
 )
-
 
 IDENTIFIER_FIELDS = (
     "id_transelec",
