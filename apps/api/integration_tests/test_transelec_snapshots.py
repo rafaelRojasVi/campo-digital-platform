@@ -7,8 +7,6 @@ from tempfile import TemporaryDirectory
 from typing import Any
 
 import xlsxwriter
-from sqlalchemy import Engine, text
-
 from app.transelec_snapshots import (
     SYSTEM_KEY,
     activate_workbook_snapshot,
@@ -17,6 +15,8 @@ from app.transelec_snapshots import (
     persist_validated_workbook,
     validate_workbook_upload,
 )
+from sqlalchemy import Engine, text
+
 from transelec_ingestion.xlsx_contract import (
     EXPECTED_RESUMEN_HEADERS,
     RESUMEN_COLUMNS,
