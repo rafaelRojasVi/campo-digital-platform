@@ -25,12 +25,6 @@ const dateFormatter = new Intl.DateTimeFormat('es-CL', {
   timeStyle: 'short',
 })
 
-function formatStatuses(statuses: string[]): string {
-  if (statuses.length === 0) return 'Sin estado'
-  if (statuses.length === 1) return statuses[0]
-  return `${statuses.length} estados`
-}
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
