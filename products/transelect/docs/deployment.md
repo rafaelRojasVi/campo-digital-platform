@@ -110,7 +110,9 @@ See [`products/transelect/dashboard/README.md`](../dashboard/README.md).
   [`production-platform-v1.md`](../../../docs/platform/production-platform-v1.md)).
   Do not create a Transelec-specific database server; use the shared
   platform instance and the `platform` schema, as already established by
-  migrations `0001`–`0003`.
+  migrations `0001`–`0003`. This is a deliberate interim pilot placement,
+  not a dedicated `transelec` schema — see
+  [production-platform-v1.md § Interim placement: Transelec hosted-pilot tables](../../../docs/platform/production-platform-v1.md#interim-placement-transelec-hosted-pilot-tables).
 - Connect Cloud Run to Cloud SQL using the
   [Cloud SQL Unix-socket connection](https://cloud.google.com/sql/docs/postgres/connect-run),
   not a public IP. `apps/api/app/config.py` supports this natively: set

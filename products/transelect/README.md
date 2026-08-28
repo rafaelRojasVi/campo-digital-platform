@@ -44,6 +44,10 @@ database as an immutable source snapshot. The active snapshot is selected by a
 single explicit pointer; overwriting a filename therefore does not erase
 history.
 
+These tables live under the shared `platform` schema as an interim pilot
+placement, not a dedicated `transelec` schema — see
+[production-platform-v1.md § Interim placement: Transelec hosted-pilot tables](../../docs/platform/production-platform-v1.md#interim-placement-transelec-hosted-pilot-tables).
+
 ## Deployment
 
 Container packaging, Cloud SQL/Cloud Storage configuration, Cloud Run IAP,
