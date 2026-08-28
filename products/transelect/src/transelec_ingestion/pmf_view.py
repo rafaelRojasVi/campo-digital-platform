@@ -84,6 +84,7 @@ class TranselecSummary:
     business_rows: int
     distinct_pmf: int
     distinct_provisional_predio_ids: int
+    distinct_roles: int
     surface_total: float
     status_breakdown: tuple[tuple[str, int], ...]
 
@@ -329,6 +330,7 @@ def build_summary(rows: Iterable[ResumenSourceRow]) -> TranselecSummary:
         business_rows=evidence.business_rows,
         distinct_pmf=evidence.distinct_pmf,
         distinct_provisional_predio_ids=evidence.distinct_provisional_predio_ids,
+        distinct_roles=evidence.distinct_roles,
         surface_total=evidence.surface_sum,
         status_breakdown=evidence.summarized_status_counts,
     )

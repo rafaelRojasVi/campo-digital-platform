@@ -249,5 +249,6 @@ def test_build_summary_projects_domain_evidence_fields() -> None:
     assert summary.business_rows == 4
     assert summary.distinct_pmf == 2
     assert summary.distinct_provisional_predio_ids == 2
+    assert summary.distinct_roles == 1
     assert summary.surface_total == 7.0
     assert summary.status_breakdown == (("Aprobado", 3), ("En tramite", 1))

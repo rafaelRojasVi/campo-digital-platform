@@ -559,6 +559,17 @@ function App() {
             </strong>
             <span className="kpi-label">Filas operativas en la fuente</span>
           </article>
+
+          <article className="kpi-card">
+            <div className="kpi-topline">
+              <span>Roles</span>
+              <span className="kpi-index">05</span>
+            </div>
+            <strong className="kpi-value">
+              {summary ? numberFormatter.format(summary.distinct_roles) : '—'}
+            </strong>
+            <span className="kpi-label">Roles de propiedad distintos</span>
+          </article>
         </section>
 
         <section className="content-grid">

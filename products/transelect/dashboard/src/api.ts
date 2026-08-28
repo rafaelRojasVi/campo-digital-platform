@@ -49,6 +49,7 @@ export interface TranselecSummary {
   business_rows: number
   distinct_pmf: number
   distinct_provisional_predio_ids: number
+  distinct_roles: number
   surface_total: number
   status_breakdown: [string, number][]
 }

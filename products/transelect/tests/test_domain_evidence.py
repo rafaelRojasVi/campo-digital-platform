@@ -101,6 +101,7 @@ def test_domain_evidence_exposes_relationships_without_inventing_keys() -> None:
     assert report.business_rows == 4
     assert report.distinct_pmf == 2
     assert report.distinct_provisional_predio_ids == 3
+    assert report.distinct_roles == 1
 
     assert report.pmf_with_multiple_predios == 1
     assert report.predios_with_multiple_area_numbers == 0
@@ -131,6 +132,38 @@ def test_domain_evidence_exposes_relationships_without_inventing_keys() -> None:
 
     assert report.pmf_with_multiple_numero_ingreso == 0
     assert report.numero_ingreso_mapping_to_multiple_pmf == 1
+
+
+def test_domain_evidence_counts_distinct_roles() -> None:
+    rows = (
+        _row(2, pmf="PMF1", predio="P1", area="A1", superficie=1.0, estado="A", resumen="A"),
+        _row(
+            3,
+            pmf="PMF1",
+            predio="P1",
+            area="A2",
+            superficie=2.0,
+            estado="A",
+            resumen="A",
+            rol="ROL-DISTINTO",
+        ),
+        _row(4, pmf="PMF2", predio="P2", area="A1", superficie=3.0, estado="A", resumen="A"),
+        _row(
+            5,
+            pmf="PMF2",
+            predio="P2",
+            area="A2",
+            superficie=None,
+            estado="A",
+            resumen="A",
+            rol=None,
+        ),
+    )
+
+    report = analyze_domain_evidence(rows)
+
+    # Two rows share "ROL", one row has a distinct role, one row has no role.
+    assert report.distinct_roles == 2
 
 
 def test_domain_evidence_rejects_empty_input() -> None:

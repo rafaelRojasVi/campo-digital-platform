@@ -28,6 +28,7 @@ class DomainEvidence:
     business_rows: int
     distinct_pmf: int
     distinct_provisional_predio_ids: int
+    distinct_roles: int
 
     missing_identifiers: tuple[tuple[str, int], ...]
 
@@ -106,6 +107,7 @@ def analyze_domain_evidence(
     predio_ids = {
         row.provisional_predio_id for row in source_rows if row.provisional_predio_id is not None
     }
+    roles = {value for row in source_rows if (value := _norm(row.values["rol"])) is not None}
 
     missing_identifiers = tuple(
         (
@@ -211,6 +213,7 @@ def analyze_domain_evidence(
         business_rows=len(source_rows),
         distinct_pmf=len(pmfs),
         distinct_provisional_predio_ids=len(predio_ids),
+        distinct_roles=len(roles),
         missing_identifiers=missing_identifiers,
         pmf_with_predio_id=len(pmf_predios),
         pmf_with_multiple_predios=sum(len(values) > 1 for values in pmf_predios.values()),
