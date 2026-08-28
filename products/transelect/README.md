@@ -7,33 +7,49 @@ The repository path retains the historical technical spelling
 
 ## Current status
 
-Source Contract V1 is under implementation from the real operational workbook
-supplied by the stakeholder.
+Source Contract V1 is established for the real operational workbook's
+`Resumen` worksheet. The hosted pilot builds on that contract without changing
+the workbook's business semantics.
 
-The first source contract is intentionally limited to the current `Resumen`
-worksheet. It establishes source structure and safe parsing before defining
-canonical database entities or workflow rules.
+Current capabilities:
+
+- positional validation of the `Resumen` A:AD source table and blank AE
+  separator;
+- safe handling of both source columns named `Carpeta`;
+- preservation of original workbook row numbers;
+- evidence and PMF/predio read models;
+- React operating dashboard with search, filters, KPIs, and PMF detail;
+- PostgreSQL-backed immutable workbook snapshots;
+- SHA-256 duplicate detection;
+- atomic publication and explicit rollback to a previous validated snapshot;
+- local-workbook fallback for development.
+
+No PMF-level status aggregation precedence has been inferred. Mixed statuses
+remain visible as mixed statuses.
 
 ## Source boundary
 
-Expected external source location:
+Expected external source location for local evidence and development:
 
 `03_Proyecto_Transelec/02_Datos_Entrada/`
 
 Source files remain outside Git.
 
-## Current implementation
+In the hosted pilot, a validated workbook copy is persisted in the platform
+database as an immutable source snapshot. The active snapshot is selected by a
+single explicit pointer; overwriting a filename therefore does not erase
+history.
 
-`transelec_ingestion.xlsx_contract`:
+## Next deployment boundary
 
-- requires the `Resumen` worksheet;
-- validates the expected column schema by position;
-- distinguishes the two source columns both named `Carpeta`;
-- preserves source row numbers;
-- skips rows without PMF;
-- treats `ID_Predo_Unico` only as a provisional source-derived predio identity;
-- validates the A:AD business-table boundary and its blank AE separator;
-- ignores worksheet-local auxiliary content from AF onward.
+The code now supports the manual-upload pilot. Production exposure still
+requires deployment configuration for:
 
-No PMF-level status aggregation rule or canonical persistence identity has yet
-been inferred.
+- managed PostgreSQL/PostGIS;
+- the API runtime;
+- the static React build;
+- authenticated viewer access at the hosting edge;
+- secret injection for `CAMPO_TRANSELEC_ADMIN_TOKEN`;
+- backup/retention policy for the managed database.
+
+Automatic OneDrive synchronization remains intentionally outside this pilot.

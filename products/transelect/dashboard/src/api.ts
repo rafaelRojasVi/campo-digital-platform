@@ -51,23 +51,53 @@ export interface TranselecSummary {
   status_breakdown: [string, number][]
 }
 
+export interface TranselecSnapshotRecord {
+  source_snapshot_id: number
+  filename: string
+  media_type: string | null
+  content_sha256: string
+  byte_size: number
+  business_rows: number
+  distinct_pmf: number
+  distinct_provisional_predio_ids: number
+  surface_total: number
+  created_at: string
+  active: boolean
+}
+
+export interface PublishWorkbookResponse {
+  duplicate: boolean
+  snapshot: TranselecSnapshotRecord
+}
+
+export class ApiError extends Error {
+  status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+async function parseError(response: Response): Promise<string> {
+  let detail = `${response.status} ${response.statusText}`
+
+  try {
+    const payload = (await response.json()) as { detail?: string }
+    if (payload.detail) detail = payload.detail
+  } catch {
+    // Preserve the HTTP fallback when the body is not JSON.
+  }
+
+  return detail
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`/api${path}`)
 
   if (!response.ok) {
-    let detail = `${response.status} ${response.statusText}`
-
-    try {
-      const payload = (await response.json()) as { detail?: string }
-
-      if (payload.detail) {
-        detail = payload.detail
-      }
-    } catch {
-      // Preserve the HTTP fallback.
-    }
-
-    throw new Error(detail)
+    throw new ApiError(response.status, await parseError(response))
   }
 
   return response.json() as Promise<T>
@@ -107,4 +137,50 @@ export function listPmfs(
 
 export function getPmfDetail(pmf: string): Promise<PmfDetail> {
   return getJson<PmfDetail>(`/transelec/pmfs/${encodeURIComponent(pmf)}`)
+}
+
+export function getSnapshots(): Promise<TranselecSnapshotRecord[]> {
+  return getJson<TranselecSnapshotRecord[]>('/transelec/snapshots')
+}
+
+export async function publishWorkbook(
+  file: File,
+  adminToken: string,
+): Promise<PublishWorkbookResponse> {
+  const response = await fetch('/api/transelec/snapshots', {
+    method: 'POST',
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-Filename': file.name,
+      'X-Transelec-Admin-Token': adminToken,
+    },
+    body: file,
+  })
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await parseError(response))
+  }
+
+  return response.json() as Promise<PublishWorkbookResponse>
+}
+
+export async function activateSnapshot(
+  sourceSnapshotId: number,
+  adminToken: string,
+): Promise<TranselecSnapshotRecord> {
+  const response = await fetch(
+    `/api/transelec/snapshots/${sourceSnapshotId}/activate`,
+    {
+      method: 'POST',
+      headers: {
+        'X-Transelec-Admin-Token': adminToken,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await parseError(response))
+  }
+
+  return response.json() as Promise<TranselecSnapshotRecord>
 }
