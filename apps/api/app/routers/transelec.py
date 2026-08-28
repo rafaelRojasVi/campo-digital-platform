@@ -153,8 +153,7 @@ async def _read_workbook_body(request: Request) -> bytes:
             raise HTTPException(
                 status_code=413,
                 detail=(
-                    "Workbook exceeds the "
-                    f"{MAX_WORKBOOK_BYTES // (1024 * 1024)} MiB pilot limit"
+                    f"Workbook exceeds the {MAX_WORKBOOK_BYTES // (1024 * 1024)} MiB pilot limit"
                 ),
             )
 
