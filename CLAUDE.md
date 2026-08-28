@@ -30,19 +30,22 @@ Canonical product boundaries are documented in:
 
 `docs/platform/product-boundaries.md`
 
-## Canonical platform documentation
+## Task-to-context routing
 
-Before changing shared platform architecture, persistence, source ingestion,
-security, environments, or product integration sequencing, read:
+Read only what the task actually needs. Load the full platform document set
+below only for a genuinely cross-product decision — shared architecture,
+persistence, source ingestion, security, environments, or product
+integration sequencing that spans more than one bounded product.
 
-- `docs/platform/README.md`
-- `docs/platform/system-overview.md`
-- `docs/platform/roadmap.md`
-- `docs/platform/production-platform-v1.md`
-- `docs/platform/source-ingestion.md`
-- `docs/platform/client-data-organization.md`
-- `docs/platform/security-model.md`
-- `docs/platform/environments-and-costs.md`
+| Task | Read first |
+|---|---|
+| Transelec frontend/dashboard | `products/transelect/README.md`, `products/transelect/dashboard/README.md` |
+| Transelec source contract / domain evidence | `products/transelect/docs/source-contract-v1.md` |
+| Transelec hosted-pilot persistence/migrations | `docs/platform/production-platform-v1.md` § Database strategy, `products/transelect/docs/deployment.md` |
+| Transelec deployment/hosting | `products/transelect/docs/deployment.md` |
+| Transelec documentation work | `docs/DOCUMENTATION_POLICY.md`, `products/transelect/README.md` |
+| LiDAR work | `products/lidar/README.md`, `products/lidar/docs/roadmap.md` |
+| Cross-product / shared-architecture decision | `docs/platform/README.md`, `docs/platform/system-overview.md`, `docs/platform/roadmap.md`, `docs/platform/production-platform-v1.md`, `docs/platform/source-ingestion.md`, `docs/platform/client-data-organization.md`, `docs/platform/security-model.md`, `docs/platform/environments-and-costs.md` |
 
 Treat `docs/research/` as dated supporting evidence, not canonical
 architecture. Provider capabilities, regions, limits, and pricing may become

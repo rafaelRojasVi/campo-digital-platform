@@ -163,6 +163,29 @@ Scope:
 A renamed, replaced, or deleted OneDrive workbook must not silently destroy
 canonical history.
 
+Current implementation status (2026-08-28, draft PR #47
+`feat/transelec-hosted-pilot-v1`, not yet merged to `main`):
+
+- **FACT** — the `Resumen` worksheet source contract (positional A:AD
+  columns, blank AE separator, both `Carpeta` columns) is established and
+  validated on every upload;
+- **FACT** — a filtered PMF/predio read projection (search, multi-select
+  filters, KPI summary, PMF detail) exists as both an API and a dashboard;
+- **FACT** — snapshot metadata and provenance persist in PostgreSQL
+  (`platform.transelec_workbook_snapshot` / `transelec_dashboard_state`),
+  with SHA-256 content addressing and explicit version history (publish,
+  idempotent duplicate detection, restore);
+- **FACT** — the object-storage boundary is real: workbook bytes live
+  outside PostgreSQL in a content-addressed object store, never in a
+  database column;
+- **FACT** — hosted-pilot packaging (multi-stage Docker image, Cloud
+  Run/Cloud SQL/Cloud Storage deployment runbook) exists and was built and
+  run locally; it has not been deployed;
+- **OPEN QUESTION** — status/workflow semantics: no PMF-level status
+  precedence has been inferred; mixed statuses remain visible as mixed
+  pending Javier's confirmed workflow. `Reingresos`, `Pendientes`, and
+  historical-sheet ingestion remain deliberately out of scope.
+
 Exit condition:
 
 Daily-changing source data can be ingested safely while preserving provenance
