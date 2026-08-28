@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from dataclasses import dataclass
@@ -33,6 +34,7 @@ from transelec_ingestion.xlsx_contract import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,18 +60,24 @@ def get_transelec_database_engine() -> Engine:
     except ValidationError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Transelec hosted storage is not configured",
+            detail="El almacenamiento alojado de Transelec no está configurado.",
         ) from exc
 
 
 def _load_local_rows(workbook_path: Path) -> tuple[ResumenSourceRow, ...]:
     try:
         workbook = load_transelec_workbook(workbook_path)
-    except (TranselecWorkbookError, OSError) as exc:
+    except (TranselecWorkbookError, OSError):
+        # Never echo the exception back to the client: it may embed a
+        # filesystem path (CAMPO_TRANSELEC_WORKBOOK_PATH). Log it instead.
+        logger.warning(
+            "Transelec local workbook source is unavailable",
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=503,
-            detail=f"Transelec source is unavailable: {exc}",
-        ) from exc
+            detail="La fuente de datos de Transelec no está disponible.",
+        ) from None
 
     return workbook.resumen_rows
 
@@ -82,13 +90,13 @@ def _load_hosted_rows() -> tuple[ResumenSourceRow, ...]:
     except TranselecSnapshotStoreError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Transelec hosted source is unavailable",
+            detail="La fuente de datos alojada de Transelec no está disponible.",
         ) from exc
 
     if active is None:
         raise HTTPException(
             status_code=503,
-            detail="No Transelec workbook snapshot has been published",
+            detail="Aún no se ha publicado ninguna planilla de Transelec.",
         )
 
     try:
@@ -99,7 +107,7 @@ def _load_hosted_rows() -> tuple[ResumenSourceRow, ...]:
     except (TranselecWorkbookError, OSError) as exc:
         raise HTTPException(
             status_code=503,
-            detail="The active Transelec workbook snapshot is unreadable",
+            detail="La planilla activa de Transelec no se pudo leer.",
         ) from exc
 
     return workbook.resumen_rows
@@ -132,7 +140,7 @@ def require_admin_token(
     if not expected_token:
         raise HTTPException(
             status_code=503,
-            detail="Transelec administration is not configured",
+            detail="La administración de Transelec no está configurada.",
         )
 
     if supplied_token is None or not secrets.compare_digest(
@@ -141,7 +149,7 @@ def require_admin_token(
     ):
         raise HTTPException(
             status_code=401,
-            detail="Invalid Transelec administrator token",
+            detail="Clave de administración de Transelec inválida.",
         )
 
 
@@ -153,7 +161,9 @@ async def _read_workbook_body(request: Request) -> bytes:
         if len(payload) + len(chunk) > max_bytes:
             raise HTTPException(
                 status_code=413,
-                detail=(f"Workbook exceeds the {max_bytes // (1024 * 1024)} MiB pilot limit"),
+                detail=(
+                    f"La planilla supera el límite permitido de {max_bytes // (1024 * 1024)} MiB."
+                ),
             )
 
         payload.extend(chunk)
@@ -230,7 +240,7 @@ def get_pmf(
     if detail is None:
         raise HTTPException(
             status_code=404,
-            detail="PMF not found in current source",
+            detail="PMF no encontrado en la fuente actual.",
         )
 
     return detail
@@ -250,7 +260,7 @@ def get_snapshots(
     except TranselecSnapshotStoreError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Transelec snapshot history is unavailable",
+            detail="El historial de versiones de Transelec no está disponible.",
         ) from exc
 
 
@@ -272,7 +282,7 @@ async def publish_snapshot(
     if filename is None or not filename.strip():
         raise HTTPException(
             status_code=400,
-            detail="X-Filename header is required",
+            detail="Falta el encabezado X-Filename con el nombre de la planilla.",
         )
 
     content = await _read_workbook_body(request)
@@ -295,7 +305,7 @@ async def publish_snapshot(
     except TranselecSnapshotStoreError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Transelec workbook could not be published",
+            detail="No fue posible publicar la planilla de Transelec.",
         ) from exc
 
     return PublishWorkbookResponse(
@@ -323,13 +333,13 @@ def activate_snapshot(
     except TranselecSnapshotStoreError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Transelec workbook snapshot could not be activated",
+            detail="No fue posible activar la versión de la planilla de Transelec.",
         ) from exc
 
     if snapshot is None:
         raise HTTPException(
             status_code=404,
-            detail="Transelec workbook snapshot not found",
+            detail="Versión de planilla de Transelec no encontrada.",
         )
 
     return snapshot

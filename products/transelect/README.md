@@ -17,9 +17,13 @@ Current capabilities:
   separator;
 - safe handling of both source columns named `Carpeta`;
 - preservation of original workbook row numbers;
-- evidence and PMF/predio read models;
-- React operating dashboard with search, filters, KPIs, and PMF detail;
-- PostgreSQL-backed immutable workbook snapshots;
+- evidence and PMF/predio read models with multi-select filtering (estado
+  resumido, sector, empresa, PAS, tipo de propietario) plus search;
+- React operating dashboard with KPIs, PMF detail, CSV export, and a print
+  view, served same-origin by FastAPI at `/` alongside `/api/transelec`;
+- immutable workbook snapshots with bytes in content-addressed object
+  storage (never PostgreSQL — see `apps/api/app/object_storage.py`) and
+  metadata/provenance in PostgreSQL;
 - SHA-256 duplicate detection;
 - atomic publication and explicit rollback to a previous validated snapshot;
 - local-workbook fallback for development.
@@ -40,16 +44,12 @@ database as an immutable source snapshot. The active snapshot is selected by a
 single explicit pointer; overwriting a filename therefore does not erase
 history.
 
-## Next deployment boundary
+## Deployment
 
-The code now supports the manual-upload pilot. Production exposure still
-requires deployment configuration for:
-
-- managed PostgreSQL/PostGIS;
-- the API runtime;
-- the static React build;
-- authenticated viewer access at the hosting edge;
-- secret injection for `CAMPO_TRANSELEC_ADMIN_TOKEN`;
-- backup/retention policy for the managed database.
+Container packaging, Cloud SQL/Cloud Storage configuration, Cloud Run IAP,
+secrets, rollback, and cost drivers are documented in
+[`docs/deployment.md`](docs/deployment.md). No managed infrastructure has
+been provisioned as part of this pilot's implementation — that document
+describes how to, not a record that it happened.
 
 Automatic OneDrive synchronization remains intentionally outside this pilot.

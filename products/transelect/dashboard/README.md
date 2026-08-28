@@ -24,10 +24,14 @@ truth while making publication safe:
 - an administrator can explicitly restore any previously validated snapshot;
 - the dashboard never invents a PMF-level status precedence rule.
 
-The upload API accepts `.xlsx` and `.xlsm` content up to 32 MiB as the raw
-request body. `X-Filename` carries the original filename. Upload and restore
-mutations require `X-Transelec-Admin-Token`, matched against
-`CAMPO_TRANSELEC_ADMIN_TOKEN`.
+The upload API accepts `.xlsx` and `.xlsm` content up to 64 MiB (configurable
+via `CAMPO_TRANSELEC_MAX_UPLOAD_BYTES`) as the raw request body. `X-Filename`
+carries the original filename. Upload and restore mutations require
+`X-Transelec-Admin-Token`, matched against `CAMPO_TRANSELEC_ADMIN_TOKEN`.
+
+Accepted workbook bytes are stored in private, content-addressed object
+storage (never PostgreSQL) — see `apps/api/app/object_storage.py` and
+[`../docs/deployment.md`](../docs/deployment.md).
 
 The pilot token protects administrative mutations only. Before exposing the
 viewer on the public internet, the deployment must also place the application
@@ -65,10 +69,23 @@ To bypass hosted snapshots and inspect a workbook directly:
 
 - PMF, provisional-predio, surface, and source-row KPIs;
 - status distribution without status-precedence assumptions;
-- PMF/predio/rol search plus estado/sector/empresa filters;
-- PMF detail drawer with predios and source rows;
+- PMF/predio/rol search plus multi-select estado resumido/sector/empresa/PAS/
+  tipo de propietario filters (all combine with AND across dimensions, OR
+  within a dimension);
+- PMF detail drawer with predios, source rows, and every source field
+  (including PAS and tipo de propietario);
+- CSV export of the current filtered PMF selection, and a print/PDF view;
 - active workbook/version context;
 - validated workbook publication;
 - immutable version history;
 - explicit restore flow;
 - responsive desktop and mobile layouts.
+
+## Production build
+
+`npm run build` produces `dist/`, which `apps/api/app/dashboard_static.py`
+serves same-origin from FastAPI in the hosted pilot container (see
+[`../docs/deployment.md`](../docs/deployment.md)) — there is no separate
+frontend origin or CORS surface in production. In local development the two
+still run as separate processes (Vite dev server + `uvicorn`), proxied as
+described above.

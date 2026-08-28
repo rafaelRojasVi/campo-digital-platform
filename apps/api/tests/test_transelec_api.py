@@ -209,3 +209,21 @@ def test_endpoints_return_503_when_workbook_is_invalid(tmp_path: Path) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 503
+
+
+def test_invalid_local_workbook_error_never_leaks_the_configured_path(
+    tmp_path: Path,
+) -> None:
+    missing_path = tmp_path / "very-private-directory-name" / "does-not-exist.xlsx"
+    app.dependency_overrides[get_workbook_path] = lambda: missing_path
+
+    try:
+        with TestClient(app) as test_client:
+            response = test_client.get("/transelec/summary")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert str(missing_path) not in detail
+    assert "very-private-directory-name" not in detail

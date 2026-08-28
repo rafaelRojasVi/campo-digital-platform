@@ -116,10 +116,10 @@ def sanitize_upload_filename(filename: str) -> str:
     normalized = Path(filename.strip()).name
 
     if not normalized or normalized in {".", ".."}:
-        raise TranselecWorkbookError("Workbook filename is required")
+        raise TranselecWorkbookError("Se requiere el nombre del archivo de la planilla.")
 
     if Path(normalized).suffix.lower() not in ALLOWED_WORKBOOK_SUFFIXES:
-        raise TranselecWorkbookError("Workbook must use an .xlsx or .xlsm filename")
+        raise TranselecWorkbookError("La planilla debe tener extensión .xlsx o .xlsm.")
 
     return normalized
 
@@ -134,13 +134,13 @@ def load_workbook_from_bytes(
     safe_filename = sanitize_upload_filename(filename)
 
     if not content:
-        raise TranselecWorkbookError("Workbook is empty")
+        raise TranselecWorkbookError("La planilla está vacía.")
 
     max_bytes = get_max_workbook_bytes()
 
     if len(content) > max_bytes:
         raise TranselecWorkbookError(
-            f"Workbook exceeds the {max_bytes // (1024 * 1024)} MiB pilot limit"
+            f"La planilla supera el límite permitido de {max_bytes // (1024 * 1024)} MiB."
         )
 
     with TemporaryDirectory(prefix="campo-transelec-") as temporary_directory:
