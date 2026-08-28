@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
+from app.dashboard_static import mount_dashboard
 from app.database import (
     DatabaseUnavailableError,
     check_database_connection,
@@ -50,4 +51,7 @@ def readiness(
 
 
 app.include_router(lidar_router)
-app.include_router(transelec_router)
+app.include_router(transelec_router, prefix="/transelec")
+app.include_router(transelec_router, prefix="/api/transelec")
+
+mount_dashboard(app)

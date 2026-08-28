@@ -101,6 +101,18 @@ def test_list_filter_options_returns_distinct_sorted_present_values() -> None:
     assert options.empresas == ("Empresa A", "Empresa B")
 
 
+def test_list_filter_options_includes_pas_and_tipo_propietario() -> None:
+    rows = (
+        _row(2, pmf="PMF1", predio="P1", pas="PAS Ambiental", tipo_propietario="Particular"),
+        _row(3, pmf="PMF2", predio="P2", pas="PAS Forestal", tipo_propietario="Empresa"),
+    )
+
+    options = list_filter_options(rows)
+
+    assert options.pas == ("PAS Ambiental", "PAS Forestal")
+    assert options.tipos_propietario == ("Empresa", "Particular")
+
+
 def test_list_pmfs_groups_rows_by_pmf_sorted_ascending() -> None:
     items = list_pmfs(_rows())
 
@@ -133,7 +145,7 @@ def test_list_pmfs_surface_total_is_none_when_no_numeric_surface_present() -> No
 
 
 def test_list_pmfs_filters_by_status() -> None:
-    items = list_pmfs(_rows(), status="Aprobado")
+    items = list_pmfs(_rows(), status=["Aprobado"])
 
     assert {item.pmf for item in items} == {"PMF1", "PMF2"}
     pmf1 = next(item for item in items if item.pmf == "PMF1")
@@ -141,13 +153,13 @@ def test_list_pmfs_filters_by_status() -> None:
 
 
 def test_list_pmfs_filters_by_sector() -> None:
-    items = list_pmfs(_rows(), sector="Norte")
+    items = list_pmfs(_rows(), sector=["Norte"])
 
     assert [item.pmf for item in items] == ["PMF2"]
 
 
 def test_list_pmfs_filters_by_empresa() -> None:
-    items = list_pmfs(_rows(), empresa="Empresa A")
+    items = list_pmfs(_rows(), empresa=["Empresa A"])
 
     assert [item.pmf for item in items] == ["PMF1"]
 
@@ -158,13 +170,47 @@ def test_list_pmfs_filters_by_search_across_pmf_predio_and_rol() -> None:
 
 
 def test_list_pmfs_combines_filters() -> None:
-    items = list_pmfs(_rows(), status="Aprobado", sector="Sur")
+    items = list_pmfs(_rows(), status=["Aprobado"], sector=["Sur"])
 
     assert [item.pmf for item in items] == ["PMF1"]
 
 
 def test_list_pmfs_returns_empty_tuple_when_nothing_matches() -> None:
-    assert list_pmfs(_rows(), sector="No Existe") == ()
+    assert list_pmfs(_rows(), sector=["No Existe"]) == ()
+
+
+def test_list_pmfs_status_filter_is_multi_select_or_within_dimension() -> None:
+    items = list_pmfs(_rows(), status=["Aprobado", "En tramite"])
+
+    assert {item.pmf for item in items} == {"PMF1", "PMF2"}
+
+
+def test_list_pmfs_sector_filter_is_multi_select_or_within_dimension() -> None:
+    items = list_pmfs(_rows(), sector=["Norte", "Sur"])
+
+    assert {item.pmf for item in items} == {"PMF1", "PMF2"}
+
+
+def test_list_pmfs_filters_by_pas() -> None:
+    rows = (
+        _row(2, pmf="PMF1", predio="P1", pas="PAS Ambiental"),
+        _row(3, pmf="PMF2", predio="P2", pas="PAS Forestal"),
+    )
+
+    assert [item.pmf for item in list_pmfs(rows, pas=["PAS Forestal"])] == ["PMF2"]
+
+
+def test_list_pmfs_filters_by_tipo_propietario() -> None:
+    rows = (
+        _row(2, pmf="PMF1", predio="P1", tipo_propietario="Particular"),
+        _row(3, pmf="PMF2", predio="P2", tipo_propietario="Empresa"),
+    )
+
+    assert [item.pmf for item in list_pmfs(rows, tipo_propietario=["Empresa"])] == ["PMF2"]
+
+
+def test_list_pmfs_empty_selection_matches_everything() -> None:
+    assert list_pmfs(_rows(), status=[]) == list_pmfs(_rows())
 
 
 def test_get_pmf_detail_groups_by_provisional_predio_with_none_bucket_last() -> None:

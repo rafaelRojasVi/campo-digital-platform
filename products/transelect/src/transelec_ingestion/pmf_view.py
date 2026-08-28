@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -75,6 +75,8 @@ class TranselecFilterOptions:
     statuses: tuple[str, ...]
     sectors: tuple[str, ...]
     empresas: tuple[str, ...]
+    pas: tuple[str, ...]
+    tipos_propietario: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,11 +92,15 @@ def list_filter_options(rows: Iterable[ResumenSourceRow]) -> TranselecFilterOpti
     statuses: set[str] = set()
     sectors: set[str] = set()
     empresas: set[str] = set()
+    pas_values: set[str] = set()
+    tipos_propietario: set[str] = set()
 
     for row in rows:
         status = _norm(row.values["estado_resumido"])
         sector = _norm(row.values["sector"])
         empresa = _norm(row.values["empresa"])
+        pas = _norm(row.values["pas"])
+        tipo_propietario = _norm(row.values["tipo_propietario"])
 
         if status is not None:
             statuses.add(status)
@@ -102,36 +108,63 @@ def list_filter_options(rows: Iterable[ResumenSourceRow]) -> TranselecFilterOpti
             sectors.add(sector)
         if empresa is not None:
             empresas.add(empresa)
+        if pas is not None:
+            pas_values.add(pas)
+        if tipo_propietario is not None:
+            tipos_propietario.add(tipo_propietario)
 
     return TranselecFilterOptions(
         statuses=tuple(sorted(statuses)),
         sectors=tuple(sorted(sectors)),
         empresas=tuple(sorted(empresas)),
+        pas=tuple(sorted(pas_values)),
+        tipos_propietario=tuple(sorted(tipos_propietario)),
     )
+
+
+def _normalized_filter_set(values: Sequence[str] | None) -> frozenset[str] | None:
+    """Normalize a multi-select filter into lowercase match values, or None for 'all'."""
+
+    if not values:
+        return None
+
+    normalized = frozenset(value.strip().lower() for value in values if value and value.strip())
+    return normalized or None
+
+
+def _matches_selection(value: str | None, allowed: frozenset[str] | None) -> bool:
+    """A dimension with no selection matches everything (multi-select OR semantics)."""
+
+    if allowed is None:
+        return True
+
+    return value is not None and value.lower() in allowed
 
 
 def _row_matches(
     row: ResumenSourceRow,
     *,
     search: str | None,
-    status: str | None,
-    sector: str | None,
-    empresa: str | None,
+    statuses: frozenset[str] | None,
+    sectors: frozenset[str] | None,
+    empresas: frozenset[str] | None,
+    pas_values: frozenset[str] | None,
+    tipos_propietario: frozenset[str] | None,
 ) -> bool:
-    if status is not None:
-        row_status = _norm(row.values["estado_resumido"])
-        if row_status is None or row_status.lower() != status.lower():
-            return False
+    if not _matches_selection(_norm(row.values["estado_resumido"]), statuses):
+        return False
 
-    if sector is not None:
-        row_sector = _norm(row.values["sector"])
-        if row_sector is None or row_sector.lower() != sector.lower():
-            return False
+    if not _matches_selection(_norm(row.values["sector"]), sectors):
+        return False
 
-    if empresa is not None:
-        row_empresa = _norm(row.values["empresa"])
-        if row_empresa is None or row_empresa.lower() != empresa.lower():
-            return False
+    if not _matches_selection(_norm(row.values["empresa"]), empresas):
+        return False
+
+    if not _matches_selection(_norm(row.values["pas"]), pas_values):
+        return False
+
+    if not _matches_selection(_norm(row.values["tipo_propietario"]), tipos_propietario):
+        return False
 
     if search is not None:
         needle = search.strip().lower()
@@ -154,14 +187,30 @@ def list_pmfs(
     rows: Iterable[ResumenSourceRow],
     *,
     search: str | None = None,
-    status: str | None = None,
-    sector: str | None = None,
-    empresa: str | None = None,
+    status: Sequence[str] | None = None,
+    sector: Sequence[str] | None = None,
+    empresa: Sequence[str] | None = None,
+    pas: Sequence[str] | None = None,
+    tipo_propietario: Sequence[str] | None = None,
 ) -> tuple[PmfListItem, ...]:
+    statuses = _normalized_filter_set(status)
+    sectors = _normalized_filter_set(sector)
+    empresas = _normalized_filter_set(empresa)
+    pas_values = _normalized_filter_set(pas)
+    tipos_propietario = _normalized_filter_set(tipo_propietario)
+
     matched = [
         row
         for row in rows
-        if _row_matches(row, search=search, status=status, sector=sector, empresa=empresa)
+        if _row_matches(
+            row,
+            search=search,
+            statuses=statuses,
+            sectors=sectors,
+            empresas=empresas,
+            pas_values=pas_values,
+            tipos_propietario=tipos_propietario,
+        )
     ]
 
     grouped: dict[str, list[ResumenSourceRow]] = defaultdict(list)
@@ -177,17 +226,17 @@ def list_pmfs(
         predios = {
             row.provisional_predio_id for row in pmf_rows if row.provisional_predio_id is not None
         }
-        sectors = {
+        pmf_sectors = {
             sector_value
             for row in pmf_rows
             if (sector_value := _norm(row.values["sector"])) is not None
         }
-        empresas = {
+        pmf_empresas = {
             empresa_value
             for row in pmf_rows
             if (empresa_value := _norm(row.values["empresa"])) is not None
         }
-        statuses = {
+        pmf_statuses = {
             status_value
             for row in pmf_rows
             if (status_value := _norm(row.values["estado_resumido"])) is not None
@@ -203,9 +252,9 @@ def list_pmfs(
                 pmf=pmf,
                 row_count=len(pmf_rows),
                 predio_count=len(predios),
-                sectors=tuple(sorted(sectors)),
-                empresas=tuple(sorted(empresas)),
-                statuses=tuple(sorted(statuses)),
+                sectors=tuple(sorted(pmf_sectors)),
+                empresas=tuple(sorted(pmf_empresas)),
+                statuses=tuple(sorted(pmf_statuses)),
                 surface_total=sum(numeric_surfaces) if numeric_surfaces else None,
             )
         )

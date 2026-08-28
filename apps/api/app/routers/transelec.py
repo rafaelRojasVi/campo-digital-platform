@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import ValidationError
 from sqlalchemy import Engine
 
@@ -32,7 +32,7 @@ from transelec_ingestion.xlsx_contract import (
     load_transelec_workbook,
 )
 
-router = APIRouter(prefix="/transelec")
+router = APIRouter()
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,11 +188,19 @@ def get_filters(rows: ResumenRows) -> pmf_view.TranselecFilterOptions:
 def list_pmfs(
     rows: ResumenRows,
     search: str | None = None,
-    status: str | None = None,
-    sector: str | None = None,
-    empresa: str | None = None,
+    status: Annotated[list[str] | None, Query()] = None,
+    sector: Annotated[list[str] | None, Query()] = None,
+    empresa: Annotated[list[str] | None, Query()] = None,
+    pas: Annotated[list[str] | None, Query()] = None,
+    tipo_propietario: Annotated[list[str] | None, Query()] = None,
 ) -> list[pmf_view.PmfListItem]:
-    """List current PMFs, optionally filtered by search/status/sector/empresa."""
+    """List current PMFs, filtered by search plus multi-select dimensions.
+
+    Each of `status`, `sector`, `empresa`, `pas`, and `tipo_propietario`
+    accepts repeated query parameters (e.g. `?status=A&status=B`) and is
+    matched with OR semantics within the dimension; dimensions combine with
+    AND semantics.
+    """
 
     return list(
         pmf_view.list_pmfs(
@@ -201,6 +209,8 @@ def list_pmfs(
             status=status,
             sector=sector,
             empresa=empresa,
+            pas=pas,
+            tipo_propietario=tipo_propietario,
         )
     )
 

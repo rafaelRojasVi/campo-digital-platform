@@ -121,6 +121,40 @@ def test_list_pmfs_filters_by_query_params(client: TestClient) -> None:
     assert [item["pmf"] for item in response.json()] == ["MP002"]
 
 
+def test_list_pmfs_filters_by_repeated_multi_select_query_params(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        "/transelec/pmfs",
+        params=[("sector", "Norte"), ("sector", "Sur")],
+    )
+
+    assert response.status_code == 200
+    assert {item["pmf"] for item in response.json()} == {"MP001", "MP002"}
+
+
+def test_api_prefix_serves_the_same_routes_as_the_compatibility_prefix(
+    client: TestClient,
+) -> None:
+    legacy = client.get("/transelec/summary")
+    api_prefixed = client.get("/api/transelec/summary")
+
+    assert legacy.status_code == api_prefixed.status_code == 200
+    assert legacy.json() == api_prefixed.json()
+
+
+def test_filters_include_pas_and_tipo_propietario_dimensions(
+    client: TestClient,
+) -> None:
+    response = client.get("/transelec/filters")
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert "pas" in body
+    assert "tipos_propietario" in body
+
+
 def test_get_pmf_detail_returns_predios(client: TestClient) -> None:
     response = client.get("/transelec/pmfs/MP001")
 
