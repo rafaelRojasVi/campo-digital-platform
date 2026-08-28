@@ -14,12 +14,12 @@ from sqlalchemy import Engine
 
 from app.database import get_database_engine
 from app.transelec_snapshots import (
-    MAX_WORKBOOK_BYTES,
     PersistedWorkbookSnapshot,
     TranselecSnapshotRecord,
     TranselecSnapshotStoreError,
     activate_workbook_snapshot,
     get_active_workbook_snapshot,
+    get_max_workbook_bytes,
     list_workbook_snapshots,
     load_workbook_from_bytes,
     persist_validated_workbook,
@@ -146,15 +146,14 @@ def require_admin_token(
 
 
 async def _read_workbook_body(request: Request) -> bytes:
+    max_bytes = get_max_workbook_bytes()
     payload = bytearray()
 
     async for chunk in request.stream():
-        if len(payload) + len(chunk) > MAX_WORKBOOK_BYTES:
+        if len(payload) + len(chunk) > max_bytes:
             raise HTTPException(
                 status_code=413,
-                detail=(
-                    f"Workbook exceeds the {MAX_WORKBOOK_BYTES // (1024 * 1024)} MiB pilot limit"
-                ),
+                detail=(f"Workbook exceeds the {max_bytes // (1024 * 1024)} MiB pilot limit"),
             )
 
         payload.extend(chunk)

@@ -149,6 +149,21 @@ def test_endpoints_return_503_when_source_not_configured(
     assert response.status_code == 503
 
 
+def test_max_workbook_bytes_defaults_to_64_mib() -> None:
+    from app.transelec_snapshots import DEFAULT_MAX_WORKBOOK_BYTES, get_max_workbook_bytes
+
+    assert DEFAULT_MAX_WORKBOOK_BYTES == 64 * 1024 * 1024
+    assert get_max_workbook_bytes() == 64 * 1024 * 1024
+
+
+def test_max_workbook_bytes_is_configurable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.transelec_snapshots import get_max_workbook_bytes
+
+    monkeypatch.setenv("CAMPO_TRANSELEC_MAX_UPLOAD_BYTES", "1024")
+
+    assert get_max_workbook_bytes() == 1024
+
+
 def test_endpoints_return_503_when_workbook_is_invalid(tmp_path: Path) -> None:
     missing_path = tmp_path / "does-not-exist.xlsx"
     app.dependency_overrides[get_workbook_path] = lambda: missing_path

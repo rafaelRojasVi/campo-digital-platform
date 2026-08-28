@@ -77,6 +77,23 @@ def test_settings_load_postgres_values_from_env_file(
     assert settings.postgres_port == 5544
 
 
+def test_settings_build_unix_socket_url_when_configured() -> None:
+    settings = Settings(
+        _env_file=None,
+        postgres_db="test_database",
+        postgres_user="test_user",
+        postgres_password="p@ss:/?#[]",
+        postgres_unix_socket_path="/cloudsql/project:region:instance",
+    )
+
+    url = settings.database_url
+
+    assert url.drivername == "postgresql+psycopg"
+    assert url.host is None
+    assert url.database == "test_database"
+    assert url.query["host"] == "/cloudsql/project:region:instance"
+
+
 def test_settings_repr_does_not_expose_password() -> None:
     secret = "must-not-appear"
 

@@ -38,8 +38,8 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column(
-            "workbook_bytes",
-            sa.LargeBinary(),
+            "object_storage_key",
+            sa.Text(),
             nullable=False,
         ),
         sa.Column(
@@ -77,8 +77,8 @@ def upgrade() -> None:
             name="ck_transelec_workbook_snapshot_media_type_nonempty",
         ),
         sa.CheckConstraint(
-            "octet_length(workbook_bytes) > 0",
-            name="ck_transelec_workbook_snapshot_bytes_nonempty",
+            "btrim(object_storage_key) <> ''",
+            name="ck_transelec_workbook_snapshot_object_storage_key_nonempty",
         ),
         sa.CheckConstraint(
             "business_rows > 0",

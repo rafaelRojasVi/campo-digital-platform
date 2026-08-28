@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,6 +13,12 @@ from typing import Any
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.object_storage import (
+    ObjectStorageError,
+    ObjectStore,
+    content_addressed_key,
+    get_object_store,
+)
 from app.source_discovery import SourceFileFingerprint, SourceFileObservation
 from app.source_provenance import (
     SourceProvenanceError,
@@ -27,11 +34,35 @@ from transelec_ingestion.xlsx_contract import (
 SYSTEM_KEY = "transelec-manual-upload"
 LOGICAL_SOURCE_PATH = "transelec/manual-upload/current-workbook.xlsx"
 ALLOWED_WORKBOOK_SUFFIXES = frozenset({".xlsx", ".xlsm"})
-MAX_WORKBOOK_BYTES = 32 * 1024 * 1024
+OBJECT_STORE_NAMESPACE = "transelec/workbooks"
+DEFAULT_MAX_WORKBOOK_BYTES = 64 * 1024 * 1024
 
 
 class TranselecSnapshotStoreError(RuntimeError):
     """Raised when hosted Transelec snapshot persistence cannot complete."""
+
+
+def get_max_workbook_bytes() -> int:
+    """Return the configurable maximum accepted workbook upload size."""
+
+    configured = os.environ.get("CAMPO_TRANSELEC_MAX_UPLOAD_BYTES", "").strip()
+
+    if not configured:
+        return DEFAULT_MAX_WORKBOOK_BYTES
+
+    try:
+        value = int(configured)
+    except ValueError as exc:
+        raise TranselecSnapshotStoreError(
+            "CAMPO_TRANSELEC_MAX_UPLOAD_BYTES must be a positive integer"
+        ) from exc
+
+    if value <= 0:
+        raise TranselecSnapshotStoreError(
+            "CAMPO_TRANSELEC_MAX_UPLOAD_BYTES must be a positive integer"
+        )
+
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,9 +136,11 @@ def load_workbook_from_bytes(
     if not content:
         raise TranselecWorkbookError("Workbook is empty")
 
-    if len(content) > MAX_WORKBOOK_BYTES:
+    max_bytes = get_max_workbook_bytes()
+
+    if len(content) > max_bytes:
         raise TranselecWorkbookError(
-            f"Workbook exceeds the {MAX_WORKBOOK_BYTES // (1024 * 1024)} MiB pilot limit"
+            f"Workbook exceeds the {max_bytes // (1024 * 1024)} MiB pilot limit"
         )
 
     with TemporaryDirectory(prefix="campo-transelec-") as temporary_directory:
@@ -158,8 +191,8 @@ def _snapshot_from_row(row: Any) -> TranselecSnapshotRecord:
     )
 
 
-def _snapshot_select_sql(*, include_bytes: bool = False) -> str:
-    bytes_column = ", tws.workbook_bytes" if include_bytes else ""
+def _snapshot_select_sql(*, include_storage_key: bool = False) -> str:
+    storage_key_column = ", tws.object_storage_key" if include_storage_key else ""
 
     return f"""
         SELECT
@@ -176,7 +209,7 @@ def _snapshot_select_sql(*, include_bytes: bool = False) -> str:
             (
                 state.active_source_snapshot_id = tws.source_snapshot_id
             ) AS active
-            {bytes_column}
+            {storage_key_column}
         FROM platform.transelec_workbook_snapshot AS tws
         JOIN platform.source_snapshot AS ss
           ON ss.id = tws.source_snapshot_id
@@ -221,14 +254,30 @@ def _activate_snapshot(connection: Any, source_snapshot_id: int) -> None:
 def persist_validated_workbook(
     engine: Engine,
     upload: ValidatedWorkbookUpload,
+    *,
+    object_store: ObjectStore | None = None,
 ) -> PersistedWorkbookSnapshot:
     """Persist and atomically activate a new validated workbook snapshot.
 
     Identical content is a no-op: the existing snapshot is returned and the
-    active pointer is left unchanged.
+    active pointer is left unchanged. Bytes are written to the private object
+    store (content-addressed) before any database row references them, so a
+    database row never points at a missing object.
     """
 
     observed_at = datetime.now(UTC)
+    resolved_object_store = object_store if object_store is not None else get_object_store()
+
+    storage_key = content_addressed_key(
+        namespace=OBJECT_STORE_NAMESPACE,
+        content_sha256=upload.content_sha256,
+        suffix=Path(upload.filename).suffix.lower(),
+    )
+
+    try:
+        resolved_object_store.put(storage_key, upload.content)
+    except ObjectStorageError as exc:
+        raise TranselecSnapshotStoreError("Unable to store Transelec workbook bytes") from exc
 
     try:
         with engine.begin() as connection:
@@ -270,7 +319,7 @@ def persist_validated_workbook(
                         source_snapshot_id,
                         filename,
                         media_type,
-                        workbook_bytes,
+                        object_storage_key,
                         business_rows,
                         distinct_pmf,
                         distinct_provisional_predio_ids,
@@ -280,7 +329,7 @@ def persist_validated_workbook(
                         :source_snapshot_id,
                         :filename,
                         :media_type,
-                        :workbook_bytes,
+                        :object_storage_key,
                         :business_rows,
                         :distinct_pmf,
                         :distinct_provisional_predio_ids,
@@ -292,7 +341,7 @@ def persist_validated_workbook(
                     "source_snapshot_id": provenance.source_snapshot_id,
                     "filename": upload.filename,
                     "media_type": upload.media_type,
-                    "workbook_bytes": upload.content,
+                    "object_storage_key": storage_key,
                     "business_rows": upload.summary.business_rows,
                     "distinct_pmf": upload.summary.distinct_pmf,
                     "distinct_provisional_predio_ids": (
@@ -347,6 +396,8 @@ def list_workbook_snapshots(
 
 def get_active_workbook_snapshot(
     engine: Engine,
+    *,
+    object_store: ObjectStore | None = None,
 ) -> ActiveWorkbookSnapshot | None:
     """Return the currently published workbook bytes, if one exists."""
 
@@ -354,7 +405,7 @@ def get_active_workbook_snapshot(
         with engine.connect() as connection:
             row = connection.execute(
                 text(
-                    _snapshot_select_sql(include_bytes=True)
+                    _snapshot_select_sql(include_storage_key=True)
                     + """
                       AND state.active_source_snapshot_id = tws.source_snapshot_id
                       LIMIT 1
@@ -369,9 +420,19 @@ def get_active_workbook_snapshot(
     if row is None:
         return None
 
+    resolved_object_store = object_store if object_store is not None else get_object_store()
+    storage_key = str(row._mapping["object_storage_key"])
+
+    try:
+        content = resolved_object_store.get(storage_key)
+    except ObjectStorageError as exc:
+        raise TranselecSnapshotStoreError(
+            "Unable to load Transelec workbook bytes from object storage"
+        ) from exc
+
     return ActiveWorkbookSnapshot(
         snapshot=_snapshot_from_row(row),
-        content=bytes(row._mapping["workbook_bytes"]),
+        content=content,
     )
 
 
