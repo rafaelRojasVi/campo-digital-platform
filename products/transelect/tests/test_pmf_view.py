@@ -23,7 +23,7 @@ def _row(
     rol: str | None = "ROL",
     **overrides: Any,
 ) -> ResumenSourceRow:
-    values = {field: None for _, field in RESUMEN_COLUMNS}
+    values: dict[str, Any] = {field: None for _, field in RESUMEN_COLUMNS}
 
     values.update(
         {

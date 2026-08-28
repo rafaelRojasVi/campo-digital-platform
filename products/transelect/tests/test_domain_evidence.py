@@ -24,7 +24,7 @@ def _row(
     numero_ingreso: str | None = None,
     **overrides: Any,
 ) -> ResumenSourceRow:
-    values = {field: None for _, field in RESUMEN_COLUMNS}
+    values: dict[str, Any] = {field: None for _, field in RESUMEN_COLUMNS}
 
     values.update(
         {
