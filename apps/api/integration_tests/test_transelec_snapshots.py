@@ -24,9 +24,7 @@ from transelec_ingestion.xlsx_contract import (
 
 
 def _source_row(**overrides: Any) -> list[Any]:
-    values: dict[str, Any] = {
-        field_name: None for _, field_name in RESUMEN_COLUMNS
-    }
+    values: dict[str, Any] = {field_name: None for _, field_name in RESUMEN_COLUMNS}
     values.update(
         {
             "pmf": "MP001",
@@ -78,9 +76,7 @@ def _clear_test_snapshots(engine: Engine) -> None:
                 """
             )
         )
-        connection.execute(
-            text("DELETE FROM platform.transelec_workbook_snapshot")
-        )
+        connection.execute(text("DELETE FROM platform.transelec_workbook_snapshot"))
         connection.execute(
             text(
                 """
@@ -148,9 +144,7 @@ def test_publish_deduplicate_history_and_restore(
     first_upload = validate_workbook_upload(
         first_bytes,
         filename="PlanillaMaestra.xlsx",
-        media_type=(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
+        media_type=("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
     )
     second_upload = validate_workbook_upload(
         second_bytes,
@@ -178,15 +172,11 @@ def test_publish_deduplicate_history_and_restore(
             first_upload,
         )
         assert duplicate_first.duplicate
-        assert duplicate_first.snapshot.source_snapshot_id == (
-            first.snapshot.source_snapshot_id
-        )
+        assert duplicate_first.snapshot.source_snapshot_id == (first.snapshot.source_snapshot_id)
 
         active = get_active_workbook_snapshot(integration_engine)
         assert active is not None
-        assert active.snapshot.source_snapshot_id == (
-            second.snapshot.source_snapshot_id
-        )
+        assert active.snapshot.source_snapshot_id == (second.snapshot.source_snapshot_id)
         assert active.content == second_bytes
 
         history = list_workbook_snapshots(integration_engine)
@@ -200,9 +190,7 @@ def test_publish_deduplicate_history_and_restore(
         assert restored is not None
         assert restored.active
 
-        active_after_restore = get_active_workbook_snapshot(
-            integration_engine
-        )
+        active_after_restore = get_active_workbook_snapshot(integration_engine)
         assert active_after_restore is not None
         assert active_after_restore.snapshot.source_snapshot_id == (
             first.snapshot.source_snapshot_id
