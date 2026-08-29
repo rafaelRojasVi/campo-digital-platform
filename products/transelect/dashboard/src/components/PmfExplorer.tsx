@@ -1,6 +1,8 @@
+import type { ReactNode } from 'react'
 import type { PmfListItem } from '../api'
 import { numberFormatter, surfaceFormatter } from './format'
 import { ChevronIcon, DownloadIcon, PrintIcon, SearchIcon } from './icons'
+import { Pagination } from './Pagination'
 import { StatusPills } from './StatusPills'
 
 interface PmfExplorerProps {
@@ -12,6 +14,41 @@ interface PmfExplorerProps {
   onExportCsv: () => void
   exportDisabled: boolean
   onPrint: () => void
+  page: number
+  pageSize: number
+  onPageChange: (page: number) => void
+  onPageSizeChange: (size: number) => void
+}
+
+function pmfRow(item: PmfListItem, onOpenPmf: (pmf: string) => void): ReactNode {
+  return (
+    <tr key={item.pmf}>
+      <td>
+        <button type="button" className="pmf-name" onClick={() => onOpenPmf(item.pmf)}>
+          {item.pmf}
+        </button>
+        <span className="mobile-meta">{item.predio_count} predios</span>
+      </td>
+      <td>
+        <StatusPills statuses={item.statuses} compact />
+      </td>
+      <td>{numberFormatter.format(item.predio_count)}</td>
+      <td>{item.sectors.join(', ') || '—'}</td>
+      <td>{item.empresas.join(', ') || '—'}</td>
+      <td className="numeric">
+        {item.surface_total === null ? '—' : `${surfaceFormatter.format(item.surface_total)} ha`}
+      </td>
+      <td className="row-action">
+        <button
+          type="button"
+          onClick={() => onOpenPmf(item.pmf)}
+          aria-label={`Abrir detalle de ${item.pmf}`}
+        >
+          <ChevronIcon />
+        </button>
+      </td>
+    </tr>
+  )
 }
 
 export function PmfExplorer({
@@ -23,7 +60,17 @@ export function PmfExplorer({
   onExportCsv,
   exportDisabled,
   onPrint,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
 }: PmfExplorerProps) {
+  const totalItems = pmfs?.length ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
+  const clampedPage = Math.min(Math.max(page, 1), totalPages)
+  const startIndex = (clampedPage - 1) * pageSize
+  const pageItems = pmfs?.slice(startIndex, startIndex + pageSize) ?? null
+
   return (
     <section className="records-section">
       <div className="records-heading">
@@ -57,7 +104,7 @@ export function PmfExplorer({
 
       <div className="table-card">
         <div className={`table-loading-line${listLoading ? ' visible' : ''}`} />
-        <div className="table-scroll">
+        <div className="table-scroll no-print">
           <table className="pmf-table">
             <thead>
               <tr>
@@ -71,40 +118,7 @@ export function PmfExplorer({
               </tr>
             </thead>
             <tbody>
-              {pmfs?.map((item) => (
-                <tr key={item.pmf}>
-                  <td>
-                    <button
-                      type="button"
-                      className="pmf-name"
-                      onClick={() => onOpenPmf(item.pmf)}
-                    >
-                      {item.pmf}
-                    </button>
-                    <span className="mobile-meta">{item.predio_count} predios</span>
-                  </td>
-                  <td>
-                    <StatusPills statuses={item.statuses} compact />
-                  </td>
-                  <td>{numberFormatter.format(item.predio_count)}</td>
-                  <td>{item.sectors.join(', ') || '—'}</td>
-                  <td>{item.empresas.join(', ') || '—'}</td>
-                  <td className="numeric">
-                    {item.surface_total === null
-                      ? '—'
-                      : `${surfaceFormatter.format(item.surface_total)} ha`}
-                  </td>
-                  <td className="row-action">
-                    <button
-                      type="button"
-                      onClick={() => onOpenPmf(item.pmf)}
-                      aria-label={`Abrir detalle de ${item.pmf}`}
-                    >
-                      <ChevronIcon />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {pageItems?.map((item) => pmfRow(item, onOpenPmf))}
               {!listLoading && pmfs?.length === 0 && (
                 <tr>
                   <td colSpan={7}>
@@ -132,7 +146,36 @@ export function PmfExplorer({
             </div>
           )}
         </div>
+
+        {/* Print always represents the complete filtered result set, not just the
+            visible page — this duplicate table is never shown on screen. */}
+        {pmfs && pmfs.length > 0 && (
+          <div className="table-scroll pmf-table-print-wrap" aria-hidden="true">
+            <table className="pmf-table">
+              <thead>
+                <tr>
+                  <th>PMF</th>
+                  <th>Estado</th>
+                  <th>Predios</th>
+                  <th>Sector</th>
+                  <th>Empresa</th>
+                  <th className="numeric">Superficie</th>
+                  <th className="row-action" aria-label="Abrir detalle" />
+                </tr>
+              </thead>
+              <tbody>{pmfs.map((item) => pmfRow(item, onOpenPmf))}</tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      <Pagination
+        page={clampedPage}
+        pageSize={pageSize}
+        totalItems={totalItems}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+      />
     </section>
   )
 }

@@ -1361,6 +1361,137 @@
   height: 48px;
 }
 
+/* The print-only table always renders the complete filtered result set, not
+   just the current page, so print/PDF never silently drops rows. */
+.pmf-table-print-wrap {
+  display: none;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--ink-600);
+  font-size: 0.72rem;
+}
+
+.pagination-range {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination-size {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.pagination-size span {
+  color: var(--ink-500);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pagination-size select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink-800);
+  font-size: 0.74rem;
+}
+
+.pagination-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-nav-mobile {
+  display: none;
+}
+
+.pagination-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-700);
+  font-size: 0.73rem;
+  font-weight: 700;
+}
+
+.pagination-step:hover:not(:disabled) {
+  border-color: #aab8bf;
+  background: #f9fbfb;
+}
+
+.pagination-step:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination-page {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--ink-700);
+  font-size: 0.73rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination-page:hover {
+  background: var(--surface-soft);
+}
+
+.pagination-page.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.pagination-ellipsis {
+  display: inline-flex;
+  width: 24px;
+  justify-content: center;
+  color: var(--ink-500);
+  font-size: 0.73rem;
+}
+
+.pagination-mobile-label {
+  color: var(--ink-700);
+  font-size: 0.73rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
 .overlay {
   position: fixed;
   z-index: 100;
@@ -2149,6 +2280,24 @@
     flex-wrap: wrap;
   }
 
+  .pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagination-info {
+    justify-content: space-between;
+  }
+
+  .pagination-nav-desktop {
+    display: none;
+  }
+
+  .pagination-nav-mobile {
+    display: flex;
+    justify-content: space-between;
+  }
+
   .clear-filters {
     height: 32px;
     padding-left: 0;
@@ -2375,6 +2524,10 @@
 
   .workspace-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pmf-table-print-wrap {
+    display: block;
   }
 
   .kpi-card,

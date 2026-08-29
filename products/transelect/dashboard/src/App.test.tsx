@@ -114,6 +114,29 @@ function isFilteredToApproved(f: api.ActiveFilters): boolean {
   return Boolean(f.status && f.status.includes('Aprobado'))
 }
 
+const manyPmfs: PmfListItem[] = Array.from({ length: 120 }, (_, index) => {
+  const n = index + 1
+  return {
+    pmf: `PG${String(n).padStart(3, '0')}`,
+    row_count: 1,
+    predio_count: 1,
+    sectors: ['Sur'],
+    empresas: ['Empresa A'],
+    statuses: ['Aprobado'],
+    surface_total: n,
+  }
+})
+
+function setupManyPmfs() {
+  mockedApi.getFilters.mockResolvedValue(filters)
+  mockedApi.getSnapshots.mockResolvedValue(snapshots)
+  mockedApi.listPmfs.mockImplementation((params = {}) =>
+    Promise.resolve(isFilteredToApproved(params) ? manyPmfs.slice(0, 10) : manyPmfs),
+  )
+  mockedApi.getSummary.mockResolvedValue(allSummary)
+  mockedApi.getPmfDetail.mockResolvedValue(pl001Detail)
+}
+
 function setupHappyPath() {
   mockedApi.getFilters.mockResolvedValue(filters)
   mockedApi.getSnapshots.mockResolvedValue(snapshots)
@@ -261,6 +284,122 @@ describe('App', () => {
     expect(exportButtons.length).toBeGreaterThan(0)
     for (const button of exportButtons) {
       expect(button).toBeEnabled()
+    }
+  })
+
+  it('paginates the PMF explorer client-side at 25 per page and navigates pages', async () => {
+    setupManyPmfs()
+    render(<App />)
+
+    await screen.findByRole('button', { name: 'PG001' })
+    expect(screen.getByText('120 resultados')).toBeInTheDocument()
+    expect(screen.getByText('Mostrando 1–25 de 120')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'PG026' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Página 2' }))
+
+    expect(screen.getByText('Mostrando 26–50 de 120')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'PG001' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PG026' })).toBeInTheDocument()
+
+    // listPmfs/getSummary are not re-fetched per page turn — pagination is client-side.
+    expect(mockedApi.listPmfs).toHaveBeenCalledTimes(1)
+  })
+
+  it('changes page size and resets to page 1', async () => {
+    setupManyPmfs()
+    render(<App />)
+
+    await screen.findByRole('button', { name: 'PG001' })
+    await userEvent.click(screen.getByRole('button', { name: 'Página 2' }))
+    expect(screen.getByText('Mostrando 26–50 de 120')).toBeInTheDocument()
+
+    await userEvent.selectOptions(screen.getByLabelText('Por página'), '100')
+
+    // Reset to page 1 of the new page size (still 2 pages at 100/page for 120 items).
+    expect(screen.getByText('Mostrando 1–100 de 120')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PG001' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('navigation', { name: 'Paginación de resultados' }),
+    ).toBeInTheDocument()
+  })
+
+  it('hides pagination controls once a larger page size makes everything fit on one page', async () => {
+    mockedApi.getFilters.mockResolvedValue(filters)
+    mockedApi.getSnapshots.mockResolvedValue(snapshots)
+    mockedApi.listPmfs.mockResolvedValue(manyPmfs.slice(0, 40))
+    mockedApi.getSummary.mockResolvedValue(allSummary)
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: 'PG001' })
+    expect(
+      screen.getByRole('navigation', { name: 'Paginación de resultados' }),
+    ).toBeInTheDocument()
+
+    await userEvent.selectOptions(screen.getByLabelText('Por página'), '100')
+
+    expect(
+      screen.queryByRole('navigation', { name: 'Paginación de resultados' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PG001' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PG040' })).toBeInTheDocument()
+  })
+
+  it('resets to page 1 when a filter changes, never stranding the user on an empty page', async () => {
+    setupManyPmfs()
+    render(<App />)
+
+    await screen.findByRole('button', { name: 'PG001' })
+    await userEvent.click(screen.getByRole('button', { name: 'Página 2' }))
+    expect(screen.getByText('Mostrando 26–50 de 120')).toBeInTheDocument()
+
+    // Filtering drops the set to 10 items — well short of the "page 2" range
+    // (26–50) the user was just looking at.
+    await selectStatusFilter('Aprobado')
+
+    await waitFor(() => {
+      expect(screen.getByText('10 resultados')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'PG001' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PG010' })).toBeInTheDocument()
+    // 10 items fit on one page of 25 — the pager hides rather than showing an
+    // empty "page 2".
+    expect(
+      screen.queryByRole('navigation', { name: 'Paginación de resultados' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('exports the complete filtered result set as CSV, not just the visible page', async () => {
+    const objectUrls: Blob[] = []
+    const originalCreateObjectURL = URL.createObjectURL
+    const originalRevokeObjectURL = URL.revokeObjectURL
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      objectUrls.push(blob)
+      return 'blob:mock-url'
+    })
+    URL.revokeObjectURL = vi.fn()
+
+    try {
+      setupManyPmfs()
+      render(<App />)
+
+      await screen.findByRole('button', { name: 'PG001' })
+      // Still on page 1 — only PG001..PG025 are visible on screen.
+      expect(screen.queryByRole('button', { name: 'PG120' })).not.toBeInTheDocument()
+
+      const [exportButton] = screen.getAllByRole('button', { name: /exportar/i })
+      await userEvent.click(exportButton)
+
+      expect(objectUrls).toHaveLength(1)
+      const csvText = await objectUrls[0].text()
+      expect(csvText).toContain('PG001')
+      expect(csvText).toContain('PG050')
+      expect(csvText).toContain('PG120')
+      expect(csvText.split('\r\n').filter(Boolean)).toHaveLength(121) // header + 120 rows
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL
+      URL.revokeObjectURL = originalRevokeObjectURL
     }
   })
 })

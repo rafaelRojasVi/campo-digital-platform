@@ -40,6 +40,9 @@ function App() {
   const [pas, setPas] = useState<string[]>([])
   const [tipoPropietario, setTipoPropietario] = useState<string[]>([])
 
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+
   const [selectedPmf, setSelectedPmf] = useState<string | null>(null)
   const [pmfDetail, setPmfDetail] = useState<PmfDetail | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -147,6 +150,12 @@ function App() {
     }
   }, [search, status, sector, empresa, pas, tipoPropietario, refreshToken])
 
+  // A manual refresh keeps the reader's place; an actual filter/search change
+  // starts back at page 1 since the result set is effectively a new list.
+  useEffect(() => {
+    setPage(1)
+  }, [search, status, sector, empresa, pas, tipoPropietario])
+
   useEffect(() => {
     if (selectedPmf === null) return
 
@@ -198,6 +207,11 @@ function App() {
     setEmpresa([])
     setPas([])
     setTipoPropietario([])
+  }
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size)
+    setPage(1)
   }
 
   const focusSearch = () => {
@@ -402,6 +416,10 @@ function App() {
           onExportCsv={exportCsv}
           exportDisabled={!pmfs || pmfs.length === 0}
           onPrint={() => window.print()}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
         />
       </main>
 
