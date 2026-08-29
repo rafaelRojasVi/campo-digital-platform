@@ -48,6 +48,36 @@ These tables live under the shared `platform` schema as an interim pilot
 placement, not a dedicated `transelec` schema — see
 [production-platform-v1.md § Interim placement: Transelec hosted-pilot tables](../../docs/platform/production-platform-v1.md#interim-placement-transelec-hosted-pilot-tables).
 
+## One-command local demo
+
+From the repository root:
+
+```bash
+make transelec-dev
+```
+
+The launcher prefers an explicit `CAMPO_TRANSELEC_WORKBOOK_PATH`. If that is
+not set, it discovers local Campo Digital source roots, searches
+`03_Proyecto_Transelec/02_Datos_Entrada/`, and selects the most recently
+modified `.xlsx`/`.xlsm` file that actually passes Source Contract V1. Source
+files are only read; the launcher never writes into OneDrive or copies client
+data into Git.
+
+It starts FastAPI and the Vite dashboard on free localhost ports, waits for
+both to become ready, and opens the dashboard in the local browser. Existing
+manual development processes are left alone rather than killed or reused.
+
+Useful companion commands:
+
+```bash
+make transelec-status
+make transelec-stop
+```
+
+`transelec-stop` terminates only processes recorded by this worktree's
+launcher. Runtime state and logs live under the system temporary directory,
+not in the repository.
+
 ## Deployment
 
 Container packaging, Cloud SQL/Cloud Storage configuration, Cloud Run IAP,

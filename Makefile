@@ -1,4 +1,4 @@
-.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check
+.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check transelec-dev transelec-status transelec-stop
 
 setup:
 	uv sync --all-extras --dev
@@ -65,3 +65,11 @@ persistence-check: migration-check
 	PYTHONPATH=apps/api \
 	uv run pytest -q apps/api/integration_tests
 
+transelec-dev:
+	uv run --extra transelec --extra api python scripts/transelec_dev.py dev
+
+transelec-status:
+	uv run python scripts/transelec_dev.py status
+
+transelec-stop:
+	uv run python scripts/transelec_dev.py stop
