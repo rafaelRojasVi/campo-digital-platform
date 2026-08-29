@@ -140,6 +140,19 @@ Scope:
 Do not invent workflow states, approval semantics, or business entities that
 have not been established.
 
+Current implementation status (2026-08-29):
+
+- **FACT** — the first real Forestry source snapshot (Degenfeld estate
+  shapefile family) has a forensic evidence record in
+  `products/forestry/docs/source-evidence-v1.md`;
+- **FACT** — a structural Source Contract V1 (family completeness, declared
+  CRS/encoding, DBF schema, record-count integrity, fingerprinting) is
+  implemented in `forestry_ingestion.shapefile_contract` with synthetic-fixture
+  tests;
+- **LIMITATION** — canonical entities, PostGIS persistence, geometry-level
+  validation, API projection, and the dashboard remain open pending
+  stakeholder answers (`products/forestry/docs/es/preguntas-campo-digital.md`).
+
 Exit condition:
 
 Forestry source data can be ingested reproducibly into an evidence-backed
