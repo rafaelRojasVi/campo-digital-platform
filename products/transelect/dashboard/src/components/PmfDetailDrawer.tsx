@@ -1,6 +1,6 @@
 import type { PmfDetail } from '../api'
 import { numberFormatter, surfaceFormatter } from './format'
-import { CloseIcon } from './icons'
+import { ChevronIcon, ChevronLeftIcon, CloseIcon } from './icons'
 import { StatusPills } from './StatusPills'
 
 interface PmfDetailDrawerProps {
@@ -9,6 +9,11 @@ interface PmfDetailDrawerProps {
   loadingDetail: boolean
   detailError: string | null
   onClose: () => void
+  positionLabel: string | null
+  hasPrev: boolean
+  hasNext: boolean
+  onPrev: () => void
+  onNext: () => void
 }
 
 export function PmfDetailDrawer({
@@ -17,6 +22,11 @@ export function PmfDetailDrawer({
   loadingDetail,
   detailError,
   onClose,
+  positionLabel,
+  hasPrev,
+  hasNext,
+  onPrev,
+  onNext,
 }: PmfDetailDrawerProps) {
   return (
     <div className="overlay" role="presentation" onMouseDown={onClose}>
@@ -29,17 +39,41 @@ export function PmfDetailDrawer({
       >
         <div className="drawer-header">
           <div>
-            <span className="section-kicker">Ficha operativa</span>
+            <span className="section-kicker">
+              Ficha operativa{positionLabel ? ` · ${positionLabel}` : ''}
+            </span>
             <h2>{selectedPmf}</h2>
           </div>
-          <button
-            type="button"
-            className="icon-button"
-            onClick={onClose}
-            aria-label="Cerrar detalle"
-          >
-            <CloseIcon />
-          </button>
+          <div className="drawer-header-actions">
+            <button
+              type="button"
+              className="icon-button small"
+              onClick={onPrev}
+              disabled={!hasPrev}
+              aria-label="PMF anterior"
+              title="PMF anterior"
+            >
+              <ChevronLeftIcon />
+            </button>
+            <button
+              type="button"
+              className="icon-button small"
+              onClick={onNext}
+              disabled={!hasNext}
+              aria-label="PMF siguiente"
+              title="PMF siguiente"
+            >
+              <ChevronIcon />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={onClose}
+              aria-label="Cerrar detalle"
+            >
+              <CloseIcon />
+            </button>
+          </div>
         </div>
 
         {loadingDetail && (

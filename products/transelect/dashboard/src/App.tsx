@@ -22,8 +22,6 @@ import { PmfExplorer } from './components/PmfExplorer'
 import { SourceManager } from './components/SourceManager'
 import { SourceStatusCard } from './components/SourceStatusCard'
 import { StatusDistribution } from './components/StatusDistribution'
-import { QuickActions } from './components/QuickActions'
-import { ViewSummaryPanel } from './components/ViewSummaryPanel'
 import { surfaceFormatter } from './components/format'
 
 function App() {
@@ -61,11 +59,16 @@ function App() {
   const [adminError, setAdminError] = useState<string | null>(null)
   const [restoreCandidate, setRestoreCandidate] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const searchInputRef = useRef<HTMLInputElement>(null)
-  const statusSectionRef = useRef<HTMLElement>(null)
 
   const activeSnapshot =
     snapshots.find((snapshot) => snapshot.active) ?? null
+
+  const selectedPmfIndex =
+    selectedPmf !== null ? (pmfs?.findIndex((item) => item.pmf === selectedPmf) ?? -1) : -1
+  const hasPrevPmf = selectedPmfIndex > 0
+  const hasNextPmf = selectedPmfIndex >= 0 && selectedPmfIndex < (pmfs?.length ?? 0) - 1
+  const pmfPositionLabel =
+    selectedPmfIndex >= 0 && pmfs ? `${selectedPmfIndex + 1} de ${pmfs.length}` : null
 
   const filtersActive = Boolean(
     search ||
@@ -186,14 +189,30 @@ function App() {
     if (!managerOpen && selectedPmf === null) return
 
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      if (managerOpen) setManagerOpen(false)
-      else setSelectedPmf(null)
+      if (event.key === 'Escape') {
+        if (managerOpen) setManagerOpen(false)
+        else setSelectedPmf(null)
+        return
+      }
+
+      if (managerOpen || selectedPmf === null || !pmfs) return
+      // Don't hijack arrow keys while the user is typing/selecting elsewhere.
+      const activeTag = document.activeElement?.tagName
+      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return
+
+      const index = pmfs.findIndex((item) => item.pmf === selectedPmf)
+      if (index < 0) return
+
+      if (event.key === 'ArrowLeft' && index > 0) {
+        setSelectedPmf(pmfs[index - 1].pmf)
+      } else if (event.key === 'ArrowRight' && index < pmfs.length - 1) {
+        setSelectedPmf(pmfs[index + 1].pmf)
+      }
     }
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [managerOpen, selectedPmf])
+  }, [managerOpen, selectedPmf, pmfs])
 
   const refreshAll = () => {
     setError(null)
@@ -214,13 +233,12 @@ function App() {
     setPage(1)
   }
 
-  const focusSearch = () => {
-    searchInputRef.current?.focus()
+  const goToPrevPmf = () => {
+    if (hasPrevPmf && pmfs) setSelectedPmf(pmfs[selectedPmfIndex - 1].pmf)
   }
 
-  const reviewStatuses = () => {
-    statusSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    statusSectionRef.current?.focus({ preventScroll: true })
+  const goToNextPmf = () => {
+    if (hasNextPmf && pmfs) setSelectedPmf(pmfs[selectedPmfIndex + 1].pmf)
   }
 
   const exportCsv = () => {
@@ -339,6 +357,8 @@ function App() {
     <div className="app-shell">
       <AppHeader
         sourceAvailable={!error}
+        activeSnapshot={activeSnapshot}
+        snapshotHistoryAvailable={snapshotHistoryAvailable}
         onManageSource={() => setManagerOpen(true)}
         onRefresh={refreshAll}
       />
@@ -365,7 +385,6 @@ function App() {
           <FilterPanel
             search={search}
             onSearchChange={setSearch}
-            searchInputRef={searchInputRef}
             filters={filters}
             status={status}
             onStatusChange={setStatus}
@@ -382,45 +401,31 @@ function App() {
           />
 
           <div className="workspace-main">
-            <StatusDistribution summary={summary} sectionRef={statusSectionRef} />
+            <StatusDistribution summary={summary} />
 
-            <div className="workspace-secondary-grid">
-              <SourceStatusCard
-                activeSnapshot={activeSnapshot}
-                snapshotHistoryAvailable={snapshotHistoryAvailable}
-                snapshotsCount={snapshots.length}
-                onManage={() => setManagerOpen(true)}
-              />
-              <ViewSummaryPanel summary={summary} />
-            </div>
+            <SourceStatusCard
+              activeSnapshot={activeSnapshot}
+              snapshotHistoryAvailable={snapshotHistoryAvailable}
+              snapshotsCount={snapshots.length}
+              onManage={() => setManagerOpen(true)}
+            />
 
-            <QuickActions
-              onFocusSearch={focusSearch}
-              onReviewStatuses={reviewStatuses}
-              filtersActive={filtersActive}
+            <PmfExplorer
+              pmfs={pmfs}
+              listLoading={listLoading}
+              loading={loading}
+              onOpenPmf={setSelectedPmf}
               onClearFilters={clearFilters}
               onExportCsv={exportCsv}
               exportDisabled={!pmfs || pmfs.length === 0}
               onPrint={() => window.print()}
-              onOpenHistory={() => setManagerOpen(true)}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={handlePageSizeChange}
             />
           </div>
         </section>
-
-        <PmfExplorer
-          pmfs={pmfs}
-          listLoading={listLoading}
-          loading={loading}
-          onOpenPmf={setSelectedPmf}
-          onClearFilters={clearFilters}
-          onExportCsv={exportCsv}
-          exportDisabled={!pmfs || pmfs.length === 0}
-          onPrint={() => window.print()}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={handlePageSizeChange}
-        />
       </main>
 
       {selectedPmf && (
@@ -430,6 +435,11 @@ function App() {
           loadingDetail={loadingDetail}
           detailError={detailError}
           onClose={() => setSelectedPmf(null)}
+          positionLabel={pmfPositionLabel}
+          hasPrev={hasPrevPmf}
+          hasNext={hasNextPmf}
+          onPrev={goToPrevPmf}
+          onNext={goToNextPmf}
         />
       )}
 

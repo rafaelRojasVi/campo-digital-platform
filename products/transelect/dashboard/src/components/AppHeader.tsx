@@ -1,13 +1,28 @@
+import type { TranselecSnapshotRecord } from '../api'
+import { formatDateOnly } from './format'
 import { DatabaseIcon, RefreshIcon } from './icons'
 
 interface AppHeaderProps {
   sourceAvailable: boolean
+  activeSnapshot: TranselecSnapshotRecord | null
+  snapshotHistoryAvailable: boolean
   onManageSource: () => void
   onRefresh: () => void
 }
 
+function provenanceLabel(
+  activeSnapshot: TranselecSnapshotRecord | null,
+  snapshotHistoryAvailable: boolean,
+): string {
+  if (activeSnapshot) return `Publicado ${formatDateOnly(activeSnapshot.created_at)}`
+  if (snapshotHistoryAvailable) return 'Sin planilla publicada'
+  return 'Modo de desarrollo'
+}
+
 export function AppHeader({
   sourceAvailable,
+  activeSnapshot,
+  snapshotHistoryAvailable,
   onManageSource,
   onRefresh,
 }: AppHeaderProps) {
@@ -27,6 +42,9 @@ export function AppHeader({
       </div>
 
       <div className="topbar-actions">
+        <span className="source-provenance">
+          {provenanceLabel(activeSnapshot, snapshotHistoryAvailable)}
+        </span>
         <div className="source-health">
           <span className={`health-dot ${sourceAvailable ? 'online' : 'offline'}`} />
           <span>{sourceAvailable ? 'Datos disponibles' : 'Fuente no disponible'}</span>

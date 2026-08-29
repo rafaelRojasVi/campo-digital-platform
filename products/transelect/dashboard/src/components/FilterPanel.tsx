@@ -1,4 +1,3 @@
-import type { Ref } from 'react'
 import type { TranselecFilterOptions } from '../api'
 import { CloseIcon, SearchIcon } from './icons'
 import { MultiSelectField } from '../MultiSelectField'
@@ -6,7 +5,6 @@ import { MultiSelectField } from '../MultiSelectField'
 interface FilterPanelProps {
   search: string
   onSearchChange: (value: string) => void
-  searchInputRef?: Ref<HTMLInputElement>
   filters: TranselecFilterOptions | null
   status: string[]
   onStatusChange: (next: string[]) => void
@@ -25,7 +23,6 @@ interface FilterPanelProps {
 export function FilterPanel({
   search,
   onSearchChange,
-  searchInputRef,
   filters,
   status,
   onStatusChange,
@@ -60,10 +57,9 @@ export function FilterPanel({
         )}
       </div>
 
-      <label className="search-field">
+      <label className="search-field search-field-primary">
         <SearchIcon />
         <input
-          ref={searchInputRef}
           type="search"
           placeholder="Buscar por PMF, predio o rol"
           value={search}
@@ -81,6 +77,7 @@ export function FilterPanel({
       </label>
 
       <div className="filter-rail-fields">
+        <span className="filter-rail-fields-label">Filtrar por</span>
         <MultiSelectField
           label="Estado resumido"
           options={filters?.statuses ?? []}

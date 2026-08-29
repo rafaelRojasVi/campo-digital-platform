@@ -31,6 +31,14 @@ export function ChevronIcon() {
   )
 }
 
+export function ChevronLeftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  )
+}
+
 export function CloseIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -60,32 +68,6 @@ export function PrintIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M6 9V4h12v5M6 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1M6 14h12v6H6z" />
-    </svg>
-  )
-}
-
-export function ChartIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 20V10m6 10V4m6 16v-7" />
-    </svg>
-  )
-}
-
-export function EraserIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m16.5 3.5 4 4L9 19H5v-4Z" />
-      <path d="M13.5 6.5 17.5 10.5" />
-    </svg>
-  )
-}
-
-export function HistoryIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" />
-      <path d="M12 8v4l3 2" />
     </svg>
   )
 }

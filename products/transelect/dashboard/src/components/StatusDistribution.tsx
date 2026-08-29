@@ -1,10 +1,9 @@
-import { useMemo, type Ref } from 'react'
+import { useMemo } from 'react'
 import type { TranselecSummary } from '../api'
 import { numberFormatter, statusTone, toneColor } from './format'
 
 interface StatusDistributionProps {
   summary: TranselecSummary | null
-  sectionRef?: Ref<HTMLElement>
 }
 
 interface Segment {
@@ -43,17 +42,21 @@ function conicGradient(segments: Segment[]): string {
   return `conic-gradient(${stops.join(', ')})`
 }
 
-export function StatusDistribution({ summary, sectionRef }: StatusDistributionProps) {
+export function StatusDistribution({ summary }: StatusDistributionProps) {
   const { segments, total } = useMemo(() => buildSegments(summary), [summary])
 
   return (
-    <article className="panel status-panel" ref={sectionRef} tabIndex={-1}>
+    <article className="panel status-panel">
       <div className="panel-heading">
         <div>
           <span className="section-kicker">Distribución</span>
           <h2>Distribución de registros por estado resumido</h2>
         </div>
-        <span className="panel-note">Por fila de fuente</span>
+        <span className="panel-note">
+          {segments.length > 0
+            ? `${numberFormatter.format(segments.length)} categoría${segments.length === 1 ? '' : 's'} · por fila de fuente`
+            : 'Por fila de fuente'}
+        </span>
       </div>
 
       {!summary && (

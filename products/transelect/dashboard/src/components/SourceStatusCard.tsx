@@ -1,5 +1,5 @@
 import type { TranselecSnapshotRecord } from '../api'
-import { formatBytes, formatDate, surfaceFormatter } from './format'
+import { formatBytes, formatDate } from './format'
 import { ChevronIcon, DatabaseIcon } from './icons'
 
 interface SourceStatusCardProps {
@@ -15,59 +15,32 @@ export function SourceStatusCard({
   snapshotsCount,
   onManage,
 }: SourceStatusCardProps) {
+  const primaryText =
+    activeSnapshot?.filename ??
+    (snapshotHistoryAvailable ? 'Sin planilla publicada' : 'Fuente de desarrollo')
+
+  const secondaryText = activeSnapshot
+    ? `Publicada ${formatDate(activeSnapshot.created_at)} · ${formatBytes(activeSnapshot.byte_size)} · ${snapshotsCount} versión${snapshotsCount === 1 ? '' : 'es'}`
+    : snapshotHistoryAvailable
+      ? 'Publique una planilla para comenzar'
+      : 'Modo de desarrollo · lectura directa'
+
   return (
-    <article className="panel source-status-card">
-      <div className="panel-heading">
-        <div>
-          <span className="section-kicker">Control de fuente</span>
-          <h2>Versión publicada</h2>
-        </div>
-        {activeSnapshot && <span className="current-badge">Activa</span>}
+    <article className="panel source-status-strip">
+      <div className="source-status-strip-icon">
+        <DatabaseIcon />
       </div>
 
-      <div className="dataset-summary">
-        <div className="dataset-file-icon">
-          <DatabaseIcon />
-        </div>
-        <div>
-          <strong>
-            {activeSnapshot?.filename ??
-              (snapshotHistoryAvailable ? 'Sin planilla publicada' : 'Fuente de desarrollo')}
-          </strong>
-          <span>
-            {activeSnapshot
-              ? `Publicada ${formatDate(activeSnapshot.created_at)}`
-              : snapshotHistoryAvailable
-                ? 'Publique una planilla para comenzar'
-                : 'Modo de desarrollo · lectura directa'}
-          </span>
-        </div>
+      <div className="source-status-strip-info">
+        <strong>{primaryText}</strong>
+        <span>{secondaryText}</span>
       </div>
 
-      <div className="dataset-metrics">
-        <div>
-          <span>Versiones</span>
-          <strong>{snapshotHistoryAvailable ? snapshotsCount : '—'}</strong>
-        </div>
-        <div>
-          <span>Tamaño</span>
-          <strong>
-            {activeSnapshot ? formatBytes(activeSnapshot.byte_size) : '—'}
-          </strong>
-        </div>
-        <div>
-          <span>Superficie</span>
-          <strong>
-            {activeSnapshot
-              ? `${surfaceFormatter.format(activeSnapshot.surface_total)} ha`
-              : '—'}
-          </strong>
-        </div>
-      </div>
+      {activeSnapshot && <span className="current-badge">Activa</span>}
 
       <button
         type="button"
-        className="button button-dark full-width"
+        className="button button-secondary compact no-print"
         onClick={onManage}
       >
         Ver historial y actualizar

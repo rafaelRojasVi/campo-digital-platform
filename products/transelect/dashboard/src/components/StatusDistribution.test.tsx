@@ -42,6 +42,20 @@ describe('StatusDistribution', () => {
     expect(screen.getByText('registros')).toBeInTheDocument()
   })
 
+  it('states the distinct category count as a factual note, absorbing the old Vista actual bullet', () => {
+    render(<StatusDistribution summary={summary} />)
+    expect(screen.getByText('2 categorías · por fila de fuente')).toBeInTheDocument()
+  })
+
+  it('uses singular phrasing for exactly one category', () => {
+    render(
+      <StatusDistribution
+        summary={{ ...summary, status_breakdown: [['Aprobado', 10]] }}
+      />,
+    )
+    expect(screen.getByText('1 categoría · por fila de fuente')).toBeInTheDocument()
+  })
+
   it('renders an empty state when there are no status-informed rows', () => {
     render(
       <StatusDistribution

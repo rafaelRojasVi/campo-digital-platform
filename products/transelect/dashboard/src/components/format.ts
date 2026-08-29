@@ -10,6 +10,12 @@ const dateFormatter = new Intl.DateTimeFormat('es-CL', {
   timeStyle: 'short',
 })
 
+const dateOnlyFormatter = new Intl.DateTimeFormat('es-CL', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+})
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -18,6 +24,11 @@ export function formatBytes(bytes: number): string {
 export function formatDate(value: string): string {
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? value : dateFormatter.format(parsed)
+}
+
+export function formatDateOnly(value: string): string {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? value : dateOnlyFormatter.format(parsed)
 }
 
 export function statusTone(status: string): string {

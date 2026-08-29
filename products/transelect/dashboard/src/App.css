@@ -92,6 +92,14 @@
   gap: 9px;
 }
 
+.source-provenance {
+  padding-right: 12px;
+  border-right: 1px solid var(--line-strong);
+  color: var(--ink-600);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
 .source-health {
   display: flex;
   align-items: center;
@@ -219,9 +227,14 @@
     border-color 140ms ease;
 }
 
-.icon-button:hover {
+.icon-button:hover:not(:disabled) {
   border-color: #aab8bf;
   background: #f6f9f9;
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .icon-button.small {
@@ -406,10 +419,32 @@
   flex: none;
 }
 
+.search-field-primary {
+  height: 48px;
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.search-field-primary input {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
 .filter-rail-fields {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.filter-rail-fields-label {
+  margin-bottom: -2px;
+  color: var(--ink-500);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .filter-rail-fields .multi-select,
@@ -441,12 +476,6 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 12px;
-}
-
-.workspace-secondary-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
@@ -640,19 +669,14 @@
   font-size: 0.75rem;
 }
 
-.source-status-card {
-  display: flex;
-  flex-direction: column;
-}
-
-.dataset-summary {
+.source-status-strip {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 14px;
+  padding: 14px 18px;
 }
 
-.dataset-file-icon,
+.source-status-strip-icon,
 .file-type {
   display: flex;
   align-items: center;
@@ -666,179 +690,43 @@
   letter-spacing: 0.04em;
 }
 
-.dataset-file-icon {
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
+.source-status-strip-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
 }
 
-.dataset-summary > div:last-child {
+.source-status-strip-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+
+.source-status-strip-info {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
+  gap: 2px;
 }
 
-.dataset-summary strong {
+.source-status-strip-info strong {
   overflow: hidden;
   color: var(--ink-900);
-  font-size: 0.78rem;
+  font-size: 0.79rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.dataset-summary span {
-  margin-top: 4px;
+.source-status-strip-info span {
   color: var(--ink-500);
   font-size: 0.68rem;
 }
 
-.dataset-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0;
-  margin-bottom: 20px;
-  padding: 14px 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.dataset-metrics > div {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.dataset-metrics > div + div {
-  padding-left: 18px;
-  border-left: 1px solid var(--line);
-}
-
-.dataset-metrics span {
-  color: var(--ink-500);
-  font-size: 0.64rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.dataset-metrics strong {
-  color: var(--ink-900);
-  font-size: 0.8rem;
-}
-
-.source-status-card .button {
-  margin-top: auto;
-}
-
-.source-status-card .button svg {
-  margin-left: auto;
-}
-
-.view-summary-card {
-  display: flex;
-  flex-direction: column;
-}
-
-.view-summary-list {
-  display: grid;
-  gap: 11px;
-  margin: 4px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.view-summary-list li {
-  position: relative;
-  padding-left: 16px;
-  color: var(--ink-800);
-  font-size: 0.79rem;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.view-summary-list li::before {
-  position: absolute;
-  top: 0.5em;
-  left: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  content: '';
-}
-
-.view-summary-skeleton span {
-  height: 18px;
-}
-
-.quick-actions-card {
-  display: flex;
-  flex-direction: column;
-}
-
-.quick-actions-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 9px;
-}
-
-.quick-action {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  padding: 12px 13px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-soft);
-  color: var(--ink-800);
-  text-align: left;
-  transition:
-    border-color 130ms ease,
-    background 130ms ease;
-}
-
-.quick-action:hover:not(:disabled) {
-  border-color: #77a9a5;
-  background: var(--accent-soft);
-}
-
-.quick-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.quick-action-icon {
-  display: flex;
-  width: 26px;
-  height: 26px;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 2px;
-  color: var(--accent);
-}
-
-.quick-action-icon svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.quick-action strong {
-  font-size: 0.76rem;
-}
-
-.quick-action span {
-  color: var(--ink-500);
-  font-size: 0.66rem;
-  line-height: 1.35;
-}
-
 .records-section {
-  margin-top: 5px;
+  margin-top: 2px;
 }
 
 .records-heading {
@@ -1547,6 +1435,12 @@
   margin-bottom: 20px;
 }
 
+.drawer-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
 .drawer-header h2,
 .manager-header h2 {
   margin: 5px 0 0;
@@ -2182,10 +2076,6 @@
     width: auto;
   }
 
-  .quick-actions-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
   .history-item {
     grid-template-columns: minmax(0, 1fr) auto;
   }
@@ -2208,6 +2098,7 @@
   }
 
   .topbar .button-secondary span,
+  .source-provenance,
   .source-health {
     display: none;
   }
@@ -2237,8 +2128,13 @@
     font-size: 2rem;
   }
 
-  .workspace-secondary-grid {
-    grid-template-columns: 1fr;
+  .source-status-strip {
+    flex-wrap: wrap;
+  }
+
+  .source-status-strip .button {
+    flex: 1 1 100%;
+    justify-content: center;
   }
 
   .donut-widget {
@@ -2257,10 +2153,6 @@
   .filter-rail-fields .multi-select {
     flex: none;
     width: 100%;
-  }
-
-  .quick-actions-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
 
   .multi-select {
@@ -2454,10 +2346,6 @@
     margin-top: 16px;
   }
 
-  .quick-actions-grid {
-    grid-template-columns: 1fr;
-  }
-
   .current-badge {
     display: none;
   }
@@ -2507,8 +2395,7 @@
   .no-print,
   .icon-button,
   .overlay,
-  .row-action,
-  .source-status-card .button-dark {
+  .row-action {
     display: none !important;
   }
 

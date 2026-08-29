@@ -110,6 +110,35 @@ const pl001Detail: PmfDetail = {
   ],
 }
 
+const pl002Detail: PmfDetail = {
+  pmf: 'PL002',
+  row_count: 2,
+  statuses: ['Pendiente'],
+  predios: [
+    {
+      provisional_predio_id: 'PL002-160-1-1',
+      rows: [
+        {
+          source_row_number: 5,
+          numero_area_corta: '1',
+          estado: 'En preparación',
+          estado_resumido: 'Pendiente',
+          superficie_corta: 0.9,
+          numero_ingreso: null,
+          fecha_ingreso: null,
+          rol: '160-1',
+          empresa: 'Empresa A',
+          sector: 'Sur',
+          tramite: null,
+          tipo_propietario: null,
+          pas: null,
+          tipo_rechazo: null,
+        },
+      ],
+    },
+  ],
+}
+
 function isFilteredToApproved(f: api.ActiveFilters): boolean {
   return Boolean(f.status && f.status.includes('Aprobado'))
 }
@@ -401,5 +430,78 @@ describe('App', () => {
       URL.createObjectURL = originalCreateObjectURL
       URL.revokeObjectURL = originalRevokeObjectURL
     }
+  })
+
+  it('surfaces the active source publication date in the header at a glance', async () => {
+    setupHappyPath()
+    render(<App />)
+    await screen.findByRole('button', { name: 'PL001' })
+
+    expect(screen.getByText('Publicado 20 ago 2026')).toBeInTheDocument()
+  })
+
+  it('labels provenance honestly when no snapshot has been published yet', async () => {
+    mockedApi.getFilters.mockResolvedValue(filters)
+    mockedApi.getSnapshots.mockResolvedValue([])
+    mockedApi.listPmfs.mockResolvedValue(allPmfs)
+    mockedApi.getSummary.mockResolvedValue(allSummary)
+
+    render(<App />)
+    await screen.findByRole('button', { name: 'PL001' })
+
+    expect(screen.getAllByText('Sin planilla publicada').length).toBeGreaterThan(0)
+  })
+
+  it('labels provenance honestly in local-development mode instead of fabricating a date', async () => {
+    mockedApi.getFilters.mockResolvedValue(filters)
+    mockedApi.getSnapshots.mockRejectedValue(new Error('no history in local mode'))
+    mockedApi.listPmfs.mockResolvedValue(allPmfs)
+    mockedApi.getSummary.mockResolvedValue(allSummary)
+
+    render(<App />)
+    await screen.findByRole('button', { name: 'PL001' })
+
+    expect(screen.getByText('Modo de desarrollo')).toBeInTheDocument()
+  })
+
+  it('navigates between PMFs from inside the drawer without closing it', async () => {
+    setupHappyPath()
+    mockedApi.getPmfDetail.mockImplementation((pmf) =>
+      Promise.resolve(pmf === 'PL002' ? pl002Detail : pl001Detail),
+    )
+
+    render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: 'PL001' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Detalle PMF PL001' })
+    expect(within(dialog).getByText('Ficha operativa · 1 de 2')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'PMF anterior' })).toBeDisabled()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'PMF siguiente' }))
+
+    const nextDialog = await screen.findByRole('dialog', { name: 'Detalle PMF PL002' })
+    expect(within(nextDialog).getByText('Ficha operativa · 2 de 2')).toBeInTheDocument()
+    expect(within(nextDialog).getByText('PL002-160-1-1')).toBeInTheDocument()
+    expect(within(nextDialog).getByRole('button', { name: 'PMF siguiente' })).toBeDisabled()
+
+    await userEvent.click(within(nextDialog).getByRole('button', { name: 'PMF anterior' }))
+    await screen.findByRole('dialog', { name: 'Detalle PMF PL001' })
+  })
+
+  it('navigates between PMFs with the arrow keys while the drawer is open', async () => {
+    setupHappyPath()
+    mockedApi.getPmfDetail.mockImplementation((pmf) =>
+      Promise.resolve(pmf === 'PL002' ? pl002Detail : pl001Detail),
+    )
+
+    render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: 'PL001' }))
+    await screen.findByRole('dialog', { name: 'Detalle PMF PL001' })
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    await screen.findByRole('dialog', { name: 'Detalle PMF PL002' })
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    await screen.findByRole('dialog', { name: 'Detalle PMF PL001' })
   })
 })
