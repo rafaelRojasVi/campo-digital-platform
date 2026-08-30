@@ -1,5 +1,17 @@
 /* Local-only boundary simulation. Source geometry remains immutable. */
 
+/*
+ * Editing is a focused map task. The normal source inspector is useful before
+ * entering a draft, but on narrow screens it occupies the same right-hand
+ * workspace as the draft tools. While a draft exists, remove the inspector
+ * from layout so the map expands and the editor stays fully usable. As soon as
+ * the draft is discarded, the inspector returns automatically because the
+ * selected source feature is still selected.
+ */
+.app__body:has(.draft-edit) > .inspector {
+  display: none;
+}
+
 .map__control-button--draft {
   color: #7a4a00;
   background: #fff7df;
@@ -21,6 +33,8 @@
   bottom: 32px;
   z-index: 1001;
   width: min(360px, calc(100% - 24px));
+  max-height: calc(100% - 96px);
+  overflow-y: auto;
   padding: 12px;
   color: var(--ink);
   background: rgba(253, 253, 251, 0.97);
@@ -229,6 +243,7 @@
     right: 8px;
     bottom: 26px;
     width: calc(100% - 16px);
+    max-height: calc(100% - 80px);
   }
 
   .draft-edit__metrics {
