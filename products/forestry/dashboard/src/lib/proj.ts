@@ -24,6 +24,25 @@ export function utmToLonLat(easting: number, northing: number): [number, number]
   return [lon, lat]
 }
 
+/**
+ * Convert one display [longitude, latitude] pair back to the source UTM CRS.
+ * Used only for local draft geometry simulation; it never mutates persisted data.
+ */
+export function lonLatToUtm(longitude: number, latitude: number): [number, number] {
+  const [easting, northing] = toWgs84.inverse([longitude, latitude])
+
+  if (
+    easting === undefined ||
+    northing === undefined ||
+    !Number.isFinite(easting) ||
+    !Number.isFinite(northing)
+  ) {
+    throw new Error(`inverse reprojection failed for (${longitude}, ${latitude})`)
+  }
+
+  return [easting, northing]
+}
+
 export interface LonLatBounds {
   west: number
   south: number

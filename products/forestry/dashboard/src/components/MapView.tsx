@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import { metersPerPixel, multiPolygonToLatLngs, tooltipHtml } from '../lib/mapData.ts'
-import { multiPolygonUtmBbox, utmToLonLat } from '../lib/proj.ts'
+import { lonLatToUtm, multiPolygonUtmBbox, utmToLonLat } from '../lib/proj.ts'
+import {
+  cloneCoordinates,
+  isClosedRing,
+  moveDraftVertex,
+  multiPolygonAreaSquareMeters,
+  type DraftCoordinates,
+} from '../lib/draftGeometry.ts'
 import type { ColorEncoding } from '../lib/palette.ts'
 import type { FeatureCollection, GeoFeature } from '../types.ts'
 import type { ZoomRequest } from '../App.tsx'
@@ -44,6 +51,13 @@ interface FeatureLayer {
 const MARKER_MAX_SUBSET = 200
 const MARKER_MIN_POLYGON_PX = 8
 
+function formatHa(value: number): string {
+  return value.toLocaleString('es-CL', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
 export function MapView({
   collection,
   filteredFeatures,
@@ -67,7 +81,13 @@ export function MapView({
   const layersRef = useRef<Map<number, FeatureLayer>>(new Map())
   const styleForRef = useRef<(featureOrdinal: number) => L.PathOptions>(() => ({}))
   const onSelectRef = useRef(onSelect)
+  const draftLayerRef = useRef<L.Polygon | null>(null)
+  const draftMarkerGroupRef = useRef<L.LayerGroup | null>(null)
+  const draftCoordinatesRef = useRef<DraftCoordinates | null>(null)
   const [basemapMode, setBasemapMode] = useState<BasemapMode>('map')
+  const [draftFeatureOrdinal, setDraftFeatureOrdinal] = useState<number | null>(null)
+  const [draftAreaHa, setDraftAreaHa] = useState<number | null>(null)
+  const [draftResetNonce, setDraftResetNonce] = useState(0)
 
   useEffect(() => {
     onSelectRef.current = onSelect
@@ -112,6 +132,9 @@ export function MapView({
       mapRef.current = null
       groupRef.current = null
       baseLayerRef.current = null
+      draftLayerRef.current = null
+      draftMarkerGroupRef.current = null
+      draftCoordinatesRef.current = null
       layersRef.current = new Map()
       // A fresh map instance starts at the default view, so the initial
       // collection fit must run again on the next mount.
@@ -205,7 +228,14 @@ export function MapView({
     }
   }, [collection])
 
-  // Visibility + style: driven by filters, color encoding, and selection.
+  // If selection moves away from the locally edited polygon, discard the draft.
+  useEffect(() => {
+    if (draftFeatureOrdinal !== null && selectedOrdinal !== draftFeatureOrdinal) {
+      setDraftFeatureOrdinal(null)
+    }
+  }, [draftFeatureOrdinal, selectedOrdinal])
+
+  // Visibility + style: driven by filters, color encoding, selection and draft state.
   useEffect(() => {
     const group = groupRef.current
     if (group === null) {
@@ -221,6 +251,7 @@ export function MapView({
       const color =
         entry !== undefined && encoding !== null ? encoding.colorFor(entry.feature) : '#9a9890'
       const selected = featureOrdinal === selectedOrdinal
+      const editing = featureOrdinal === draftFeatureOrdinal
 
       // At estate scale the 1,568 polygons are only a few pixels each and a
       // white stroke would wash them out, so the boundary gap appears from
@@ -230,11 +261,12 @@ export function MapView({
       const strokeWeight = zoom >= 12 || visibleOrdinals.size <= 200 ? 0.8 : 0
 
       return {
-        color: selected ? '#14130f' : '#ffffff',
-        weight: selected ? 2.5 : strokeWeight,
-        opacity: selected ? 1 : 0.85,
+        color: editing || selected ? '#14130f' : '#ffffff',
+        weight: editing ? 2 : selected ? 2.5 : strokeWeight,
+        opacity: editing || selected ? 1 : 0.85,
         fillColor: color,
-        fillOpacity: 0.78,
+        fillOpacity: editing ? 0.12 : 0.78,
+        dashArray: editing ? '5 4' : undefined,
       }
     }
     styleForRef.current = styleFor
@@ -281,6 +313,7 @@ export function MapView({
         const wantMarker =
           useMarkers &&
           entry.visible &&
+          featureOrdinal !== draftFeatureOrdinal &&
           entry.maxExtentMeters / resolution < MARKER_MIN_POLYGON_PX
 
         if (wantMarker) {
@@ -338,7 +371,94 @@ export function MapView({
         map.off('zoomend', restyleOnZoom)
       }
     }
-  }, [filteredFeatures, encoding, selectedOrdinal])
+  }, [filteredFeatures, encoding, selectedOrdinal, draftFeatureOrdinal])
+
+  // Local-only draft geometry editor. The source layer remains untouched and
+  // is shown beneath the draft as a dashed outline for comparison.
+  useEffect(() => {
+    const map = mapRef.current
+    if (map === null || draftFeatureOrdinal === null) return
+
+    const entry = layersRef.current.get(draftFeatureOrdinal)
+    if (entry === undefined || !entry.feature.properties.geometry_is_valid) return
+
+    const coordinates = cloneCoordinates(entry.feature.geometry.coordinates)
+    draftCoordinatesRef.current = coordinates
+    setDraftAreaHa(multiPolygonAreaSquareMeters(coordinates) / 10_000)
+
+    const draftLayer = L.polygon(
+      multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates }),
+      {
+        color: '#f3a712',
+        weight: 3,
+        opacity: 1,
+        fillColor: '#f3a712',
+        fillOpacity: 0.18,
+      },
+    ).addTo(map)
+    draftLayerRef.current = draftLayer
+
+    const markerGroup = L.layerGroup().addTo(map)
+    draftMarkerGroupRef.current = markerGroup
+
+    for (let polygonIndex = 0; polygonIndex < coordinates.length; polygonIndex += 1) {
+      const polygon = coordinates[polygonIndex]
+      if (polygon === undefined) continue
+
+      for (let ringIndex = 0; ringIndex < polygon.length; ringIndex += 1) {
+        const ring = polygon[ringIndex]
+        if (ring === undefined) continue
+        const markerCount = isClosedRing(ring) ? ring.length - 1 : ring.length
+
+        for (let vertexIndex = 0; vertexIndex < markerCount; vertexIndex += 1) {
+          const position = ring[vertexIndex]
+          if (position === undefined) continue
+          const x = position[0]
+          const y = position[1]
+          if (x === undefined || y === undefined) continue
+          const [lon, lat] = utmToLonLat(x, y)
+
+          const marker = L.marker([lat, lon], {
+            draggable: true,
+            keyboard: false,
+            icon: L.divIcon({
+              className: 'draft-vertex',
+              html: '<span></span>',
+              iconSize: [12, 12],
+              iconAnchor: [6, 6],
+            }),
+          }).addTo(markerGroup)
+
+          marker.on('drag', () => {
+            const point = marker.getLatLng()
+            const [nextX, nextY] = lonLatToUtm(point.lng, point.lat)
+            moveDraftVertex(
+              coordinates,
+              polygonIndex,
+              ringIndex,
+              vertexIndex,
+              nextX,
+              nextY,
+            )
+            draftLayer.setLatLngs(
+              multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates }),
+            )
+            setDraftAreaHa(multiPolygonAreaSquareMeters(coordinates) / 10_000)
+          })
+        }
+      }
+    }
+
+    draftLayer.bringToFront()
+
+    return () => {
+      markerGroup.remove()
+      draftLayer.remove()
+      draftMarkerGroupRef.current = null
+      draftLayerRef.current = null
+      draftCoordinatesRef.current = null
+    }
+  }, [draftFeatureOrdinal, draftResetNonce])
 
   // Initial fit to the whole loaded collection (once per collection object).
   const fittedCollectionRef = useRef<FeatureCollection | null>(null)
@@ -387,6 +507,28 @@ export function MapView({
     }
   }, [zoomRequest])
 
+  const draftFeature =
+    draftFeatureOrdinal === null
+      ? null
+      : collection.features.find(
+          (feature) => feature.properties.feature_ordinal === draftFeatureOrdinal,
+        ) ?? null
+  const originalAreaHa =
+    draftFeature === null ? null : draftFeature.properties.geometry_area_source_units / 10_000
+  const areaDifferenceHa =
+    originalAreaHa === null || draftAreaHa === null ? null : draftAreaHa - originalAreaHa
+  const areaDifferencePercent =
+    originalAreaHa === null || originalAreaHa === 0 || areaDifferenceHa === null
+      ? null
+      : (areaDifferenceHa / originalAreaHa) * 100
+
+  const selectedFeature =
+    selectedOrdinal === null
+      ? null
+      : collection.features.find(
+          (feature) => feature.properties.feature_ordinal === selectedOrdinal,
+        ) ?? null
+
   return (
     <div className="map">
       <div ref={containerRef} className="map__canvas" data-testid="map-canvas" />
@@ -421,6 +563,21 @@ export function MapView({
         >
           Ajustar a resultados
         </button>
+        {selectedFeature !== null && draftFeatureOrdinal === null ? (
+          <button
+            type="button"
+            className="map__control-button map__control-button--draft"
+            disabled={!selectedFeature.properties.geometry_is_valid}
+            onClick={() => setDraftFeatureOrdinal(selectedFeature.properties.feature_ordinal)}
+            title={
+              selectedFeature.properties.geometry_is_valid
+                ? 'Crear un borrador local moviendo vértices; no modifica la fuente'
+                : 'La simulación requiere una geometría fuente válida'
+            }
+          >
+            Simular ajuste
+          </button>
+        ) : null}
         <button
           type="button"
           className="map__control-button map__control-button--focus"
@@ -431,6 +588,63 @@ export function MapView({
           {mapFocus ? 'Salir de modo mapa' : 'Modo mapa'}
         </button>
       </div>
+
+      {draftFeature !== null && originalAreaHa !== null && draftAreaHa !== null ? (
+        <section className="draft-edit" aria-label="Simulación local de límite">
+          <div className="draft-edit__heading">
+            <div>
+              <strong>Simulación de límite</strong>
+              <span>
+                {draftFeature.properties.n_rodal !== null
+                  ? `Rodal ${draftFeature.properties.n_rodal}`
+                  : `Polígono #${draftFeature.properties.feature_ordinal}`}
+              </span>
+            </div>
+            <span className="draft-edit__badge">Borrador local</span>
+          </div>
+          <div className="draft-edit__metrics">
+            <div>
+              <span>Área original</span>
+              <strong>{formatHa(originalAreaHa)} ha</strong>
+            </div>
+            <div>
+              <span>Área estimada</span>
+              <strong>{formatHa(draftAreaHa)} ha</strong>
+            </div>
+            <div>
+              <span>Diferencia</span>
+              <strong>
+                {areaDifferenceHa !== null && areaDifferenceHa >= 0 ? '+' : ''}
+                {areaDifferenceHa === null ? '—' : formatHa(areaDifferenceHa)} ha
+                {areaDifferencePercent === null
+                  ? ''
+                  : ` (${areaDifferencePercent >= 0 ? '+' : ''}${areaDifferencePercent.toFixed(1)}%)`}
+              </strong>
+            </div>
+          </div>
+          <p>
+            Arrastra los puntos del límite. El cálculo usa la geometría del borrador en EPSG:32718.
+            No guarda ni modifica la fuente.
+          </p>
+          <div className="draft-edit__actions">
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => setDraftResetNonce((nonce) => nonce + 1)}
+            >
+              Reiniciar
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => setDraftFeatureOrdinal(null)}
+            >
+              Descartar borrador
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       {filteredFeatures.length === 0 ? (
         <div className="map__empty" role="status">
           <p>Ningún polígono coincide con los filtros actuales.</p>

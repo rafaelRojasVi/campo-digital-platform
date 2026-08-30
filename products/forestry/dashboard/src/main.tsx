@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import 'leaflet/dist/leaflet.css'
 import './styles.css'
 import './workspace.css'
+import './draft.css'
 import App from './App.tsx'
 
 const rootElement = document.getElementById('root')
