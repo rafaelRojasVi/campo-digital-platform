@@ -13,6 +13,7 @@ import { LegendPanel } from './components/LegendPanel.tsx'
 import { MapView } from './components/MapView.tsx'
 import { DataPanel } from './components/DataPanel.tsx'
 import { Inspector } from './components/Inspector.tsx'
+import { ActiveFilterBar } from './components/ActiveFilterBar.tsx'
 import { ErrorView, LoadingView, NoSnapshotView } from './components/StatusViews.tsx'
 import { EMPTY_FILTERS, applyFilters, countActiveFilters } from './lib/filters.ts'
 import type { FilterState } from './lib/filters.ts'
@@ -55,6 +56,8 @@ export default function App() {
   const [zoomRequest, setZoomRequest] = useState<ZoomRequest | null>(null)
   const [fitNonce, setFitNonce] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mapFocus, setMapFocus] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -135,6 +138,20 @@ export default function App() {
 
   const handleRetry = useCallback(() => setReloadNonce((nonce) => nonce + 1), [])
 
+  const handleToggleSidebar = useCallback(() => {
+    if (mapFocus) {
+      setMapFocus(false)
+      setSidebarCollapsed(false)
+      return
+    }
+    setSidebarCollapsed((collapsed) => !collapsed)
+  }, [mapFocus])
+
+  const handleToggleMapFocus = useCallback(() => {
+    setMapFocus((focused) => !focused)
+    setSidebarOpen(false)
+  }, [])
+
   if (phase.status === 'loading') {
     return <LoadingView step={phase.step} />
   }
@@ -150,7 +167,7 @@ export default function App() {
   const { snapshot, summary, comparison } = phase
 
   return (
-    <div className="app">
+    <div className={`app${mapFocus ? ' app--map-focus' : ''}`}>
       <Header snapshot={snapshot} summary={summary} />
       <KpiStrip summary={summary} comparison={comparison} collection={phase.collection} />
 
@@ -167,7 +184,11 @@ export default function App() {
           ) : null}
         </button>
 
-        <aside className={`app__sidebar${sidebarOpen ? ' app__sidebar--open' : ''}`}>
+        <aside
+          className={`app__sidebar${sidebarOpen ? ' app__sidebar--open' : ''}${
+            sidebarCollapsed ? ' app__sidebar--collapsed' : ''
+          }`}
+        >
           <FiltersPanel
             collection={phase.collection}
             filters={filters}
@@ -195,7 +216,13 @@ export default function App() {
             zoomRequest={zoomRequest}
             fitNonce={fitNonce}
             onFitToResults={() => setFitNonce((nonce) => nonce + 1)}
+            sidebarCollapsed={sidebarCollapsed}
+            mapFocus={mapFocus}
+            activeFilterCount={activeFilterCount}
+            onToggleSidebar={handleToggleSidebar}
+            onToggleMapFocus={handleToggleMapFocus}
           />
+          <ActiveFilterBar filters={filters} onFiltersChange={setFilters} />
         </main>
 
         {selectedFeature !== null ? (

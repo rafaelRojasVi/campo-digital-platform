@@ -15,10 +15,21 @@ interface MapViewProps {
   zoomRequest: ZoomRequest | null
   fitNonce: number
   onFitToResults: () => void
+  sidebarCollapsed: boolean
+  mapFocus: boolean
+  activeFilterCount: number
+  onToggleSidebar: () => void
+  onToggleMapFocus: () => void
 }
+
+type BasemapMode = 'map' | 'satellite' | 'none'
 
 const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 const OSM_ATTRIBUTION = '© OpenStreetMap contributors'
+const SATELLITE_TILE_URL =
+  'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+const SATELLITE_ATTRIBUTION =
+  'Tiles © Esri — Esri, Maxar, Earthstar Geographics, and the GIS User Community'
 
 interface FeatureLayer {
   layer: L.Polygon
@@ -42,6 +53,11 @@ export function MapView({
   zoomRequest,
   fitNonce,
   onFitToResults,
+  sidebarCollapsed,
+  mapFocus,
+  activeFilterCount,
+  onToggleSidebar,
+  onToggleMapFocus,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -51,13 +67,13 @@ export function MapView({
   const layersRef = useRef<Map<number, FeatureLayer>>(new Map())
   const styleForRef = useRef<(featureOrdinal: number) => L.PathOptions>(() => ({}))
   const onSelectRef = useRef(onSelect)
-  const [basemapVisible, setBasemapVisible] = useState(true)
+  const [basemapMode, setBasemapMode] = useState<BasemapMode>('map')
 
   useEffect(() => {
     onSelectRef.current = onSelect
   }, [onSelect])
 
-  // Map + basemap lifecycle.
+  // Map lifecycle.
   useEffect(() => {
     const container = containerRef.current
     if (container === null) {
@@ -103,22 +119,29 @@ export function MapView({
     }
   }, [])
 
+  // Basemap is presentation only. Forestry geometry remains the source layer.
   useEffect(() => {
     const map = mapRef.current
     if (map === null) {
       return
     }
 
-    if (basemapVisible && baseLayerRef.current === null) {
-      baseLayerRef.current = L.tileLayer(OSM_TILE_URL, {
-        maxZoom: 19,
-        attribution: OSM_ATTRIBUTION,
-      }).addTo(map)
-    } else if (!basemapVisible && baseLayerRef.current !== null) {
+    if (baseLayerRef.current !== null) {
       baseLayerRef.current.remove()
       baseLayerRef.current = null
     }
-  }, [basemapVisible])
+
+    if (basemapMode === 'none') {
+      return
+    }
+
+    const satellite = basemapMode === 'satellite'
+    baseLayerRef.current = L.tileLayer(satellite ? SATELLITE_TILE_URL : OSM_TILE_URL, {
+      maxZoom: 19,
+      attribution: satellite ? SATELLITE_ATTRIBUTION : OSM_ATTRIBUTION,
+      crossOrigin: true,
+    }).addTo(map)
+  }, [basemapMode])
 
   // Build one Leaflet polygon per source feature, once per collection.
   useEffect(() => {
@@ -261,8 +284,7 @@ export function MapView({
           entry.maxExtentMeters / resolution < MARKER_MIN_POLYGON_PX
 
         if (wantMarker) {
-          const color =
-            encoding !== null ? encoding.colorFor(entry.feature) : '#9a9890'
+          const color = encoding !== null ? encoding.colorFor(entry.feature) : '#9a9890'
 
           if (entry.marker === null) {
             const marker = L.circleMarker(entry.centroid, {
@@ -368,7 +390,29 @@ export function MapView({
   return (
     <div className="map">
       <div ref={containerRef} className="map__canvas" data-testid="map-canvas" />
-      <div className="map__controls">
+      <div className="map__controls" aria-label="Controles del mapa">
+        <button
+          type="button"
+          className="map__control-button"
+          onClick={onToggleSidebar}
+          aria-pressed={!sidebarCollapsed && !mapFocus}
+        >
+          {sidebarCollapsed || mapFocus ? 'Mostrar filtros' : 'Ocultar filtros'}
+          {activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+        </button>
+        <label className="map__basemap-control">
+          <span>Fondo</span>
+          <select
+            className="map__basemap-select"
+            value={basemapMode}
+            onChange={(event) => setBasemapMode(event.target.value as BasemapMode)}
+            aria-label="Fondo del mapa"
+          >
+            <option value="map">Mapa</option>
+            <option value="satellite">Satélite</option>
+            <option value="none">Sin fondo</option>
+          </select>
+        </label>
         <button
           type="button"
           className="map__control-button"
@@ -379,12 +423,12 @@ export function MapView({
         </button>
         <button
           type="button"
-          className="map__control-button"
-          aria-pressed={basemapVisible}
-          onClick={() => setBasemapVisible((visible) => !visible)}
-          title="Mostrar u ocultar el mapa base OpenStreetMap"
+          className="map__control-button map__control-button--focus"
+          aria-pressed={mapFocus}
+          onClick={onToggleMapFocus}
+          title="Dar prioridad visual al mapa"
         >
-          {basemapVisible ? 'Ocultar mapa base' : 'Mostrar mapa base'}
+          {mapFocus ? 'Salir de modo mapa' : 'Modo mapa'}
         </button>
       </div>
       {filteredFeatures.length === 0 ? (
