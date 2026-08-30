@@ -4,9 +4,12 @@ import { metersPerPixel, multiPolygonToLatLngs, tooltipHtml } from '../lib/mapDa
 import { lonLatToUtm, multiPolygonUtmBbox, utmToLonLat } from '../lib/proj.ts'
 import {
   cloneCoordinates,
+  countDraftVertices,
   isClosedRing,
   moveDraftVertex,
   multiPolygonAreaSquareMeters,
+  simplifyDraftCoordinates,
+  straightCutCandidates,
   type DraftCoordinates,
 } from '../lib/draftGeometry.ts'
 import type { ColorEncoding } from '../lib/palette.ts'
@@ -30,6 +33,13 @@ interface MapViewProps {
 }
 
 type BasemapMode = 'map' | 'satellite' | 'none'
+type DraftMode = 'move' | 'cut'
+
+interface CutPreview {
+  pieces: [DraftCoordinates, DraftCoordinates]
+  selectedIndex: 0 | 1
+  beforeCut: DraftCoordinates
+}
 
 const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 const OSM_ATTRIBUTION = '© OpenStreetMap contributors'
@@ -50,6 +60,7 @@ interface FeatureLayer {
 
 const MARKER_MAX_SUBSET = 200
 const MARKER_MIN_POLYGON_PX = 8
+const SIMPLIFY_STEPS_METERS = [2, 5, 10, 20, 40] as const
 
 function formatHa(value: number): string {
   return value.toLocaleString('es-CL', {
@@ -81,49 +92,67 @@ export function MapView({
   const layersRef = useRef<Map<number, FeatureLayer>>(new Map())
   const styleForRef = useRef<(featureOrdinal: number) => L.PathOptions>(() => ({}))
   const onSelectRef = useRef(onSelect)
+
   const draftLayerRef = useRef<L.Polygon | null>(null)
   const draftMarkerGroupRef = useRef<L.LayerGroup | null>(null)
   const draftCoordinatesRef = useRef<DraftCoordinates | null>(null)
+  const draftSeedRef = useRef<DraftCoordinates | null>(null)
+  const cutGuideGroupRef = useRef<L.LayerGroup | null>(null)
+  const cutStartRef = useRef<[number, number] | null>(null)
+  const cutModeRef = useRef(false)
+  const cutClickHandlerRef = useRef<(latlng: L.LatLng) => void>(() => undefined)
+
   const [basemapMode, setBasemapMode] = useState<BasemapMode>('map')
   const [draftFeatureOrdinal, setDraftFeatureOrdinal] = useState<number | null>(null)
   const [draftAreaHa, setDraftAreaHa] = useState<number | null>(null)
-  const [draftResetNonce, setDraftResetNonce] = useState(0)
+  const [draftVertexCount, setDraftVertexCount] = useState<number | null>(null)
+  const [draftVersion, setDraftVersion] = useState(0)
+  const [draftMode, setDraftMode] = useState<DraftMode>('move')
+  const [simplifyTolerance, setSimplifyTolerance] = useState(0)
+  const [cutStatus, setCutStatus] = useState<string | null>(null)
+  const [cutPreview, setCutPreview] = useState<CutPreview | null>(null)
 
   useEffect(() => {
     onSelectRef.current = onSelect
   }, [onSelect])
 
+  useEffect(() => {
+    cutModeRef.current = draftMode === 'cut' && cutPreview === null
+  }, [draftMode, cutPreview])
+
+  const clearCutGuide = () => {
+    cutGuideGroupRef.current?.clearLayers()
+    cutStartRef.current = null
+  }
+
   // Map lifecycle.
   useEffect(() => {
     const container = containerRef.current
-    if (container === null) {
-      return
-    }
+    if (container === null) return
 
     const map = L.map(container, {
       preferCanvas: true,
       zoomControl: true,
       attributionControl: true,
-      // Fractional zoom lets fitBounds fill the viewport with the sparse
-      // estate envelope instead of snapping a full level out.
       zoomSnap: 0.25,
     })
     map.setView([-40.45, -73.35], 10)
     L.control.scale({ metric: true, imperial: false }).addTo(map)
+    cutGuideGroupRef.current = L.layerGroup().addTo(map)
 
     const handleBackgroundClick = (event: L.LeafletMouseEvent) => {
-      const original = event.originalEvent as MouseEvent & { _forestryFeatureClick?: boolean }
-      if (original._forestryFeatureClick !== true) {
-        onSelectRef.current(null)
+      if (cutModeRef.current) {
+        cutClickHandlerRef.current(event.latlng)
+        return
       }
+      const original = event.originalEvent as MouseEvent & { _forestryFeatureClick?: boolean }
+      if (original._forestryFeatureClick !== true) onSelectRef.current(null)
     }
     map.on('click', handleBackgroundClick)
 
     mapRef.current = map
 
-    const observer = new ResizeObserver(() => {
-      map.invalidateSize()
-    })
+    const observer = new ResizeObserver(() => map.invalidateSize())
     observer.observe(container)
 
     return () => {
@@ -135,9 +164,9 @@ export function MapView({
       draftLayerRef.current = null
       draftMarkerGroupRef.current = null
       draftCoordinatesRef.current = null
+      draftSeedRef.current = null
+      cutGuideGroupRef.current = null
       layersRef.current = new Map()
-      // A fresh map instance starts at the default view, so the initial
-      // collection fit must run again on the next mount.
       fittedCollectionRef.current = null
     }
   }, [])
@@ -145,18 +174,13 @@ export function MapView({
   // Basemap is presentation only. Forestry geometry remains the source layer.
   useEffect(() => {
     const map = mapRef.current
-    if (map === null) {
-      return
-    }
+    if (map === null) return
 
     if (baseLayerRef.current !== null) {
       baseLayerRef.current.remove()
       baseLayerRef.current = null
     }
-
-    if (basemapMode === 'none') {
-      return
-    }
+    if (basemapMode === 'none') return
 
     const satellite = basemapMode === 'satellite'
     baseLayerRef.current = L.tileLayer(satellite ? SATELLITE_TILE_URL : OSM_TILE_URL, {
@@ -169,9 +193,7 @@ export function MapView({
   // Build one Leaflet polygon per source feature, once per collection.
   useEffect(() => {
     const map = mapRef.current
-    if (map === null) {
-      return
-    }
+    if (map === null) return
 
     const group = L.featureGroup().addTo(map)
     groupRef.current = group
@@ -191,18 +213,14 @@ export function MapView({
       })
 
       layer.on('click', (event: L.LeafletMouseEvent) => {
+        if (cutModeRef.current) return
         const original = event.originalEvent as MouseEvent & { _forestryFeatureClick?: boolean }
         original._forestryFeatureClick = true
         onSelectRef.current(featureOrdinal)
       })
 
-      layer.on('mouseover', () => {
-        layer.setStyle({ fillOpacity: 0.92, weight: 2 })
-      })
-
-      layer.on('mouseout', () => {
-        layer.setStyle(styleForRef.current(featureOrdinal))
-      })
+      layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.92, weight: 2 }))
+      layer.on('mouseout', () => layer.setStyle(styleForRef.current(featureOrdinal)))
 
       const [minx, miny, maxx, maxy] = multiPolygonUtmBbox(feature.geometry)
       const [lon, lat] = utmToLonLat((minx + maxx) / 2, (miny + maxy) / 2)
@@ -232,15 +250,17 @@ export function MapView({
   useEffect(() => {
     if (draftFeatureOrdinal !== null && selectedOrdinal !== draftFeatureOrdinal) {
       setDraftFeatureOrdinal(null)
+      draftSeedRef.current = null
+      clearCutGuide()
+      setCutPreview(null)
+      setDraftMode('move')
     }
   }, [draftFeatureOrdinal, selectedOrdinal])
 
   // Visibility + style: driven by filters, color encoding, selection and draft state.
   useEffect(() => {
     const group = groupRef.current
-    if (group === null) {
-      return
-    }
+    if (group === null) return
 
     const visibleOrdinals = new Set(
       filteredFeatures.map((feature) => feature.properties.feature_ordinal),
@@ -252,11 +272,6 @@ export function MapView({
         entry !== undefined && encoding !== null ? encoding.colorFor(entry.feature) : '#9a9890'
       const selected = featureOrdinal === selectedOrdinal
       const editing = featureOrdinal === draftFeatureOrdinal
-
-      // At estate scale the 1,568 polygons are only a few pixels each and a
-      // white stroke would wash them out, so the boundary gap appears from
-      // zoom 12 up. Small filtered subsets keep their stroke at any zoom so
-      // isolated polygons stay findable.
       const zoom = mapRef.current?.getZoom() ?? 12
       const strokeWeight = zoom >= 12 || visibleOrdinals.size <= 200 ? 0.8 : 0
 
@@ -272,10 +287,8 @@ export function MapView({
     styleForRef.current = styleFor
 
     let selectedLayer: L.Polygon | null = null
-
     for (const [featureOrdinal, entry] of layersRef.current) {
       const visible = visibleOrdinals.has(featureOrdinal)
-
       if (visible && !entry.visible) {
         group.addLayer(entry.layer)
         entry.visible = true
@@ -283,28 +296,17 @@ export function MapView({
         group.removeLayer(entry.layer)
         entry.visible = false
       }
-
       if (visible) {
         entry.layer.setStyle(styleFor(featureOrdinal))
-        if (featureOrdinal === selectedOrdinal) {
-          selectedLayer = entry.layer
-        }
+        if (featureOrdinal === selectedOrdinal) selectedLayer = entry.layer
       }
     }
+    if (selectedLayer !== null) selectedLayer.bringToFront()
 
-    if (selectedLayer !== null) {
-      selectedLayer.bringToFront()
-    }
-
-    // Representative point markers: in a small filtered subset, a polygon of
-    // a few hectares is sub-pixel at estate zoom; a centroid dot keeps it
-    // findable. Dots disappear once the polygon itself is readable.
     const syncMarkers = () => {
       const map = mapRef.current
       const markerGroup = markerGroupRef.current
-      if (map === null || markerGroup === null) {
-        return
-      }
+      if (map === null || markerGroup === null) return
 
       const useMarkers = visibleOrdinals.size <= MARKER_MAX_SUBSET
       const resolution = metersPerPixel(map.getCenter().lat, map.getZoom())
@@ -318,7 +320,6 @@ export function MapView({
 
         if (wantMarker) {
           const color = encoding !== null ? encoding.colorFor(entry.feature) : '#9a9890'
-
           if (entry.marker === null) {
             const marker = L.circleMarker(entry.centroid, {
               radius: 4,
@@ -334,6 +335,7 @@ export function MapView({
               className: 'map-tooltip',
             })
             marker.on('click', (event: L.LeafletMouseEvent) => {
+              if (cutModeRef.current) return
               const original = event.originalEvent as MouseEvent & {
                 _forestryFeatureClick?: boolean
               }
@@ -342,11 +344,8 @@ export function MapView({
             })
             entry.marker = marker
           }
-
           entry.marker.setStyle({ fillColor: color })
-          if (!markerGroup.hasLayer(entry.marker)) {
-            markerGroup.addLayer(entry.marker)
-          }
+          if (!markerGroup.hasLayer(entry.marker)) markerGroup.addLayer(entry.marker)
         } else if (entry.marker !== null && markerGroup.hasLayer(entry.marker)) {
           markerGroup.removeLayer(entry.marker)
         }
@@ -354,27 +353,21 @@ export function MapView({
     }
 
     syncMarkers()
-
-    // Re-derive stroke weight and marker visibility on zoom changes.
     const map = mapRef.current
     if (map !== null) {
       const restyleOnZoom = () => {
         for (const [featureOrdinal, entry] of layersRef.current) {
-          if (entry.visible) {
-            entry.layer.setStyle(styleFor(featureOrdinal))
-          }
+          if (entry.visible) entry.layer.setStyle(styleFor(featureOrdinal))
         }
         syncMarkers()
       }
       map.on('zoomend', restyleOnZoom)
-      return () => {
-        map.off('zoomend', restyleOnZoom)
-      }
+      return () => map.off('zoomend', restyleOnZoom)
     }
   }, [filteredFeatures, encoding, selectedOrdinal, draftFeatureOrdinal])
 
-  // Local-only draft geometry editor. The source layer remains untouched and
-  // is shown beneath the draft as a dashed outline for comparison.
+  // Local-only draft geometry editor. A seed is used after simplification or
+  // cutting; otherwise the immutable source geometry starts the draft.
   useEffect(() => {
     const map = mapRef.current
     if (map === null || draftFeatureOrdinal === null) return
@@ -382,9 +375,12 @@ export function MapView({
     const entry = layersRef.current.get(draftFeatureOrdinal)
     if (entry === undefined || !entry.feature.properties.geometry_is_valid) return
 
-    const coordinates = cloneCoordinates(entry.feature.geometry.coordinates)
+    const coordinates = cloneCoordinates(
+      draftSeedRef.current ?? entry.feature.geometry.coordinates,
+    )
     draftCoordinatesRef.current = coordinates
     setDraftAreaHa(multiPolygonAreaSquareMeters(coordinates) / 10_000)
+    setDraftVertexCount(countDraftVertices(coordinates))
 
     const draftLayer = L.polygon(
       multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates }),
@@ -401,50 +397,52 @@ export function MapView({
     const markerGroup = L.layerGroup().addTo(map)
     draftMarkerGroupRef.current = markerGroup
 
-    for (let polygonIndex = 0; polygonIndex < coordinates.length; polygonIndex += 1) {
-      const polygon = coordinates[polygonIndex]
-      if (polygon === undefined) continue
+    if (draftMode === 'move') {
+      for (let polygonIndex = 0; polygonIndex < coordinates.length; polygonIndex += 1) {
+        const polygon = coordinates[polygonIndex]
+        if (polygon === undefined) continue
 
-      for (let ringIndex = 0; ringIndex < polygon.length; ringIndex += 1) {
-        const ring = polygon[ringIndex]
-        if (ring === undefined) continue
-        const markerCount = isClosedRing(ring) ? ring.length - 1 : ring.length
+        for (let ringIndex = 0; ringIndex < polygon.length; ringIndex += 1) {
+          const ring = polygon[ringIndex]
+          if (ring === undefined) continue
+          const markerCount = isClosedRing(ring) ? ring.length - 1 : ring.length
 
-        for (let vertexIndex = 0; vertexIndex < markerCount; vertexIndex += 1) {
-          const position = ring[vertexIndex]
-          if (position === undefined) continue
-          const x = position[0]
-          const y = position[1]
-          if (x === undefined || y === undefined) continue
-          const [lon, lat] = utmToLonLat(x, y)
+          for (let vertexIndex = 0; vertexIndex < markerCount; vertexIndex += 1) {
+            const position = ring[vertexIndex]
+            if (position === undefined) continue
+            const x = position[0]
+            const y = position[1]
+            if (x === undefined || y === undefined) continue
+            const [lon, lat] = utmToLonLat(x, y)
 
-          const marker = L.marker([lat, lon], {
-            draggable: true,
-            keyboard: false,
-            icon: L.divIcon({
-              className: 'draft-vertex',
-              html: '<span></span>',
-              iconSize: [12, 12],
-              iconAnchor: [6, 6],
-            }),
-          }).addTo(markerGroup)
+            const marker = L.marker([lat, lon], {
+              draggable: true,
+              keyboard: false,
+              icon: L.divIcon({
+                className: 'draft-vertex',
+                html: '<span></span>',
+                iconSize: [12, 12],
+                iconAnchor: [6, 6],
+              }),
+            }).addTo(markerGroup)
 
-          marker.on('drag', () => {
-            const point = marker.getLatLng()
-            const [nextX, nextY] = lonLatToUtm(point.lng, point.lat)
-            moveDraftVertex(
-              coordinates,
-              polygonIndex,
-              ringIndex,
-              vertexIndex,
-              nextX,
-              nextY,
-            )
-            draftLayer.setLatLngs(
-              multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates }),
-            )
-            setDraftAreaHa(multiPolygonAreaSquareMeters(coordinates) / 10_000)
-          })
+            marker.on('drag', () => {
+              const point = marker.getLatLng()
+              const [nextX, nextY] = lonLatToUtm(point.lng, point.lat)
+              moveDraftVertex(
+                coordinates,
+                polygonIndex,
+                ringIndex,
+                vertexIndex,
+                nextX,
+                nextY,
+              )
+              draftLayer.setLatLngs(
+                multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates }),
+              )
+              setDraftAreaHa(multiPolygonAreaSquareMeters(coordinates) / 10_000)
+            })
+          }
         }
       }
     }
@@ -458,16 +456,77 @@ export function MapView({
       draftLayerRef.current = null
       draftCoordinatesRef.current = null
     }
-  }, [draftFeatureOrdinal, draftResetNonce])
+  }, [draftFeatureOrdinal, draftVersion, draftMode])
+
+  // Two-click straight cut. Only the safe geometry contract in
+  // straightCutCandidates can produce a preview.
+  useEffect(() => {
+    cutClickHandlerRef.current = (latlng: L.LatLng) => {
+      if (draftMode !== 'cut' || cutPreview !== null) return
+      const current = draftCoordinatesRef.current
+      if (current === null) return
+
+      const point = lonLatToUtm(latlng.lng, latlng.lat)
+      const guide = cutGuideGroupRef.current
+      const start = cutStartRef.current
+
+      if (start === null) {
+        cutStartRef.current = point
+        guide?.clearLayers()
+        L.circleMarker(latlng, {
+          radius: 5,
+          color: '#8c3b20',
+          weight: 2,
+          fillColor: '#ffffff',
+          fillOpacity: 1,
+        }).addTo(guide ?? L.layerGroup())
+        setCutStatus('Primer punto listo. Haz clic al otro lado del polígono.')
+        return
+      }
+
+      if (guide !== null) {
+        const [startLon, startLat] = utmToLonLat(start[0], start[1])
+        L.polyline(
+          [L.latLng(startLat, startLon), latlng],
+          { color: '#b64224', weight: 3, dashArray: '8 5' },
+        ).addTo(guide)
+        L.circleMarker(latlng, {
+          radius: 5,
+          color: '#8c3b20',
+          weight: 2,
+          fillColor: '#ffffff',
+          fillOpacity: 1,
+        }).addTo(guide)
+      }
+
+      const result = straightCutCandidates(current, start, point)
+      cutStartRef.current = null
+
+      if (!result.ok) {
+        setCutStatus(result.reason + ' Intenta otra línea.')
+        window.setTimeout(() => guide?.clearLayers(), 700)
+        return
+      }
+
+      const selectedIndex = result.largerPieceIndex
+      const preview: CutPreview = {
+        pieces: [cloneCoordinates(result.pieces[0]), cloneCoordinates(result.pieces[1])],
+        selectedIndex,
+        beforeCut: cloneCoordinates(current),
+      }
+      setCutPreview(preview)
+      draftSeedRef.current = cloneCoordinates(preview.pieces[selectedIndex])
+      setCutStatus('Vista previa: se conserva la pieza de mayor superficie.')
+      setDraftVersion((version) => version + 1)
+    }
+  }, [draftMode, cutPreview])
 
   // Initial fit to the whole loaded collection (once per collection object).
   const fittedCollectionRef = useRef<FeatureCollection | null>(null)
   useEffect(() => {
     const map = mapRef.current
     const group = groupRef.current
-    if (map === null || group === null || fittedCollectionRef.current === collection) {
-      return
-    }
+    if (map === null || group === null || fittedCollectionRef.current === collection) return
     const bounds = group.getBounds()
     if (bounds.isValid()) {
       map.fitBounds(bounds, { padding: [16, 16] })
@@ -475,36 +534,22 @@ export function MapView({
     }
   }, [collection, filteredFeatures])
 
-  // Explicit "fit to filtered results".
   useEffect(() => {
-    if (fitNonce === 0) {
-      return
-    }
+    if (fitNonce === 0) return
     const map = mapRef.current
     const group = groupRef.current
-    if (map === null || group === null) {
-      return
-    }
+    if (map === null || group === null) return
     const bounds = group.getBounds()
-    if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [16, 16] })
-    }
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [16, 16] })
   }, [fitNonce])
 
-  // Zoom to one selected feature (table row click, inspector button).
   useEffect(() => {
-    if (zoomRequest === null) {
-      return
-    }
+    if (zoomRequest === null) return
     const map = mapRef.current
     const entry = layersRef.current.get(zoomRequest.featureOrdinal)
-    if (map === null || entry === undefined) {
-      return
-    }
+    if (map === null || entry === undefined) return
     const bounds = entry.layer.getBounds()
-    if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [48, 48], maxZoom: 16 })
-    }
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [48, 48], maxZoom: 16 })
   }, [zoomRequest])
 
   const draftFeature =
@@ -529,8 +574,99 @@ export function MapView({
           (feature) => feature.properties.feature_ordinal === selectedOrdinal,
         ) ?? null
 
+  const sourceVertexCount =
+    draftFeature === null ? null : countDraftVertices(draftFeature.geometry.coordinates)
+  const cutSupported =
+    draftFeature !== null &&
+    draftFeature.geometry.coordinates.length === 1 &&
+    draftFeature.geometry.coordinates[0]?.length === 1
+
+  const beginDraft = () => {
+    if (selectedFeature === null) return
+    draftSeedRef.current = null
+    setSimplifyTolerance(0)
+    setCutStatus(null)
+    setCutPreview(null)
+    clearCutGuide()
+    setDraftMode('move')
+    setDraftFeatureOrdinal(selectedFeature.properties.feature_ordinal)
+  }
+
+  const reducePoints = () => {
+    const current = draftCoordinatesRef.current
+    if (current === null) return
+    const nextTolerance =
+      SIMPLIFY_STEPS_METERS.find((tolerance) => tolerance > simplifyTolerance) ?? null
+    if (nextTolerance === null) return
+
+    draftSeedRef.current = simplifyDraftCoordinates(current, nextTolerance)
+    setSimplifyTolerance(nextTolerance)
+    setCutStatus(null)
+    setCutPreview(null)
+    clearCutGuide()
+    setDraftMode('move')
+    setDraftVersion((version) => version + 1)
+  }
+
+  const startCut = () => {
+    const current = draftCoordinatesRef.current
+    if (current === null) return
+    draftSeedRef.current = cloneCoordinates(current)
+    setCutPreview(null)
+    clearCutGuide()
+    setCutStatus('Haz clic en dos puntos para dibujar una línea que atraviese el polígono.')
+    setDraftMode('cut')
+  }
+
+  const switchCutSide = () => {
+    if (cutPreview === null) return
+    const nextIndex: 0 | 1 = cutPreview.selectedIndex === 0 ? 1 : 0
+    draftSeedRef.current = cloneCoordinates(cutPreview.pieces[nextIndex])
+    setCutPreview({ ...cutPreview, selectedIndex: nextIndex })
+    setCutStatus('Vista previa invertida: se conserva la otra pieza.')
+    setDraftVersion((version) => version + 1)
+  }
+
+  const acceptCut = () => {
+    if (cutPreview === null) return
+    setCutPreview(null)
+    setCutStatus('Corte aplicado al borrador local. Puedes seguir ajustando puntos.')
+    clearCutGuide()
+    setDraftMode('move')
+  }
+
+  const cancelCut = () => {
+    if (cutPreview !== null) {
+      draftSeedRef.current = cloneCoordinates(cutPreview.beforeCut)
+      setDraftVersion((version) => version + 1)
+    }
+    setCutPreview(null)
+    clearCutGuide()
+    setCutStatus(null)
+    setDraftMode('move')
+  }
+
+  const resetDraft = () => {
+    draftSeedRef.current = null
+    setSimplifyTolerance(0)
+    setCutPreview(null)
+    setCutStatus(null)
+    clearCutGuide()
+    setDraftMode('move')
+    setDraftVersion((version) => version + 1)
+  }
+
+  const discardDraft = () => {
+    draftSeedRef.current = null
+    setCutPreview(null)
+    setCutStatus(null)
+    clearCutGuide()
+    setDraftMode('move')
+    setDraftFeatureOrdinal(null)
+  }
+
   return (
-    <div className="map">
+    <div className={`map${draftMode === 'cut' ? ' map--cutting' : ''}`}>
       <div ref={containerRef} className="map__canvas" data-testid="map-canvas" />
       <div className="map__controls" aria-label="Controles del mapa">
         <button
@@ -555,12 +691,7 @@ export function MapView({
             <option value="none">Sin fondo</option>
           </select>
         </label>
-        <button
-          type="button"
-          className="map__control-button"
-          onClick={onFitToResults}
-          title="Ajustar la vista a los polígonos filtrados"
-        >
+        <button type="button" className="map__control-button" onClick={onFitToResults}>
           Ajustar a resultados
         </button>
         {selectedFeature !== null && draftFeatureOrdinal === null ? (
@@ -568,10 +699,10 @@ export function MapView({
             type="button"
             className="map__control-button map__control-button--draft"
             disabled={!selectedFeature.properties.geometry_is_valid}
-            onClick={() => setDraftFeatureOrdinal(selectedFeature.properties.feature_ordinal)}
+            onClick={beginDraft}
             title={
               selectedFeature.properties.geometry_is_valid
-                ? 'Crear un borrador local moviendo vértices; no modifica la fuente'
+                ? 'Crear un borrador local; no modifica la fuente'
                 : 'La simulación requiere una geometría fuente válida'
             }
           >
@@ -583,7 +714,6 @@ export function MapView({
           className="map__control-button map__control-button--focus"
           aria-pressed={mapFocus}
           onClick={onToggleMapFocus}
-          title="Dar prioridad visual al mapa"
         >
           {mapFocus ? 'Salir de modo mapa' : 'Modo mapa'}
         </button>
@@ -602,6 +732,7 @@ export function MapView({
             </div>
             <span className="draft-edit__badge">Borrador local</span>
           </div>
+
           <div className="draft-edit__metrics">
             <div>
               <span>Área original</span>
@@ -622,23 +753,82 @@ export function MapView({
               </strong>
             </div>
           </div>
-          <p>
-            Arrastra los puntos del límite. El cálculo usa la geometría del borrador en EPSG:32718.
-            No guarda ni modifica la fuente.
-          </p>
-          <div className="draft-edit__actions">
+
+          <div className="draft-edit__tools" aria-label="Herramientas del borrador">
             <button
               type="button"
-              className="button button--ghost"
-              onClick={() => setDraftResetNonce((nonce) => nonce + 1)}
+              className={`draft-tool${draftMode === 'move' ? ' draft-tool--active' : ''}`}
+              onClick={() => {
+                const current = draftCoordinatesRef.current
+                if (current !== null) draftSeedRef.current = cloneCoordinates(current)
+                setCutPreview(null)
+                setCutStatus(null)
+                clearCutGuide()
+                setDraftMode('move')
+              }}
             >
-              Reiniciar
+              Mover puntos
             </button>
             <button
               type="button"
-              className="button"
-              onClick={() => setDraftFeatureOrdinal(null)}
+              className="draft-tool"
+              onClick={reducePoints}
+              disabled={simplifyTolerance >= SIMPLIFY_STEPS_METERS.at(-1)!}
             >
+              Reducir puntos
+            </button>
+            <button
+              type="button"
+              className={`draft-tool${draftMode === 'cut' ? ' draft-tool--active' : ''}`}
+              onClick={startCut}
+              disabled={!cutSupported}
+              title={
+                cutSupported
+                  ? 'Dibuja una línea recta con dos clics y conserva uno de los lados'
+                  : 'Disponible solo para polígonos simples sin huecos ni partes múltiples'
+              }
+            >
+              Cortar con línea
+            </button>
+          </div>
+
+          <div className="draft-edit__point-summary">
+            <span>
+              Puntos: <strong>{draftVertexCount ?? '—'}</strong>
+              {sourceVertexCount !== null && draftVertexCount !== sourceVertexCount
+                ? ` · fuente ${sourceVertexCount}`
+                : ''}
+            </span>
+            {simplifyTolerance > 0 ? <span>Simplificación: {simplifyTolerance} m</span> : null}
+          </div>
+
+          {cutStatus !== null ? <p className="draft-edit__status">{cutStatus}</p> : null}
+
+          {cutPreview !== null ? (
+            <div className="draft-edit__cut-actions">
+              <button type="button" className="button button--ghost" onClick={switchCutSide}>
+                Conservar otro lado
+              </button>
+              <button type="button" className="button button--ghost" onClick={cancelCut}>
+                Cancelar corte
+              </button>
+              <button type="button" className="button" onClick={acceptCut}>
+                Aceptar corte
+              </button>
+            </div>
+          ) : null}
+
+          <p className="draft-edit__note">
+            {draftMode === 'cut'
+              ? 'El corte y el área son solo una simulación local. La fuente no cambia.'
+              : 'Arrastra puntos o reduce su cantidad. El área se calcula en EPSG:32718; no se guarda en la fuente.'}
+          </p>
+
+          <div className="draft-edit__actions">
+            <button type="button" className="button button--ghost" onClick={resetDraft}>
+              Reiniciar
+            </button>
+            <button type="button" className="button" onClick={discardDraft}>
               Descartar borrador
             </button>
           </div>

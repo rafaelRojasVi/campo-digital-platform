@@ -20,7 +20,7 @@
   right: 12px;
   bottom: 32px;
   z-index: 1001;
-  width: min(330px, calc(100% - 24px));
+  width: min(360px, calc(100% - 24px));
   padding: 12px;
   color: var(--ink);
   background: rgba(253, 253, 251, 0.97);
@@ -103,6 +103,84 @@
   line-height: 1.4;
 }
 
+.draft-edit__tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.draft-tool {
+  min-width: 0;
+  padding: 6px 7px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--ink-2);
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.draft-tool:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--panel-2);
+  border-color: #b58a29;
+}
+
+.draft-tool--active {
+  color: #6b4300;
+  background: #fff0b9;
+  border-color: #d5ad43;
+}
+
+.draft-tool:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.draft-edit__point-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.draft-edit__point-summary strong {
+  color: var(--ink-2);
+}
+
+.draft-edit__status {
+  margin: 8px 0 0 !important;
+  padding: 7px 8px;
+  color: #6b4300 !important;
+  background: #fff8e5;
+  border: 1px solid #ecd48c;
+  border-radius: var(--radius);
+}
+
+.draft-edit__note {
+  margin: 8px 0 !important;
+}
+
+.draft-edit__cut-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.draft-edit__cut-actions .button {
+  flex: 1 1 auto;
+  padding: 5px 7px;
+  font-size: 10.8px;
+}
+
 .draft-edit__actions {
   display: flex;
   justify-content: flex-end;
@@ -137,6 +215,15 @@
   border-color: #8c5c00;
 }
 
+.map--cutting .map__canvas,
+.map--cutting .leaflet-interactive {
+  cursor: crosshair !important;
+}
+
+.map--cutting .draft-vertex {
+  display: none !important;
+}
+
 @media (max-width: 720px) {
   .draft-edit {
     right: 8px;
@@ -150,5 +237,14 @@
 
   .draft-edit__metrics > div:last-child {
     grid-column: auto;
+  }
+
+  .draft-edit__tools {
+    grid-template-columns: 1fr;
+  }
+
+  .draft-edit__point-summary {
+    flex-direction: column;
+    gap: 2px;
   }
 }
