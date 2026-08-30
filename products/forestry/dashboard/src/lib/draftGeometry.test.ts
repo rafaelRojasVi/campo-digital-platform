@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   cloneCoordinates,
+  countDraftVertices,
   moveDraftVertex,
   multiPolygonAreaSquareMeters,
+  simplifyDraftCoordinates,
+  straightCutCandidates,
 } from './draftGeometry.ts'
 
 describe('draft geometry area', () => {
@@ -31,5 +34,49 @@ describe('draft geometry area', () => {
     expect(draft[0]?.[0]?.[0]).toEqual([10, 20])
     expect(draft[0]?.[0]?.[4]).toEqual([10, 20])
     expect(source[0]?.[0]?.[0]).toEqual([0, 0])
+  })
+})
+
+describe('draft point reduction', () => {
+  it('reduces near-collinear vertices while preserving closure and source geometry', () => {
+    const source = [[[[0, 0], [25, 0.2], [50, -0.1], [75, 0.1], [100, 0], [100, 100], [0, 100], [0, 0]]]]
+    const simplified = simplifyDraftCoordinates(source, 1)
+
+    expect(countDraftVertices(simplified)).toBeLessThan(countDraftVertices(source))
+    expect(simplified[0]?.[0]?.[0]).toEqual(simplified[0]?.[0]?.at(-1))
+    expect(source[0]?.[0]).toHaveLength(8)
+    expect(multiPolygonAreaSquareMeters(simplified)).toBeCloseTo(10_000, -1)
+  })
+})
+
+describe('straight draft cuts', () => {
+  const square = [[[[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]]]]
+
+  it('splits a simple polygon into two pieces with conserved area', () => {
+    const result = straightCutCandidates(square, [-10, 40], [110, 40])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.areasSquareMeters[0] + result.areasSquareMeters[1]).toBeCloseTo(10_000)
+    expect(result.areasSquareMeters.sort((a, b) => a - b)).toEqual([4000, 6000])
+    expect(result.largerPieceIndex).toBe(0)
+  })
+
+  it('refuses multipart or holed geometry instead of guessing topology', () => {
+    const withHole = [[
+      [[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]],
+      [[20, 20], [30, 20], [30, 30], [20, 30], [20, 20]],
+    ]]
+    const result = straightCutCandidates(withHole, [-10, 40], [110, 40])
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toMatch(/polígonos simples/)
+  })
+
+  it('requires exactly two clean boundary crossings', () => {
+    const result = straightCutCandidates(square, [-10, -10], [-5, -5])
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toMatch(/exactamente dos veces/)
   })
 })
