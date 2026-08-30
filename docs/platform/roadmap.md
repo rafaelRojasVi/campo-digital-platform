@@ -149,9 +149,17 @@ Current implementation status (2026-08-29):
   CRS/encoding, DBF schema, record-count integrity, fingerprinting) is
   implemented in `forestry_ingestion.shapefile_contract` with synthetic-fixture
   tests;
-- **LIMITATION** — canonical entities, PostGIS persistence, geometry-level
-  validation, API projection, and the dashboard remain open pending
-  stakeholder answers (`products/forestry/docs/es/preguntas-campo-digital.md`).
+- **FACT** — Ingestion Substrate V1 is implemented
+  (`products/forestry/docs/ingestion-substrate-v1.md`): immutable,
+  idempotent PostGIS persistence of contract-valid snapshots (migration
+  `0003`, schema `forestry`) with snapshot-local feature identity,
+  faithful geometry storage under EPSG:32718, quality-flag evidence, and
+  service-level read projections — verified read-only against the real
+  Degenfeld snapshot;
+- **LIMITATION** — canonical entities (predio/rodal/polygon identity across
+  snapshots), workflow semantics, the API router, and the dashboard remain
+  open pending stakeholder answers
+  (`products/forestry/docs/es/preguntas-campo-digital.md`).
 
 Exit condition:
 
