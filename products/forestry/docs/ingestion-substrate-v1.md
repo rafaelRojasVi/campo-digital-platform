@@ -130,7 +130,8 @@ per-feature flag.
 
 ## Read projections
 
-`app.forestry_reads` (service level; no API router or dashboard yet):
+`app.forestry_reads` (service level; exposed over HTTP by
+[Read API V1](read-api-v1.md) — no dashboard yet):
 
 - `list_shapefile_snapshots` — persisted snapshots in ingestion order;
 - `snapshot_summary` — feature count, total geometry-derived area, total
@@ -181,5 +182,6 @@ geometry repair policy. None of these is modeled.
 [Forestry product](../README.md) ·
 [Source Evidence V1](source-evidence-v1.md) ·
 [Source Contract V1](source-contract-v1.md) ·
+[Read API V1](read-api-v1.md) ·
 [Product projection V1](product-projection-v1.md) ·
 [Platform source ingestion](../../../docs/platform/source-ingestion.md)

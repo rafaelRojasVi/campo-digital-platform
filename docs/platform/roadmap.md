@@ -156,9 +156,21 @@ Current implementation status (2026-08-29):
   faithful geometry storage under EPSG:32718, quality-flag evidence, and
   service-level read projections — verified read-only against the real
   Degenfeld snapshot;
+- **FACT** — Read API V1 is implemented
+  (`products/forestry/docs/read-api-v1.md`): a read-only factual HTTP
+  projection under `/api/forestry` (snapshot list/summary, source predio
+  and use distributions, literal source-field comparison, paginated and
+  filterable feature listing, feature detail, GeoJSON-encoded geometry in
+  the source CRS) — verified read-only against the real Degenfeld snapshot;
+  it establishes no canonical identity, workflow, or current-state
+  semantics;
+- **OPEN QUESTION (integration)** — Alembic revision `0003` also exists on
+  the unmerged Transelec hosted-pilot branch; whichever product branch is
+  integrated second must be re-revisioned so `main` keeps a single Alembic
+  head (see `products/forestry/docs/read-api-v1.md`, Integration concerns);
 - **LIMITATION** — canonical entities (predio/rodal/polygon identity across
-  snapshots), workflow semantics, the API router, and the dashboard remain
-  open pending stakeholder answers
+  snapshots), workflow semantics, and the dashboard remain open pending
+  stakeholder answers
   (`products/forestry/docs/es/preguntas-campo-digital.md`).
 
 Exit condition:

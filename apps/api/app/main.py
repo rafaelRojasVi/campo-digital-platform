@@ -13,6 +13,7 @@ from app.database import (
     check_database_connection,
     get_database_engine,
 )
+from app.routers.forestry import router as forestry_router
 from app.routers.lidar import router as lidar_router
 
 app = FastAPI(
@@ -49,3 +50,4 @@ def readiness(
 
 
 app.include_router(lidar_router)
+app.include_router(forestry_router)

@@ -12,17 +12,55 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from sqlalchemy import Connection, text
+from sqlalchemy import Connection, Row, text
 
 from app.forestry_persistence import ForestryIngestionError
+from forestry_ingestion.snapshot_evidence import (
+    FLAG_BLANK_RODAL,
+    FLAG_DUPLICATE_GEOMETRY,
+    FLAG_DUPLICATE_PREDIO_RODAL_KEY,
+    FLAG_INVALID_GEOMETRY,
+    FLAG_PREDIO_CODE_NAME_ANOMALY,
+    FLAG_TRUNCATED_USE_CODE_2026,
+)
 
 UseField = Literal["uso_2024", "uso_2026"]
+ChangeFilter = Literal["changed", "unchanged"]
+
+KNOWN_QUALITY_FLAGS: frozenset[str] = frozenset(
+    {
+        FLAG_BLANK_RODAL,
+        FLAG_DUPLICATE_GEOMETRY,
+        FLAG_DUPLICATE_PREDIO_RODAL_KEY,
+        FLAG_INVALID_GEOMETRY,
+        FLAG_PREDIO_CODE_NAME_ANOMALY,
+        FLAG_TRUNCATED_USE_CODE_2026,
+    }
+)
 
 _USE_FIELD_COLUMNS: dict[str, str] = {
     "uso_2024": "uso_2024",
     "uso_2026": "uso_2026",
+}
+
+# Source columns filterable by literal equality; keys are filter field names.
+_EQUALITY_FILTER_COLUMNS: dict[str, str] = {
+    "cod_predial": "cod_predial",
+    "nom_predio": "nom_predio",
+    "n_rodal": "n_rodal",
+    "cod_uso": "cod_uso",
+    "uso_2024": "uso_2024",
+    "desc_uso": "desc_uso",
+    "uso_2026": "uso_2026",
+    "cod_uso_2026": "cod_uso_2026",
+}
+
+# Literal source-field comparisons filterable as changed/unchanged.
+_CHANGE_FILTER_COLUMNS: dict[str, tuple[str, str]] = {
+    "uso_2024_vs_uso_2026": ("uso_2024", "uso_2026"),
+    "cod_uso_vs_cod_uso_2026": ("cod_uso", "cod_uso_2026"),
 }
 
 
@@ -33,6 +71,7 @@ class ForestrySnapshotRecord:
     shapefile_snapshot_id: int
     layer_name: str
     family_fingerprint: str
+    storage_srid: int
     feature_count: int
     created_at: datetime
 
@@ -95,6 +134,22 @@ class UseFieldComparison:
     cod_uso_vs_cod_uso_2026: tuple[UseFieldChange, ...]
 
 
+_SNAPSHOT_RECORD_COLUMNS = """
+    id, layer_name, family_fingerprint, storage_srid, feature_count, created_at
+"""
+
+
+def _snapshot_record(row: Row[Any]) -> ForestrySnapshotRecord:
+    return ForestrySnapshotRecord(
+        shapefile_snapshot_id=int(row.id),
+        layer_name=row.layer_name,
+        family_fingerprint=row.family_fingerprint,
+        storage_srid=int(row.storage_srid),
+        feature_count=int(row.feature_count),
+        created_at=row.created_at,
+    )
+
+
 def list_shapefile_snapshots(
     connection: Connection,
 ) -> tuple[ForestrySnapshotRecord, ...]:
@@ -102,24 +157,59 @@ def list_shapefile_snapshots(
 
     rows = connection.execute(
         text(
-            """
-            SELECT id, layer_name, family_fingerprint, feature_count, created_at
+            f"""
+            SELECT {_SNAPSHOT_RECORD_COLUMNS}
             FROM forestry.shapefile_snapshot
             ORDER BY id
             """
         )
     ).all()
 
-    return tuple(
-        ForestrySnapshotRecord(
-            shapefile_snapshot_id=int(row.id),
-            layer_name=row.layer_name,
-            family_fingerprint=row.family_fingerprint,
-            feature_count=int(row.feature_count),
-            created_at=row.created_at,
+    return tuple(_snapshot_record(row) for row in rows)
+
+
+def get_snapshot_record(
+    connection: Connection,
+    shapefile_snapshot_id: int,
+) -> ForestrySnapshotRecord | None:
+    """Return one persisted snapshot record, or None when not persisted."""
+
+    row = connection.execute(
+        text(
+            f"""
+            SELECT {_SNAPSHOT_RECORD_COLUMNS}
+            FROM forestry.shapefile_snapshot
+            WHERE id = :snapshot_id
+            """
+        ),
+        {"snapshot_id": shapefile_snapshot_id},
+    ).one_or_none()
+
+    return None if row is None else _snapshot_record(row)
+
+
+def latest_ingested_snapshot(
+    connection: Connection,
+) -> ForestrySnapshotRecord | None:
+    """Return the most recently ingested snapshot (ingestion order).
+
+    "Latest ingested" is a deterministic fact about ingestion order only; it
+    carries no authoritative current-state or supersession semantics, which
+    remain unestablished.
+    """
+
+    row = connection.execute(
+        text(
+            f"""
+            SELECT {_SNAPSHOT_RECORD_COLUMNS}
+            FROM forestry.shapefile_snapshot
+            ORDER BY id DESC
+            LIMIT 1
+            """
         )
-        for row in rows
-    )
+    ).one_or_none()
+
+    return None if row is None else _snapshot_record(row)
 
 
 def snapshot_summary(
@@ -307,6 +397,283 @@ def use_field_comparison(
             before_column="cod_uso",
             after_column="cod_uso_2026",
         ),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFeatureFilters:
+    """Deterministic snapshot-local filters over persisted source fields.
+
+    Every filter is a literal condition on stored source values: equality on
+    a source column, membership in the persisted quality-flag evidence,
+    stored geometry validity, or a literal changed/unchanged comparison of
+    the year-stamped source columns. No filter carries business semantics.
+    """
+
+    cod_predial: str | None = None
+    nom_predio: str | None = None
+    n_rodal: str | None = None
+    cod_uso: str | None = None
+    uso_2024: str | None = None
+    desc_uso: str | None = None
+    uso_2026: str | None = None
+    cod_uso_2026: str | None = None
+    quality_flag: str | None = None
+    geometry_valid: bool | None = None
+    uso_2024_vs_uso_2026: ChangeFilter | None = None
+    cod_uso_vs_cod_uso_2026: ChangeFilter | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFeatureRecord:
+    """One snapshot-local source feature as listed (no geometry payload)."""
+
+    feature_ordinal: int
+    source_objectid: int | None
+    cod_predial: str | None
+    nom_predio: str | None
+    n_rodal: str | None
+    cod_uso: str | None
+    uso_2024: str | None
+    desc_uso: str | None
+    uso_2026: str | None
+    cod_uso_2026: str | None
+    sup_ha: float | None
+    geometry_is_valid: bool
+    geometry_area_source_units: float
+    quality_flags: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFeaturePage:
+    """One deterministic page of the snapshot-local feature listing."""
+
+    total_count: int
+    limit: int
+    offset: int
+    features: tuple[SourceFeatureRecord, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFeatureDetail:
+    """One source feature with its full attribute row and geometry."""
+
+    record: SourceFeatureRecord
+    shape_area: float | None
+    geometry_invalid_reason: str | None
+    source_attributes: dict[str, Any]
+    geometry_geojson: str
+
+
+@dataclass(frozen=True, slots=True)
+class FeatureGeometryRecord:
+    """Listing fields plus faithful GeoJSON-encoded stored geometry."""
+
+    record: SourceFeatureRecord
+    geometry_geojson: str
+
+
+_FEATURE_RECORD_COLUMNS = """
+    feature_ordinal,
+    source_objectid,
+    cod_predial,
+    nom_predio,
+    n_rodal,
+    cod_uso,
+    uso_2024,
+    desc_uso,
+    uso_2026,
+    cod_uso_2026,
+    sup_ha,
+    geometry_is_valid,
+    geometry_area_source_units,
+    quality_flags
+"""
+
+
+def _feature_record(row: Row[Any]) -> SourceFeatureRecord:
+    return SourceFeatureRecord(
+        feature_ordinal=int(row.feature_ordinal),
+        source_objectid=(None if row.source_objectid is None else int(row.source_objectid)),
+        cod_predial=row.cod_predial,
+        nom_predio=row.nom_predio,
+        n_rodal=row.n_rodal,
+        cod_uso=row.cod_uso,
+        uso_2024=row.uso_2024,
+        desc_uso=row.desc_uso,
+        uso_2026=row.uso_2026,
+        cod_uso_2026=row.cod_uso_2026,
+        sup_ha=(None if row.sup_ha is None else float(row.sup_ha)),
+        geometry_is_valid=bool(row.geometry_is_valid),
+        geometry_area_source_units=float(row.geometry_area_source_units),
+        quality_flags=tuple(row.quality_flags),
+    )
+
+
+def _filter_conditions(
+    filters: SourceFeatureFilters,
+) -> tuple[str, dict[str, object]]:
+    """Build whitelisted SQL conditions and binds for the feature filters."""
+
+    conditions: list[str] = []
+    binds: dict[str, object] = {}
+
+    for field_name, column in _EQUALITY_FILTER_COLUMNS.items():
+        value = getattr(filters, field_name)
+
+        if value is not None:
+            conditions.append(f"{column} = :filter_{field_name}")
+            binds[f"filter_{field_name}"] = value
+
+    if filters.quality_flag is not None:
+        if filters.quality_flag not in KNOWN_QUALITY_FLAGS:
+            raise ForestryIngestionError(f"Unsupported quality flag: {filters.quality_flag!r}")
+
+        conditions.append(":filter_quality_flag = ANY(quality_flags)")
+        binds["filter_quality_flag"] = filters.quality_flag
+
+    if filters.geometry_valid is not None:
+        conditions.append("geometry_is_valid = :filter_geometry_valid")
+        binds["filter_geometry_valid"] = filters.geometry_valid
+
+    for field_name, (before_column, after_column) in _CHANGE_FILTER_COLUMNS.items():
+        value = getattr(filters, field_name)
+
+        if value is None:
+            continue
+
+        if value == "changed":
+            conditions.append(f"{before_column} IS DISTINCT FROM {after_column}")
+        elif value == "unchanged":
+            conditions.append(f"{before_column} IS NOT DISTINCT FROM {after_column}")
+        else:
+            raise ForestryIngestionError(f"Unsupported change filter value: {value!r}")
+
+    clause = "".join(f" AND {condition}" for condition in conditions)
+
+    return clause, binds
+
+
+def list_source_features(
+    connection: Connection,
+    shapefile_snapshot_id: int,
+    *,
+    filters: SourceFeatureFilters | None = None,
+    limit: int,
+    offset: int,
+) -> SourceFeaturePage:
+    """List snapshot-local source features in feature-ordinal order."""
+
+    if limit < 1 or offset < 0:
+        raise ForestryIngestionError("limit must be >= 1 and offset must be >= 0")
+
+    clause, binds = _filter_conditions(filters or SourceFeatureFilters())
+    binds["snapshot_id"] = shapefile_snapshot_id
+
+    total_count = connection.execute(
+        text(
+            f"""
+            SELECT count(*)
+            FROM forestry.source_feature
+            WHERE shapefile_snapshot_id = :snapshot_id{clause}
+            """
+        ),
+        binds,
+    ).scalar_one()
+
+    rows = connection.execute(
+        text(
+            f"""
+            SELECT {_FEATURE_RECORD_COLUMNS}
+            FROM forestry.source_feature
+            WHERE shapefile_snapshot_id = :snapshot_id{clause}
+            ORDER BY feature_ordinal
+            LIMIT :limit OFFSET :offset
+            """
+        ),
+        {**binds, "limit": limit, "offset": offset},
+    ).all()
+
+    return SourceFeaturePage(
+        total_count=int(total_count),
+        limit=limit,
+        offset=offset,
+        features=tuple(_feature_record(row) for row in rows),
+    )
+
+
+def get_source_feature(
+    connection: Connection,
+    shapefile_snapshot_id: int,
+    feature_ordinal: int,
+) -> SourceFeatureDetail | None:
+    """Return one source feature with attributes and faithful geometry."""
+
+    row = connection.execute(
+        text(
+            f"""
+            SELECT {_FEATURE_RECORD_COLUMNS},
+                shape_area,
+                geometry_invalid_reason,
+                source_attributes,
+                ST_AsGeoJSON(geometry) AS geometry_geojson
+            FROM forestry.source_feature
+            WHERE shapefile_snapshot_id = :snapshot_id
+              AND feature_ordinal = :feature_ordinal
+            """
+        ),
+        {
+            "snapshot_id": shapefile_snapshot_id,
+            "feature_ordinal": feature_ordinal,
+        },
+    ).one_or_none()
+
+    if row is None:
+        return None
+
+    return SourceFeatureDetail(
+        record=_feature_record(row),
+        shape_area=(None if row.shape_area is None else float(row.shape_area)),
+        geometry_invalid_reason=row.geometry_invalid_reason,
+        source_attributes=dict(row.source_attributes),
+        geometry_geojson=row.geometry_geojson,
+    )
+
+
+def list_feature_geometries(
+    connection: Connection,
+    shapefile_snapshot_id: int,
+    *,
+    filters: SourceFeatureFilters | None = None,
+) -> tuple[FeatureGeometryRecord, ...]:
+    """List filtered features with GeoJSON-encoded stored geometry.
+
+    Geometry is serialized exactly as stored (source CRS coordinates, invalid
+    geometries included); nothing is reprojected or repaired.
+    """
+
+    clause, binds = _filter_conditions(filters or SourceFeatureFilters())
+    binds["snapshot_id"] = shapefile_snapshot_id
+
+    rows = connection.execute(
+        text(
+            f"""
+            SELECT {_FEATURE_RECORD_COLUMNS},
+                ST_AsGeoJSON(geometry) AS geometry_geojson
+            FROM forestry.source_feature
+            WHERE shapefile_snapshot_id = :snapshot_id{clause}
+            ORDER BY feature_ordinal
+            """
+        ),
+        binds,
+    ).all()
+
+    return tuple(
+        FeatureGeometryRecord(
+            record=_feature_record(row),
+            geometry_geojson=row.geometry_geojson,
+        )
+        for row in rows
     )
 
 
