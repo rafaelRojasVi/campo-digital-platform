@@ -7,8 +7,8 @@ Implemented 2026-08-29 on top of
 
 This is a **read-only factual projection** of the persisted Forestry source
 substrate. Every endpoint reports stored source evidence or deterministic
-arithmetic over it. There are no mutation endpoints, no authentication, and
-no dashboard yet.
+arithmetic over it. There are no mutation endpoints and no authentication.
+[Dashboard V1](dashboard-v1.md) consumes this API as its only data boundary.
 
 ## What this API does NOT establish
 

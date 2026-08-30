@@ -59,3 +59,9 @@ products/lidar/dashboard/public/local-demo/
 .env
 .env.*
 !.env.example
+
+# Forestry local demo launcher state (PIDs, ports, logs)
+.forestry-dev/
+
+# Browser-QA session artifacts
+.playwright-cli/

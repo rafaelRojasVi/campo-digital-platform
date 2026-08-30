@@ -1,4 +1,4 @@
-.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check
+.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check forestry-dev forestry-status forestry-stop forestry-frontend-check
 
 setup:
 	uv sync --all-extras --dev
@@ -65,3 +65,15 @@ persistence-check: migration-check
 	PYTHONPATH=apps/api \
 	uv run pytest -q apps/api/integration_tests
 
+
+forestry-dev:
+	uv run --extra api python scripts/forestry_dev.py up
+
+forestry-status:
+	uv run --extra api python scripts/forestry_dev.py status
+
+forestry-stop:
+	uv run --extra api python scripts/forestry_dev.py stop
+
+forestry-frontend-check:
+	cd products/forestry/dashboard && npm run lint && npm run build && npm test

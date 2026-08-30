@@ -131,7 +131,7 @@ per-feature flag.
 ## Read projections
 
 `app.forestry_reads` (service level; exposed over HTTP by
-[Read API V1](read-api-v1.md) — no dashboard yet):
+[Read API V1](read-api-v1.md) and visually by [Dashboard V1](dashboard-v1.md)):
 
 - `list_shapefile_snapshots` — persisted snapshots in ingestion order;
 - `snapshot_summary` — feature count, total geometry-derived area, total

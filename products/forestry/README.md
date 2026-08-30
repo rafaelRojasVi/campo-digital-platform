@@ -5,9 +5,10 @@ the Degenfeld estate ("patrimonio Degenfeld") land-use base.
 
 ## Current status
 
-Forestry has an evidence-backed source contract and an immutable PostGIS
-ingestion/read substrate; business workflow and canonical cross-snapshot
-feature identity remain unresolved.
+Forestry has an evidence-backed source contract, an immutable PostGIS
+ingestion/read substrate, a read-only API, and a read-only visual dashboard;
+business workflow and canonical cross-snapshot feature identity remain
+unresolved.
 
 Source Evidence V1 and Source Contract V1 are established from the first real
 source snapshot supplied by the stakeholder (reviewed 2026-08-29). Ingestion
@@ -15,10 +16,12 @@ Substrate V1 (2026-08-29) persists contract-valid snapshots into PostGIS and
 was verified read-only against the real snapshot. Read API V1 (2026-08-29)
 exposes the persisted evidence as a read-only factual HTTP projection under
 `/api/forestry`, also verified read-only against the real snapshot.
+Dashboard V1 (2026-08-30) is a map-centric read-only web application over
+that API, verified in the browser against the real snapshot and launched
+locally with `make forestry-dev`.
 
-No canonical entities, workflow states, editing, or dashboard functionality
-have been implemented; those wait for stakeholder confirmation of the open
-questions.
+No canonical entities, workflow states, or editing have been implemented;
+those wait for stakeholder confirmation of the open questions.
 
 ## Source boundary
 
@@ -71,7 +74,15 @@ and a written stakeholder brief.
 - read-only HTTP projection of those reads under `/api/forestry`
   ([Read API V1](docs/read-api-v1.md)); no mutation endpoints.
 
-The dashboard and all workflow semantics remain future slices.
+`products/forestry/dashboard/` (frontend):
+
+- read-only map-centric dashboard over the read API
+  ([Dashboard V1](docs/dashboard-v1.md)): estate map with factual color
+  dimensions and legend, search/filters, synchronized paginated table,
+  literal 2024→2026 comparison, quality-evidence panel, polygon inspector,
+  filtered CSV export; launched via `make forestry-dev`.
+
+All workflow semantics remain future slices.
 
 ## Documentation
 
@@ -87,5 +98,10 @@ The dashboard and all workflow semantics remain future slices.
   representation, and what it does not establish.
 - [Product Projection V1](docs/product-projection-v1.md) — what a first
   read-only dashboard could safely show vs what needs confirmation.
+- [Dashboard V1](docs/dashboard-v1.md) — the implemented read-only visual
+  application: information architecture, map stack/projection, visual
+  encoding, launcher, QA and performance results.
+- [Resumen del visor para Campo Digital](docs/es/dashboard-v1.md) — Spanish
+  stakeholder summary of the dashboard.
 - [Preguntas para Javier](docs/es/preguntas-campo-digital.md) — Spanish
   stakeholder questionnaire.
