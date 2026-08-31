@@ -15,6 +15,7 @@ Product-specific implementation truth remains inside each product boundary. Plat
 ## Start here
 
 - [System overview](system-overview.md)
+- [Company portal V1](company-portal-v1.md)
 - [Production platform V1](production-platform-v1.md)
 - [Environments and infrastructure costs](environments-and-costs.md)
 - [Source ingestion](source-ingestion.md)

@@ -172,6 +172,27 @@ and history.
 
 Create one coherent Campo Digital user experience.
 
+Current implementation status (2026-08-31):
+
+- **FACT** — a local company portal V1 exists (`apps/portal/`) with a
+  stakeholder-facing home screen and per-module shells for all three
+  products; see [Company portal V1](company-portal-v1.md).
+- **FACT** — local module navigation/composition is implemented: each
+  product dashboard is embedded via iframe behind a thin Campo Digital
+  header, with back navigation, a compact module switcher, and an
+  "open in new tab" fallback.
+- **FACT** — `make campo-demo` / `make campo-status` / `make campo-stop`
+  discover sibling product worktrees by branch, start or adopt each
+  product's own existing launcher, and only ever stop processes they
+  themselves started.
+- **FACT** — LiDAR gained a minimal local launcher (`make lidar-dev`) so it
+  can run alongside Forestry and Transelec in one demo; no scientific or
+  persistence behavior changed.
+- **LIMITATION** — the iframe composition is explicitly a local-demo
+  strategy, not a production routing decision.
+- **OPEN** — authentication/session entry point, production routing,
+  deployment, and multi-tenant access are all still pending (Phase 6).
+
 Target shape:
 
 ```text

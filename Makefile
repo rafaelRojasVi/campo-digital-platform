@@ -1,4 +1,4 @@
-.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check
+.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check lidar-dev lidar-status lidar-stop campo-demo campo-status campo-stop
 
 setup:
 	uv sync --all-extras --dev
@@ -64,4 +64,22 @@ persistence-check: migration-check
 	POSTGRES_PORT=5433 \
 	PYTHONPATH=apps/api \
 	uv run pytest -q apps/api/integration_tests
+
+lidar-dev:
+	uv run --extra api python scripts/lidar_dev.py up
+
+lidar-status:
+	uv run python scripts/lidar_dev.py status
+
+lidar-stop:
+	uv run python scripts/lidar_dev.py stop
+
+campo-demo:
+	uv run --extra api python scripts/campo_demo.py up
+
+campo-status:
+	uv run python scripts/campo_demo.py status
+
+campo-stop:
+	uv run python scripts/campo_demo.py stop
 
