@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { metersPerPixel, multiPolygonToLatLngs, tooltipHtml } from '../lib/mapData.ts'
 import { lonLatToUtm, multiPolygonUtmBbox, utmToLonLat } from '../lib/proj.ts'
@@ -8,10 +8,18 @@ import {
   isClosedRing,
   moveDraftVertex,
   multiPolygonAreaSquareMeters,
+  pickHandleIndices,
   simplifyDraftCoordinates,
   straightCutCandidates,
   type DraftCoordinates,
 } from '../lib/draftGeometry.ts'
+import {
+  createDraftHistory,
+  pushDraftHistory,
+  redoDraftHistory,
+  undoDraftHistory,
+  type DraftHistoryState,
+} from '../lib/draftHistory.ts'
 import type { ColorEncoding } from '../lib/palette.ts'
 import type { FeatureCollection, GeoFeature } from '../types.ts'
 import type { ZoomRequest } from '../App.tsx'
@@ -34,6 +42,7 @@ interface MapViewProps {
 
 type BasemapMode = 'map' | 'satellite' | 'none'
 type DraftMode = 'move' | 'cut'
+type SimplifyLevel = 'alto' | 'medio' | 'bajo'
 
 interface CutPreview {
   pieces: [DraftCoordinates, DraftCoordinates]
@@ -60,13 +69,58 @@ interface FeatureLayer {
 
 const MARKER_MAX_SUBSET = 200
 const MARKER_MIN_POLYGON_PX = 8
-const SIMPLIFY_STEPS_METERS = [2, 5, 10, 20, 40] as const
+
+/**
+ * Editable vertex handles are capped per ring. Above this, entering edit mode
+ * on a heavy real polygon (measured: 960 vertices, ~430ms of dropped frames
+ * once the full ~1,568-feature dataset is on screen) freezes the browser
+ * building one draggable DOM marker per source vertex. The underlying draft
+ * geometry keeps every source vertex; this only limits how many get a
+ * draggable handle. See docs in the V1.1 performance pass for the profile.
+ */
+const MAX_VERTEX_HANDLES_PER_RING = 180
+
+const SIMPLIFY_LEVELS: { id: SimplifyLevel; label: string; toleranceMeters: number }[] = [
+  { id: 'alto', label: 'Alto', toleranceMeters: 2 },
+  { id: 'medio', label: 'Medio', toleranceMeters: 10 },
+  { id: 'bajo', label: 'Bajo', toleranceMeters: 30 },
+]
+
+const DRAFT_STYLE: L.PathOptions = {
+  color: '#f3a712',
+  weight: 3,
+  opacity: 1,
+  fillColor: '#f3a712',
+  fillOpacity: 0.18,
+}
+
+const CUT_RETAINED_STYLE: L.PathOptions = {
+  color: '#f3a712',
+  weight: 3,
+  opacity: 1,
+  fillColor: '#f3a712',
+  fillOpacity: 0.24,
+}
+
+const CUT_REMOVED_STYLE: L.PathOptions = {
+  color: '#b3261e',
+  weight: 2,
+  opacity: 0.75,
+  dashArray: '5 4',
+  fillColor: '#b3261e',
+  fillOpacity: 0.12,
+}
 
 function formatHa(value: number): string {
   return value.toLocaleString('es-CL', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
+}
+
+function markFeatureClick(event: L.LeafletMouseEvent): void {
+  const original = event.originalEvent as MouseEvent & { _forestryFeatureClick?: boolean }
+  original._forestryFeatureClick = true
 }
 
 export function MapView({
@@ -93,6 +147,13 @@ export function MapView({
   const styleForRef = useRef<(featureOrdinal: number) => L.PathOptions>(() => ({}))
   const onSelectRef = useRef(onSelect)
 
+  // Targeted-restyle bookkeeping: avoids re-applying setStyle to every
+  // visible layer (measured 1,568 calls) when only selection/draft changes.
+  const prevVisibleRef = useRef<Set<number>>(new Set())
+  const prevSelectedRef = useRef<number | null>(null)
+  const prevDraftRef = useRef<number | null>(null)
+  const prevEncodingRef = useRef<ColorEncoding | null>(null)
+
   const draftLayerRef = useRef<L.Polygon | null>(null)
   const draftMarkerGroupRef = useRef<L.LayerGroup | null>(null)
   const draftCoordinatesRef = useRef<DraftCoordinates | null>(null)
@@ -100,17 +161,25 @@ export function MapView({
   const cutGuideGroupRef = useRef<L.LayerGroup | null>(null)
   const cutStartRef = useRef<[number, number] | null>(null)
   const cutModeRef = useRef(false)
+  const cutPreviewActiveRef = useRef(false)
   const cutClickHandlerRef = useRef<(latlng: L.LatLng) => void>(() => undefined)
+  const historyRef = useRef<DraftHistoryState>(createDraftHistory())
+  const escapeHandlerRef = useRef<() => boolean>(() => false)
+  const undoHandlerRef = useRef<() => void>(() => undefined)
+  const redoHandlerRef = useRef<() => void>(() => undefined)
 
   const [basemapMode, setBasemapMode] = useState<BasemapMode>('map')
   const [draftFeatureOrdinal, setDraftFeatureOrdinal] = useState<number | null>(null)
   const [draftAreaHa, setDraftAreaHa] = useState<number | null>(null)
   const [draftVertexCount, setDraftVertexCount] = useState<number | null>(null)
+  const [draftHandleCount, setDraftHandleCount] = useState<number | null>(null)
   const [draftVersion, setDraftVersion] = useState(0)
   const [draftMode, setDraftMode] = useState<DraftMode>('move')
-  const [simplifyTolerance, setSimplifyTolerance] = useState(0)
   const [cutStatus, setCutStatus] = useState<string | null>(null)
   const [cutPreview, setCutPreview] = useState<CutPreview | null>(null)
+  const [simplifyLevel, setSimplifyLevel] = useState<SimplifyLevel | null>(null)
+  const [historyTick, setHistoryTick] = useState(0)
+  const [panelCollapsed, setPanelCollapsed] = useState(false)
 
   useEffect(() => {
     onSelectRef.current = onSelect
@@ -118,11 +187,22 @@ export function MapView({
 
   useEffect(() => {
     cutModeRef.current = draftMode === 'cut' && cutPreview === null
+    cutPreviewActiveRef.current = cutPreview !== null
   }, [draftMode, cutPreview])
 
   const clearCutGuide = () => {
     cutGuideGroupRef.current?.clearLayers()
     cutStartRef.current = null
+  }
+
+  const resetHistory = () => {
+    historyRef.current = createDraftHistory()
+    setHistoryTick((tick) => tick + 1)
+  }
+
+  const recordHistory = (previous: DraftCoordinates) => {
+    historyRef.current = pushDraftHistory(historyRef.current, cloneCoordinates(previous))
+    setHistoryTick((tick) => tick + 1)
   }
 
   // Map lifecycle.
@@ -145,6 +225,10 @@ export function MapView({
         cutClickHandlerRef.current(event.latlng)
         return
       }
+      // A cut preview shows two pieces the user picks between; an empty-map
+      // click nearby should not silently discard the whole draft. Only the
+      // explicit buttons, a piece click, or Escape resolve the preview.
+      if (cutPreviewActiveRef.current) return
       const original = event.originalEvent as MouseEvent & { _forestryFeatureClick?: boolean }
       if (original._forestryFeatureClick !== true) onSelectRef.current(null)
     }
@@ -170,6 +254,35 @@ export function MapView({
       fittedCollectionRef.current = null
     }
   }, [])
+
+  // Undo / redo / escape keyboard shortcuts, active only while editing.
+  useEffect(() => {
+    if (draftFeatureOrdinal === null) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return
+
+      if (event.key === 'Escape') {
+        if (escapeHandlerRef.current()) event.preventDefault()
+        return
+      }
+
+      const modifier = event.metaKey || event.ctrlKey
+      if (!modifier) return
+      if (event.key.toLowerCase() !== 'z') return
+
+      event.preventDefault()
+      if (event.shiftKey) {
+        redoHandlerRef.current()
+      } else {
+        undoHandlerRef.current()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [draftFeatureOrdinal])
 
   // Basemap is presentation only. Forestry geometry remains the source layer.
   useEffect(() => {
@@ -214,8 +327,7 @@ export function MapView({
 
       layer.on('click', (event: L.LeafletMouseEvent) => {
         if (cutModeRef.current) return
-        const original = event.originalEvent as MouseEvent & { _forestryFeatureClick?: boolean }
-        original._forestryFeatureClick = true
+        markFeatureClick(event)
         onSelectRef.current(featureOrdinal)
       })
 
@@ -236,6 +348,10 @@ export function MapView({
     }
 
     layersRef.current = layers
+    prevVisibleRef.current = new Set()
+    prevSelectedRef.current = null
+    prevDraftRef.current = null
+    prevEncodingRef.current = null
 
     return () => {
       group.remove()
@@ -253,11 +369,16 @@ export function MapView({
       draftSeedRef.current = null
       clearCutGuide()
       setCutPreview(null)
+      setSimplifyLevel(null)
       setDraftMode('move')
+      resetHistory()
     }
   }, [draftFeatureOrdinal, selectedOrdinal])
 
-  // Visibility + style: driven by filters, color encoding, selection and draft state.
+  // Visibility + style: driven by filters, color encoding, selection and draft
+  // state. Only layers whose visibility or role actually changed get
+  // restyled — measured to cut ~1,568 setStyle calls down to a handful when
+  // entering/leaving edit mode or changing selection.
   useEffect(() => {
     const group = groupRef.current
     if (group === null) return
@@ -286,9 +407,18 @@ export function MapView({
     }
     styleForRef.current = styleFor
 
+    const previouslyVisible = prevVisibleRef.current
+    const encodingChanged = prevEncodingRef.current !== encoding
+    const touchedOrdinals = new Set<number>()
+    if (prevSelectedRef.current !== null) touchedOrdinals.add(prevSelectedRef.current)
+    if (selectedOrdinal !== null) touchedOrdinals.add(selectedOrdinal)
+    if (prevDraftRef.current !== null) touchedOrdinals.add(prevDraftRef.current)
+    if (draftFeatureOrdinal !== null) touchedOrdinals.add(draftFeatureOrdinal)
+
     let selectedLayer: L.Polygon | null = null
     for (const [featureOrdinal, entry] of layersRef.current) {
       const visible = visibleOrdinals.has(featureOrdinal)
+      const wasVisible = previouslyVisible.has(featureOrdinal)
       if (visible && !entry.visible) {
         group.addLayer(entry.layer)
         entry.visible = true
@@ -296,12 +426,17 @@ export function MapView({
         group.removeLayer(entry.layer)
         entry.visible = false
       }
-      if (visible) {
+      if (visible && (!wasVisible || encodingChanged || touchedOrdinals.has(featureOrdinal))) {
         entry.layer.setStyle(styleFor(featureOrdinal))
-        if (featureOrdinal === selectedOrdinal) selectedLayer = entry.layer
       }
+      if (visible && featureOrdinal === selectedOrdinal) selectedLayer = entry.layer
     }
     if (selectedLayer !== null) selectedLayer.bringToFront()
+
+    prevVisibleRef.current = visibleOrdinals
+    prevSelectedRef.current = selectedOrdinal
+    prevDraftRef.current = draftFeatureOrdinal
+    prevEncodingRef.current = encoding
 
     const syncMarkers = () => {
       const map = mapRef.current
@@ -336,10 +471,7 @@ export function MapView({
             })
             marker.on('click', (event: L.LeafletMouseEvent) => {
               if (cutModeRef.current) return
-              const original = event.originalEvent as MouseEvent & {
-                _forestryFeatureClick?: boolean
-              }
-              original._forestryFeatureClick = true
+              markFeatureClick(event)
               onSelectRef.current(featureOrdinal)
             })
             entry.marker = marker
@@ -362,7 +494,9 @@ export function MapView({
         syncMarkers()
       }
       map.on('zoomend', restyleOnZoom)
-      return () => map.off('zoomend', restyleOnZoom)
+      return () => {
+        map.off('zoomend', restyleOnZoom)
+      }
     }
   }, [filteredFeatures, encoding, selectedOrdinal, draftFeatureOrdinal])
 
@@ -382,20 +516,28 @@ export function MapView({
     setDraftAreaHa(multiPolygonAreaSquareMeters(coordinates) / 10_000)
     setDraftVertexCount(countDraftVertices(coordinates))
 
-    const draftLayer = L.polygon(
-      multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates }),
-      {
-        color: '#f3a712',
-        weight: 3,
-        opacity: 1,
-        fillColor: '#f3a712',
-        fillOpacity: 0.18,
-      },
-    ).addTo(map)
+    // Mutable cache mirroring `coordinates`, one entry per source vertex
+    // (including the closing duplicate). Dragging patches only the moved
+    // point here instead of reprojecting the whole polygon every event.
+    const latLngsCache = multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates })
+
+    const draftLayer = L.polygon(latLngsCache, DRAFT_STYLE).addTo(map)
     draftLayerRef.current = draftLayer
 
     const markerGroup = L.layerGroup().addTo(map)
     draftMarkerGroupRef.current = markerGroup
+
+    let areaFramePending = false
+    const scheduleAreaUpdate = () => {
+      if (areaFramePending) return
+      areaFramePending = true
+      requestAnimationFrame(() => {
+        areaFramePending = false
+        setDraftAreaHa(multiPolygonAreaSquareMeters(coordinates) / 10_000)
+      })
+    }
+
+    let totalHandles = 0
 
     if (draftMode === 'move') {
       for (let polygonIndex = 0; polygonIndex < coordinates.length; polygonIndex += 1) {
@@ -406,8 +548,15 @@ export function MapView({
           const ring = polygon[ringIndex]
           if (ring === undefined) continue
           const markerCount = isClosedRing(ring) ? ring.length - 1 : ring.length
+          const handleIndices =
+            markerCount > MAX_VERTEX_HANDLES_PER_RING
+              ? pickHandleIndices(ring, MAX_VERTEX_HANDLES_PER_RING)
+              : Array.from({ length: markerCount }, (_, index) => index)
+          totalHandles += handleIndices.length
+          const closed = isClosedRing(ring)
+          const lastIndex = ring.length - 1
 
-          for (let vertexIndex = 0; vertexIndex < markerCount; vertexIndex += 1) {
+          for (const vertexIndex of handleIndices) {
             const position = ring[vertexIndex]
             if (position === undefined) continue
             const x = position[0]
@@ -426,20 +575,31 @@ export function MapView({
               }),
             }).addTo(markerGroup)
 
+            marker.on('dragstart', () => {
+              const current = draftCoordinatesRef.current
+              if (current !== null) recordHistory(current)
+            })
+
             marker.on('drag', () => {
               const point = marker.getLatLng()
               const [nextX, nextY] = lonLatToUtm(point.lng, point.lat)
-              moveDraftVertex(
-                coordinates,
-                polygonIndex,
-                ringIndex,
-                vertexIndex,
-                nextX,
-                nextY,
-              )
-              draftLayer.setLatLngs(
-                multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates }),
-              )
+              moveDraftVertex(coordinates, polygonIndex, ringIndex, vertexIndex, nextX, nextY)
+
+              const ringLatLngs = latLngsCache[polygonIndex]?.[ringIndex]
+              if (ringLatLngs !== undefined) {
+                const [movedLon, movedLat] = utmToLonLat(nextX, nextY)
+                ringLatLngs[vertexIndex] = [movedLat, movedLon]
+                if (closed && vertexIndex === 0) {
+                  ringLatLngs[lastIndex] = [movedLat, movedLon]
+                } else if (closed && vertexIndex === lastIndex) {
+                  ringLatLngs[0] = [movedLat, movedLon]
+                }
+              }
+              draftLayer.setLatLngs(latLngsCache)
+              scheduleAreaUpdate()
+            })
+
+            marker.on('dragend', () => {
               setDraftAreaHa(multiPolygonAreaSquareMeters(coordinates) / 10_000)
             })
           }
@@ -447,6 +607,7 @@ export function MapView({
       }
     }
 
+    setDraftHandleCount(draftMode === 'move' ? totalHandles : null)
     draftLayer.bringToFront()
 
     return () => {
@@ -480,7 +641,7 @@ export function MapView({
           fillColor: '#ffffff',
           fillOpacity: 1,
         }).addTo(guide ?? L.layerGroup())
-        setCutStatus('Primer punto listo. Haz clic al otro lado del polígono.')
+        setCutStatus('Primer punto listo · haz clic al otro lado. Esc para cancelar.')
         return
       }
 
@@ -509,17 +670,59 @@ export function MapView({
       }
 
       const selectedIndex = result.largerPieceIndex
+      const removedHa = result.areasSquareMeters[selectedIndex === 0 ? 1 : 0] / 10_000
       const preview: CutPreview = {
         pieces: [cloneCoordinates(result.pieces[0]), cloneCoordinates(result.pieces[1])],
         selectedIndex,
         beforeCut: cloneCoordinates(current),
       }
       setCutPreview(preview)
-      draftSeedRef.current = cloneCoordinates(preview.pieces[selectedIndex])
-      setCutStatus('Vista previa: se conserva la pieza de mayor superficie.')
-      setDraftVersion((version) => version + 1)
+      setCutStatus(
+        `Corte listo · se removerían ${formatHa(removedHa)} ha. ` +
+          'Haz clic en el lado que quieres conservar.',
+      )
     }
   }, [draftMode, cutPreview])
+
+  // While a cut preview is active, show both resulting pieces at once so the
+  // user can compare and click the side to keep, instead of only seeing the
+  // currently-selected piece.
+  useEffect(() => {
+    const map = mapRef.current
+    if (map === null || cutPreview === null) return
+
+    const retainedCoordinates = cutPreview.pieces[cutPreview.selectedIndex]
+    const removedCoordinates = cutPreview.pieces[cutPreview.selectedIndex === 0 ? 1 : 0]
+
+    const retainedLayer = L.polygon(
+      multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates: retainedCoordinates }),
+      CUT_RETAINED_STYLE,
+    ).addTo(map)
+    const removedLayer = L.polygon(
+      multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates: removedCoordinates }),
+      CUT_REMOVED_STYLE,
+    ).addTo(map)
+
+    const selectOtherSide = (event: L.LeafletMouseEvent) => {
+      markFeatureClick(event)
+      setCutPreview((current) =>
+        current === null
+          ? current
+          : { ...current, selectedIndex: current.selectedIndex === 0 ? 1 : 0 },
+      )
+    }
+    removedLayer.on('click', selectOtherSide)
+    retainedLayer.on('click', (event: L.LeafletMouseEvent) => markFeatureClick(event))
+
+    retainedLayer.bringToFront()
+    draftLayerRef.current?.setStyle({ opacity: 0, fillOpacity: 0 })
+
+    return () => {
+      retainedLayer.remove()
+      removedLayer.remove()
+      draftLayerRef.current?.setStyle(DRAFT_STYLE)
+    }
+  }, [cutPreview])
 
   // Initial fit to the whole loaded collection (once per collection object).
   const fittedCollectionRef = useRef<FeatureCollection | null>(null)
@@ -560,8 +763,21 @@ export function MapView({
         ) ?? null
   const originalAreaHa =
     draftFeature === null ? null : draftFeature.properties.geometry_area_source_units / 10_000
+
+  const previewRetainedAreaHa =
+    cutPreview === null
+      ? null
+      : multiPolygonAreaSquareMeters(cutPreview.pieces[cutPreview.selectedIndex]) / 10_000
+  const previewRemovedAreaHa =
+    cutPreview === null
+      ? null
+      : multiPolygonAreaSquareMeters(
+          cutPreview.pieces[cutPreview.selectedIndex === 0 ? 1 : 0],
+        ) / 10_000
+
+  const displayedAreaHa = previewRetainedAreaHa ?? draftAreaHa
   const areaDifferenceHa =
-    originalAreaHa === null || draftAreaHa === null ? null : draftAreaHa - originalAreaHa
+    originalAreaHa === null || displayedAreaHa === null ? null : displayedAreaHa - originalAreaHa
   const areaDifferencePercent =
     originalAreaHa === null || originalAreaHa === 0 || areaDifferenceHa === null
       ? null
@@ -581,10 +797,37 @@ export function MapView({
     draftFeature.geometry.coordinates.length === 1 &&
     draftFeature.geometry.coordinates[0]?.length === 1
 
+  const simplifyPreview = useMemo(() => {
+    if (simplifyLevel === null) return null
+    const current = draftCoordinatesRef.current
+    if (current === null) return null
+    const level = SIMPLIFY_LEVELS.find((entry) => entry.id === simplifyLevel)
+    if (level === undefined) return null
+
+    const simplified = simplifyDraftCoordinates(current, level.toleranceMeters)
+    const beforeCount = countDraftVertices(current)
+    const afterCount = countDraftVertices(simplified)
+    const beforeAreaHa = multiPolygonAreaSquareMeters(current) / 10_000
+    const afterAreaHa = multiPolygonAreaSquareMeters(simplified) / 10_000
+
+    return {
+      coordinates: simplified,
+      beforeCount,
+      afterCount,
+      deltaAreaHa: afterAreaHa - beforeAreaHa,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simplifyLevel, draftVersion, draftFeatureOrdinal])
+
+  const canUndo = historyRef.current.past.length > 0
+  const canRedo = historyRef.current.future.length > 0
+  void historyTick // re-render trigger for canUndo/canRedo
+
   const beginDraft = () => {
     if (selectedFeature === null) return
     draftSeedRef.current = null
-    setSimplifyTolerance(0)
+    resetHistory()
+    setSimplifyLevel(null)
     setCutStatus(null)
     setCutPreview(null)
     clearCutGuide()
@@ -592,15 +835,12 @@ export function MapView({
     setDraftFeatureOrdinal(selectedFeature.properties.feature_ordinal)
   }
 
-  const reducePoints = () => {
+  const applySimplifyPreview = () => {
+    if (simplifyPreview === null) return
     const current = draftCoordinatesRef.current
-    if (current === null) return
-    const nextTolerance =
-      SIMPLIFY_STEPS_METERS.find((tolerance) => tolerance > simplifyTolerance) ?? null
-    if (nextTolerance === null) return
-
-    draftSeedRef.current = simplifyDraftCoordinates(current, nextTolerance)
-    setSimplifyTolerance(nextTolerance)
+    if (current !== null) recordHistory(current)
+    draftSeedRef.current = simplifyPreview.coordinates
+    setSimplifyLevel(null)
     setCutStatus(null)
     setCutPreview(null)
     clearCutGuide()
@@ -608,38 +848,31 @@ export function MapView({
     setDraftVersion((version) => version + 1)
   }
 
+  const cancelSimplifyPreview = () => setSimplifyLevel(null)
+
   const startCut = () => {
     const current = draftCoordinatesRef.current
     if (current === null) return
     draftSeedRef.current = cloneCoordinates(current)
+    setSimplifyLevel(null)
     setCutPreview(null)
     clearCutGuide()
-    setCutStatus('Haz clic en dos puntos para dibujar una línea que atraviese el polígono.')
+    setCutStatus('Haz clic en dos puntos del borde para trazar el corte. Esc para cancelar.')
     setDraftMode('cut')
-  }
-
-  const switchCutSide = () => {
-    if (cutPreview === null) return
-    const nextIndex: 0 | 1 = cutPreview.selectedIndex === 0 ? 1 : 0
-    draftSeedRef.current = cloneCoordinates(cutPreview.pieces[nextIndex])
-    setCutPreview({ ...cutPreview, selectedIndex: nextIndex })
-    setCutStatus('Vista previa invertida: se conserva la otra pieza.')
-    setDraftVersion((version) => version + 1)
   }
 
   const acceptCut = () => {
     if (cutPreview === null) return
+    recordHistory(cutPreview.beforeCut)
+    draftSeedRef.current = cloneCoordinates(cutPreview.pieces[cutPreview.selectedIndex])
     setCutPreview(null)
     setCutStatus('Corte aplicado al borrador local. Puedes seguir ajustando puntos.')
     clearCutGuide()
     setDraftMode('move')
+    setDraftVersion((version) => version + 1)
   }
 
   const cancelCut = () => {
-    if (cutPreview !== null) {
-      draftSeedRef.current = cloneCoordinates(cutPreview.beforeCut)
-      setDraftVersion((version) => version + 1)
-    }
     setCutPreview(null)
     clearCutGuide()
     setCutStatus(null)
@@ -647,8 +880,10 @@ export function MapView({
   }
 
   const resetDraft = () => {
+    const current = draftCoordinatesRef.current
+    if (current !== null) recordHistory(current)
     draftSeedRef.current = null
-    setSimplifyTolerance(0)
+    setSimplifyLevel(null)
     setCutPreview(null)
     setCutStatus(null)
     clearCutGuide()
@@ -658,11 +893,69 @@ export function MapView({
 
   const discardDraft = () => {
     draftSeedRef.current = null
+    resetHistory()
     setCutPreview(null)
+    setSimplifyLevel(null)
     setCutStatus(null)
     clearCutGuide()
     setDraftMode('move')
     setDraftFeatureOrdinal(null)
+  }
+
+  const performUndo = () => {
+    const current = draftCoordinatesRef.current
+    if (current === null) return
+    const step = undoDraftHistory(historyRef.current, cloneCoordinates(current))
+    if (step === null) return
+    historyRef.current = step.history
+    setHistoryTick((tick) => tick + 1)
+    draftSeedRef.current = step.coordinates
+    setCutPreview(null)
+    setSimplifyLevel(null)
+    setCutStatus('Cambio deshecho.')
+    clearCutGuide()
+    setDraftMode('move')
+    setDraftVersion((version) => version + 1)
+  }
+
+  const performRedo = () => {
+    const current = draftCoordinatesRef.current
+    if (current === null) return
+    const step = redoDraftHistory(historyRef.current, cloneCoordinates(current))
+    if (step === null) return
+    historyRef.current = step.history
+    setHistoryTick((tick) => tick + 1)
+    draftSeedRef.current = step.coordinates
+    setCutPreview(null)
+    setSimplifyLevel(null)
+    setCutStatus('Cambio rehecho.')
+    clearCutGuide()
+    setDraftMode('move')
+    setDraftVersion((version) => version + 1)
+  }
+
+  undoHandlerRef.current = performUndo
+  redoHandlerRef.current = performRedo
+  escapeHandlerRef.current = () => {
+    if (cutStartRef.current !== null) {
+      clearCutGuide()
+      setCutStatus('Haz clic en dos puntos del borde para trazar el corte. Esc para cancelar.')
+      return true
+    }
+    if (cutPreview !== null) {
+      cancelCut()
+      return true
+    }
+    if (draftMode === 'cut') {
+      setDraftMode('move')
+      setCutStatus(null)
+      return true
+    }
+    if (simplifyLevel !== null) {
+      cancelSimplifyPreview()
+      return true
+    }
+    return false
   }
 
   return (
@@ -719,8 +1012,11 @@ export function MapView({
         </button>
       </div>
 
-      {draftFeature !== null && originalAreaHa !== null && draftAreaHa !== null ? (
-        <section className="draft-edit" aria-label="Simulación local de límite">
+      {draftFeature !== null && originalAreaHa !== null && displayedAreaHa !== null ? (
+        <section
+          className={`draft-edit${panelCollapsed ? ' draft-edit--collapsed' : ''}`}
+          aria-label="Simulación local de límite"
+        >
           <div className="draft-edit__heading">
             <div>
               <strong>Simulación de límite</strong>
@@ -731,6 +1027,15 @@ export function MapView({
               </span>
             </div>
             <span className="draft-edit__badge">Borrador local</span>
+            <button
+              type="button"
+              className="draft-edit__collapse"
+              onClick={() => setPanelCollapsed((collapsed) => !collapsed)}
+              aria-expanded={!panelCollapsed}
+              title={panelCollapsed ? 'Expandir panel' : 'Minimizar panel'}
+            >
+              {panelCollapsed ? '▸' : '▾'}
+            </button>
           </div>
 
           <div className="draft-edit__metrics">
@@ -739,9 +1044,15 @@ export function MapView({
               <strong>{formatHa(originalAreaHa)} ha</strong>
             </div>
             <div>
-              <span>Área estimada</span>
-              <strong>{formatHa(draftAreaHa)} ha</strong>
+              <span>{cutPreview !== null ? 'Área resultante' : 'Área estimada'}</span>
+              <strong>{formatHa(displayedAreaHa)} ha</strong>
             </div>
+            {cutPreview !== null && previewRemovedAreaHa !== null ? (
+              <div>
+                <span>Área removida</span>
+                <strong>{formatHa(previewRemovedAreaHa)} ha</strong>
+              </div>
+            ) : null}
             <div>
               <span>Diferencia</span>
               <strong>
@@ -754,84 +1065,166 @@ export function MapView({
             </div>
           </div>
 
-          <div className="draft-edit__tools" aria-label="Herramientas del borrador">
-            <button
-              type="button"
-              className={`draft-tool${draftMode === 'move' ? ' draft-tool--active' : ''}`}
-              onClick={() => {
-                const current = draftCoordinatesRef.current
-                if (current !== null) draftSeedRef.current = cloneCoordinates(current)
-                setCutPreview(null)
-                setCutStatus(null)
-                clearCutGuide()
-                setDraftMode('move')
-              }}
-            >
-              Mover puntos
-            </button>
-            <button
-              type="button"
-              className="draft-tool"
-              onClick={reducePoints}
-              disabled={simplifyTolerance >= SIMPLIFY_STEPS_METERS.at(-1)!}
-            >
-              Reducir puntos
-            </button>
-            <button
-              type="button"
-              className={`draft-tool${draftMode === 'cut' ? ' draft-tool--active' : ''}`}
-              onClick={startCut}
-              disabled={!cutSupported}
-              title={
-                cutSupported
-                  ? 'Dibuja una línea recta con dos clics y conserva uno de los lados'
-                  : 'Disponible solo para polígonos simples sin huecos ni partes múltiples'
-              }
-            >
-              Cortar con línea
-            </button>
-          </div>
+          {!panelCollapsed ? (
+            <>
+              <div className="draft-edit__tools" aria-label="Herramientas del borrador">
+                <button
+                  type="button"
+                  className={`draft-tool${draftMode === 'move' ? ' draft-tool--active' : ''}`}
+                  onClick={() => {
+                    const current = draftCoordinatesRef.current
+                    if (current !== null) draftSeedRef.current = cloneCoordinates(current)
+                    setCutPreview(null)
+                    setSimplifyLevel(null)
+                    setCutStatus(null)
+                    clearCutGuide()
+                    setDraftMode('move')
+                  }}
+                >
+                  Mover puntos
+                </button>
+                <button
+                  type="button"
+                  className={`draft-tool${simplifyLevel !== null ? ' draft-tool--active' : ''}`}
+                  onClick={() => {
+                    setCutPreview(null)
+                    setCutStatus(null)
+                    clearCutGuide()
+                    setDraftMode('move')
+                    setSimplifyLevel((level) => (level === null ? 'medio' : null))
+                  }}
+                >
+                  Reducir puntos
+                </button>
+                <button
+                  type="button"
+                  className={`draft-tool${draftMode === 'cut' ? ' draft-tool--active' : ''}`}
+                  onClick={startCut}
+                  disabled={!cutSupported}
+                  title={
+                    cutSupported
+                      ? 'Dibuja una línea recta con dos clics y conserva uno de los lados'
+                      : 'Disponible solo para polígonos simples sin huecos ni partes múltiples'
+                  }
+                >
+                  Cortar con línea
+                </button>
+              </div>
 
-          <div className="draft-edit__point-summary">
-            <span>
-              Puntos: <strong>{draftVertexCount ?? '—'}</strong>
-              {sourceVertexCount !== null && draftVertexCount !== sourceVertexCount
-                ? ` · fuente ${sourceVertexCount}`
-                : ''}
-            </span>
-            {simplifyTolerance > 0 ? <span>Simplificación: {simplifyTolerance} m</span> : null}
-          </div>
+              {simplifyLevel !== null ? (
+                <div className="draft-edit__simplify" aria-label="Detalle del límite">
+                  <span className="draft-edit__simplify-label">Detalle del límite</span>
+                  <div className="draft-edit__simplify-levels">
+                    {SIMPLIFY_LEVELS.map((level) => (
+                      <button
+                        key={level.id}
+                        type="button"
+                        className={`draft-tool${simplifyLevel === level.id ? ' draft-tool--active' : ''}`}
+                        onClick={() => setSimplifyLevel(level.id)}
+                      >
+                        {level.label}
+                      </button>
+                    ))}
+                  </div>
+                  {simplifyPreview !== null ? (
+                    <>
+                      <p className="draft-edit__simplify-summary">
+                        {simplifyPreview.beforeCount} → {simplifyPreview.afterCount} puntos ·
+                        variación {simplifyPreview.deltaAreaHa >= 0 ? '+' : ''}
+                        {formatHa(simplifyPreview.deltaAreaHa)} ha
+                      </p>
+                      <div className="draft-edit__cut-actions">
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={cancelSimplifyPreview}
+                        >
+                          Cancelar
+                        </button>
+                        <button type="button" className="button" onClick={applySimplifyPreview}>
+                          Aplicar
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
 
-          {cutStatus !== null ? <p className="draft-edit__status">{cutStatus}</p> : null}
+              <div className="draft-edit__point-summary">
+                <span>
+                  Puntos: <strong>{draftVertexCount ?? '—'}</strong>
+                  {sourceVertexCount !== null && draftVertexCount !== sourceVertexCount
+                    ? ` · fuente ${sourceVertexCount}`
+                    : ''}
+                </span>
+                {draftMode === 'move' &&
+                draftHandleCount !== null &&
+                draftVertexCount !== null &&
+                draftHandleCount < draftVertexCount ? (
+                  <span>Controles visibles: {draftHandleCount}</span>
+                ) : null}
+              </div>
 
-          {cutPreview !== null ? (
-            <div className="draft-edit__cut-actions">
-              <button type="button" className="button button--ghost" onClick={switchCutSide}>
-                Conservar otro lado
-              </button>
-              <button type="button" className="button button--ghost" onClick={cancelCut}>
-                Cancelar corte
-              </button>
-              <button type="button" className="button" onClick={acceptCut}>
-                Aceptar corte
-              </button>
-            </div>
+              {cutStatus !== null ? <p className="draft-edit__status">{cutStatus}</p> : null}
+
+              {cutPreview !== null ? (
+                <div className="draft-edit__cut-actions">
+                  <button
+                    type="button"
+                    className="button button--ghost"
+                    onClick={() =>
+                      setCutPreview((current) =>
+                        current === null
+                          ? current
+                          : { ...current, selectedIndex: current.selectedIndex === 0 ? 1 : 0 },
+                      )
+                    }
+                  >
+                    Conservar otro lado
+                  </button>
+                  <button type="button" className="button button--ghost" onClick={cancelCut}>
+                    Cancelar corte
+                  </button>
+                  <button type="button" className="button" onClick={acceptCut}>
+                    Aceptar corte
+                  </button>
+                </div>
+              ) : null}
+
+              <p className="draft-edit__note">
+                {draftMode === 'cut'
+                  ? 'El corte y el área son solo una simulación local. La fuente no cambia.'
+                  : 'Arrastra puntos o reduce su cantidad. El área se calcula en EPSG:32718; no se guarda en la fuente.'}
+              </p>
+
+              <div className="draft-edit__actions">
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={performUndo}
+                  disabled={!canUndo}
+                  title="Ctrl/Cmd+Z"
+                >
+                  Deshacer
+                </button>
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={performRedo}
+                  disabled={!canRedo}
+                  title="Ctrl/Cmd+Shift+Z"
+                >
+                  Rehacer
+                </button>
+                <button type="button" className="button button--ghost" onClick={resetDraft}>
+                  Reiniciar
+                </button>
+                <button type="button" className="button" onClick={discardDraft}>
+                  Descartar borrador
+                </button>
+              </div>
+            </>
           ) : null}
-
-          <p className="draft-edit__note">
-            {draftMode === 'cut'
-              ? 'El corte y el área son solo una simulación local. La fuente no cambia.'
-              : 'Arrastra puntos o reduce su cantidad. El área se calcula en EPSG:32718; no se guarda en la fuente.'}
-          </p>
-
-          <div className="draft-edit__actions">
-            <button type="button" className="button button--ghost" onClick={resetDraft}>
-              Reiniciar
-            </button>
-            <button type="button" className="button" onClick={discardDraft}>
-              Descartar borrador
-            </button>
-          </div>
         </section>
       ) : null}
 

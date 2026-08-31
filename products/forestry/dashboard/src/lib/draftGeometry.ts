@@ -191,6 +191,110 @@ export function simplifyDraftCoordinates(
   )
 }
 
+function simplifyOpenLineIndices(points: number[][], toleranceSquared: number): number[] {
+  if (points.length <= 2) return points.map((_, index) => index)
+
+  const first = points[0]
+  const last = points[points.length - 1]
+  if (first === undefined || last === undefined) return points.map((_, index) => index)
+
+  let maxDistance = 0
+  let splitIndex = 0
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const point = points[index]
+    if (point === undefined) continue
+    const distance = squaredSegmentDistance(point, first, last)
+    if (distance > maxDistance) {
+      maxDistance = distance
+      splitIndex = index
+    }
+  }
+
+  if (maxDistance <= toleranceSquared || splitIndex === 0) {
+    return [0, points.length - 1]
+  }
+
+  const left = simplifyOpenLineIndices(points.slice(0, splitIndex + 1), toleranceSquared)
+  const right = simplifyOpenLineIndices(points.slice(splitIndex), toleranceSquared).map(
+    (index) => index + splitIndex,
+  )
+  return Array.from(new Set([...left, ...right])).sort((a, b) => a - b)
+}
+
+/**
+ * Same farthest-point split as {@link simplifyClosedRing}, but returns the
+ * *indices* of surviving vertices (relative to the open ring, no duplicate
+ * closing point) instead of new coordinates. Used to pick a reduced set of
+ * editable handles without mutating the draft geometry itself.
+ */
+function significantRingIndices(open: number[][], toleranceMeters: number): number[] {
+  if (open.length <= 4 || toleranceMeters <= 0) return open.map((_, index) => index)
+
+  const first = open[0]
+  if (first === undefined) return open.map((_, index) => index)
+
+  let splitIndex = 1
+  let farthest = -1
+  for (let index = 1; index < open.length; index += 1) {
+    const point = open[index]
+    if (point === undefined) continue
+    const distance = squaredDistance(point, first)
+    if (distance > farthest) {
+      farthest = distance
+      splitIndex = index
+    }
+  }
+
+  if (splitIndex <= 0 || splitIndex >= open.length) return open.map((_, index) => index)
+
+  const toleranceSquared = toleranceMeters * toleranceMeters
+  const firstArc = simplifyOpenLineIndices(open.slice(0, splitIndex + 1), toleranceSquared)
+  const secondArcPoints = [...open.slice(splitIndex), first]
+  const secondArc = simplifyOpenLineIndices(secondArcPoints, toleranceSquared).map((index) =>
+    index === secondArcPoints.length - 1 ? 0 : splitIndex + index,
+  )
+
+  return Array.from(new Set([...firstArc, ...secondArc])).sort((a, b) => a - b)
+}
+
+/**
+ * Pick a bounded subset of "significant" vertex indices (Douglas-Peucker
+ * corners) from a closed ring, for use as editable handles. Purely a display
+ * decision: the draft coordinates are never mutated, and every index refers
+ * to a real vertex, so dragging a handle still moves that exact vertex.
+ */
+export function pickHandleIndices(ring: number[][], maxHandles: number): number[] {
+  const open = isClosedRing(ring) ? ring.slice(0, -1) : ring.slice()
+  if (open.length <= maxHandles || open.length <= 4) {
+    return open.map((_, index) => index)
+  }
+
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const point of open) {
+    const x = point[0] ?? 0
+    const y = point[1] ?? 0
+    if (x < minX) minX = x
+    if (y < minY) minY = y
+    if (x > maxX) maxX = x
+    if (y > maxY) maxY = y
+  }
+  const diagonal = Math.hypot(maxX - minX, maxY - minY) || 1
+
+  let tolerance = diagonal * 0.0004
+  let indices = significantRingIndices(open, tolerance)
+  let guard = 0
+  while (indices.length > maxHandles && guard < 30) {
+    tolerance *= 1.6
+    indices = significantRingIndices(open, tolerance)
+    guard += 1
+  }
+
+  return indices
+}
+
 interface SegmentIntersection {
   point: [number, number]
   edgeIndex: number
