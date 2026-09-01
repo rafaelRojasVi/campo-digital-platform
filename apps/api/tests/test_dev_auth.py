@@ -20,15 +20,16 @@ def test_dev_auth_allowed_in_development() -> None:
     assert_dev_auth_allowed(_settings("development"))
 
 
-def test_dev_auth_allowed_in_test() -> None:
-    assert_dev_auth_allowed(_settings("test"))
+def test_dev_auth_rejected_in_staging() -> None:
+    # ADR-005 originally allowed dev-auth in staging; the secure-file-access
+    # slice closes that exposure now that real Entra sign-in exists.
+    with pytest.raises(DevAuthDisabledInProductionError):
+        assert_dev_auth_allowed(_settings("staging"))
 
 
-def test_dev_auth_allowed_in_staging() -> None:
-    # Render staging has no managed identity provider yet, so dev-auth is the
-    # only way to demonstrate the authorization layer there. See
-    # docs/adr/ADR-005-render-staging-experiment.md.
-    assert_dev_auth_allowed(_settings("staging"))
+def test_dev_auth_rejected_in_test() -> None:
+    with pytest.raises(DevAuthDisabledInProductionError):
+        assert_dev_auth_allowed(_settings("test"))
 
 
 def test_dev_auth_rejected_in_production() -> None:

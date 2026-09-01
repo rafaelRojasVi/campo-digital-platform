@@ -59,7 +59,7 @@ app.include_router(ingestion_router)
 # importing this module never depends on unrelated database credentials being
 # configured. app.dev_auth.assert_dev_auth_allowed still runs per-request
 # inside the /auth/dev-login handler as defense in depth.
-if os.environ.get("APP_ENV", "development") != "production":
+if os.environ.get("APP_ENV", "development") == "development":
     from app.routers.dev_auth import router as dev_auth_router
 
     app.include_router(dev_auth_router)

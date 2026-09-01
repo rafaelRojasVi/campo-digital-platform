@@ -1,4 +1,4 @@
-"""app.main must never mount dev-only auth routes under APP_ENV=production.
+"""app.main must only mount dev-only auth routes under APP_ENV=development.
 
 Also guards against a regression where mounting the router required full
 database settings (POSTGRES_PASSWORD) to resolve just to decide routing —
@@ -50,9 +50,14 @@ def test_dev_auth_routes_mounted_in_development() -> None:
     assert "AUTH_MOUNTED=True" in output
 
 
-def test_dev_auth_routes_mounted_in_staging() -> None:
+def test_dev_auth_routes_not_mounted_in_staging() -> None:
     output = _run_with_env("staging")
-    assert "AUTH_MOUNTED=True" in output
+    assert "AUTH_MOUNTED=False" in output
+
+
+def test_dev_auth_routes_not_mounted_in_test() -> None:
+    output = _run_with_env("test")
+    assert "AUTH_MOUNTED=False" in output
 
 
 def test_dev_auth_routes_not_mounted_in_production() -> None:

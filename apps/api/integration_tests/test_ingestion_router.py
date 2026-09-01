@@ -4,31 +4,81 @@ from __future__ import annotations
 
 import zipfile
 from collections.abc import Generator
+from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
 
 import pytest
-from app.deps import get_object_store
+from app.access_repository import (
+    grant_product_role,
+    list_grants_for_user,
+    resolve_or_create_app_user,
+)
+from app.deps import SESSION_COOKIE_NAME, get_object_store
+from app.dev_auth import DEFAULT_SEED_GRANTS, DEV_IDENTITY_KIND, SEEDED_DEV_IDENTITIES
 from app.main import app
 from app.object_store import LocalObjectStore
+from app.session_store import PlatformSessionStore
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
+
+_platform_sessions = PlatformSessionStore()
 
 
 @pytest.fixture
 def client(integration_engine: Engine, tmp_path: Path) -> Generator[TestClient, None, None]:
-    del integration_engine  # ensures the schema/migration fixtures ran first
     app.dependency_overrides[get_object_store] = lambda: LocalObjectStore(tmp_path / "object-store")
 
     with TestClient(app) as test_client:
+        # _login mints real sessions against the test DB and needs a live
+        # engine — app.routers.dev_auth's /auth/dev-login is only mounted
+        # under APP_ENV=development (see app.main), and this suite runs
+        # under APP_ENV=test so app.db_safety.require_test_database can
+        # prove the DB is disposable, so the HTTP dev-login endpoint is
+        # unreachable here. See test_dev_auth_router.py's module docstring.
+        test_client.engine = integration_engine
         yield test_client
 
     app.dependency_overrides.clear()
 
 
 def _login(client: TestClient, identity_key: str) -> None:
-    response = client.post("/auth/dev-login", json={"identity_key": identity_key})
-    assert response.status_code == 200, response.text
+    """Authenticate `client` as a seeded dev identity via a real
+    PlatformSessionStore session, mirroring exactly what
+    routers/dev_auth.py's dev_login handler does server-side (resolve/create
+    the app_user, seed DEFAULT_SEED_GRANTS on first login) — the only
+    difference is the minted session is a PlatformSessionStore session
+    rather than a DevSessionStore token, because DevSessionStore's fallback
+    path in app.deps.get_current_app_user is itself gated to
+    APP_ENV=development and this suite runs under APP_ENV=test."""
+
+    engine: Engine = client.engine
+    display_name = next(
+        (
+            identity.display_name
+            for identity in SEEDED_DEV_IDENTITIES
+            if identity.identity_key == identity_key
+        ),
+        identity_key,
+    )
+    with engine.connect() as connection:
+        user = resolve_or_create_app_user(
+            connection,
+            identity_kind=DEV_IDENTITY_KIND,
+            identity_key=identity_key,
+            display_name=display_name,
+        )
+        if not list_grants_for_user(connection, app_user_id=user.id):
+            for product_key, role in DEFAULT_SEED_GRANTS.get(identity_key, ()):
+                grant_product_role(
+                    connection, app_user_id=user.id, product_key=product_key, role=role
+                )
+        raw_secret = _platform_sessions.create_session(
+            connection, app_user_id=user.id, ttl=timedelta(hours=8)
+        )
+        connection.commit()
+
+    client.cookies.set(SESSION_COOKIE_NAME, raw_secret)
 
 
 def _forestry_zip_bytes() -> bytes:

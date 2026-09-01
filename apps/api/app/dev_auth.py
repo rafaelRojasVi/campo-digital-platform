@@ -2,8 +2,8 @@
 
 This is explicitly NOT a production identity provider. It exists only to
 prove the authorization layer (``app.access``) locally, by letting a
-developer pick one seeded identity and receive a real session. It must never
-run when ``APP_ENV == "production"`` — every entrypoint that constructs a
+developer pick one seeded identity and receive a real session. It must only
+run when ``APP_ENV == "development"`` — every entrypoint that constructs a
 ``DevSessionStore``-backed router must call ``assert_dev_auth_allowed`` first.
 """
 
@@ -54,9 +54,9 @@ DEFAULT_SEED_GRANTS: dict[str, tuple[tuple[str, Role], ...]] = {
 def assert_dev_auth_allowed(settings: Settings) -> None:
     """Raise unless the configured environment permits dev-only auth."""
 
-    if settings.app_env == "production":
+    if settings.app_env != "development":
         raise DevAuthDisabledInProductionError(
-            "Dev-only authentication must never run with APP_ENV=production."
+            "Dev-only authentication must never run outside APP_ENV=development."
         )
 
 
