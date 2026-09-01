@@ -12,10 +12,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from lidar_core.models import MeasurementRun, MeasurementRunStatus
+from lidar_io import output_root_discovery
 from lidar_io.output_root_discovery import (
     SOURCE_CURRENT_WORKTREE,
     SOURCE_DISCOVERED_WORKTREE,
+    SOURCE_DISCOVERY_DISABLED,
     SOURCE_ENV,
     SOURCE_NONE,
     has_visible_measurements,
@@ -202,6 +206,123 @@ def test_no_valid_candidate_anywhere_falls_back_to_current_worktree_clean_state(
 
     assert resolution.path == current_repo / "products" / "lidar" / "reports" / "out"
     assert resolution.source == SOURCE_NONE
+
+
+# ------------------------------------------------- app_env staging/production hardening
+
+
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+def test_non_development_env_never_discovers_sibling_worktree_data(
+    app_env: str, tmp_path: Path
+) -> None:
+    """QA regression: a hosted (staging/production) API process must not
+    auto-discover LiDAR report data from sibling git worktrees, even when
+    such data genuinely exists on disk."""
+
+    current_repo = tmp_path / "current"
+
+    sibling_repo = tmp_path / "sibling"
+    sibling_reports = sibling_repo / "products" / "lidar" / "reports" / "out"
+    _write_run(sibling_reports, run_id="run-sibling")
+
+    resolution = resolve_report_root(
+        current_repo,
+        env_value=None,
+        worktree_paths=[current_repo, sibling_repo],
+        app_env=app_env,
+    )
+
+    current_reports = current_repo / "products" / "lidar" / "reports" / "out"
+    assert resolution.path == current_reports
+    assert resolution.source == SOURCE_DISCOVERY_DISABLED
+
+
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+def test_non_development_env_never_trusts_own_worktree_data_either(
+    app_env: str, tmp_path: Path
+) -> None:
+    """The invariant is not just "no siblings": with no explicit
+    ``CAMPO_LIDAR_OUTPUT_ROOT``, staging/production must behave as if no
+    local report store exists at all, even if the current worktree's own
+    (gitignored) reports directory happens to contain data."""
+
+    current_repo = tmp_path / "current"
+    current_reports = current_repo / "products" / "lidar" / "reports" / "out"
+    _write_run(current_reports, run_id="run-current")
+
+    resolution = resolve_report_root(
+        current_repo,
+        env_value=None,
+        worktree_paths=[current_repo],
+        app_env=app_env,
+    )
+
+    assert resolution.path == current_reports
+    assert resolution.source == SOURCE_DISCOVERY_DISABLED
+
+
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+def test_non_development_env_never_shells_out_to_git_worktree_list(
+    app_env: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Even the read-only ``git worktree list`` probe itself must not run:
+    inspecting sibling worktrees is disallowed, not just using their data."""
+
+    def _fail_if_called(repo_root: Path) -> list[Path]:
+        raise AssertionError(
+            "discover_worktree_paths must not be called outside development"
+        )
+
+    monkeypatch.setattr(
+        output_root_discovery, "discover_worktree_paths", _fail_if_called
+    )
+
+    resolution = resolve_report_root(
+        tmp_path / "current",
+        env_value=None,
+        worktree_paths=None,
+        app_env=app_env,
+    )
+
+    assert resolution.source == SOURCE_DISCOVERY_DISABLED
+
+
+def test_non_development_env_still_honors_explicit_env_override(tmp_path: Path) -> None:
+    """The one explicitly-configured hosted report source must still work in
+    staging/production — only implicit discovery is restricted."""
+
+    explicit = tmp_path / "hosted-report-source"
+    _write_run(explicit)
+
+    resolution = resolve_report_root(
+        tmp_path / "current",
+        env_value=str(explicit),
+        worktree_paths=[tmp_path / "current"],
+        app_env="production",
+    )
+
+    assert resolution.path == explicit
+    assert resolution.source == SOURCE_ENV
+
+
+def test_development_env_keeps_existing_sibling_discovery_behavior(tmp_path: Path) -> None:
+    """Explicit non-regression check: the developer-convenience default
+    (``app_env`` defaults to development) must remain exactly as before."""
+
+    current_repo = tmp_path / "current"
+
+    sibling_repo = tmp_path / "sibling"
+    sibling_reports = sibling_repo / "products" / "lidar" / "reports" / "out"
+    _write_run(sibling_reports, run_id="run-sibling")
+
+    resolution = resolve_report_root(
+        current_repo,
+        env_value=None,
+        worktree_paths=[current_repo, sibling_repo],
+    )
+
+    assert resolution.path == sibling_reports
+    assert resolution.source == SOURCE_DISCOVERED_WORKTREE
 
 
 def test_resolve_report_root_never_writes_or_touches_candidate_files(tmp_path: Path) -> None:

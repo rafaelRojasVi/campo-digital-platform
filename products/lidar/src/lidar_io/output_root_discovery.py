@@ -11,6 +11,15 @@ runs.
 This module never copies, moves, symlinks, or modifies report data. It only
 reads directory listings to decide which existing directory to point the API
 at.
+
+That local/worktree convenience is intentionally restricted to
+``APP_ENV=development`` (see ``resolve_report_root``'s ``app_env``
+parameter). In ``staging``/``production`` a hosted API process must never
+probe sibling git worktrees, nor implicitly trust whatever happens to sit in
+its own ``products/lidar/reports/out`` — with no explicit
+``CAMPO_LIDAR_OUTPUT_ROOT``, it must fall back to the same "no report source
+configured" state the API already handles safely (``/runs`` returns an empty
+list).
 """
 
 from __future__ import annotations
@@ -27,6 +36,9 @@ SOURCE_ENV = "env"
 SOURCE_CURRENT_WORKTREE = "current-worktree"
 SOURCE_DISCOVERED_WORKTREE = "discovered-worktree"
 SOURCE_NONE = "none"
+SOURCE_DISCOVERY_DISABLED = "discovery-disabled"
+
+DEVELOPMENT_ENV = "development"
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,13 +90,15 @@ def resolve_report_root(
     *,
     env_value: str | None,
     worktree_paths: list[Path] | None = None,
+    app_env: str = DEVELOPMENT_ENV,
 ) -> ReportRootResolution:
-    """Resolves the LiDAR report-output root to use for this local demo.
+    """Resolves the LiDAR report-output root to use for this process.
 
     Precedence:
 
     1. An explicit ``env_value`` (``CAMPO_LIDAR_OUTPUT_ROOT``) always wins,
-       even if it turns out to be empty or missing.
+       even if it turns out to be empty or missing. Applies in every
+       ``app_env``.
     2. The current worktree's own ``products/lidar/reports/out``, if it
        already contains at least one API-visible run.
     3. The first other local git worktree whose ``products/lidar/reports/out``
@@ -92,12 +106,23 @@ def resolve_report_root(
     4. Otherwise, the current worktree's (possibly empty/missing)
        ``products/lidar/reports/out``, so the API keeps its legitimate empty
        state instead of erroring.
+
+    Steps 2 and 3 (local/worktree auto-discovery) only run when
+    ``app_env == "development"``. In any other environment (``staging``,
+    ``production``, etc.) this function never lists worktrees or probes any
+    directory for report data; it returns the step-4 result directly
+    (tagged ``SOURCE_DISCOVERY_DISABLED`` instead of ``SOURCE_NONE``, so
+    callers/logs can tell "nothing found" apart from "not even allowed to
+    look"), exactly as if no local data existed anywhere.
     """
 
     if env_value:
         return ReportRootResolution(Path(env_value), SOURCE_ENV)
 
     current_candidate = repo_root / REPORTS_RELATIVE_PATH
+
+    if app_env != DEVELOPMENT_ENV:
+        return ReportRootResolution(current_candidate, SOURCE_DISCOVERY_DISABLED)
 
     if has_visible_measurements(current_candidate):
         return ReportRootResolution(current_candidate, SOURCE_CURRENT_WORKTREE)

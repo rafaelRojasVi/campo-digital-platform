@@ -109,6 +109,27 @@ sets `CAMPO_LIDAR_OUTPUT_ROOT` for `campo-digital-api-staging`, which is what
 keeps the deployed behavior at the safe, verified `[]` case rather than the
 developer-machine case.
 
+**DECISION (pre-deploy hardening, QA finding).** The paragraph above relied
+on environmental happenstance — "safe because no sibling worktrees exist on
+Render" — rather than a code-level guarantee. QA correctly flagged that as
+insufficient: any hosted `APP_ENV` (`staging`, `production`) that ever did
+have sibling worktree paths reachable on disk would silently serve their
+report data. `resolve_report_root` now takes an `app_env` parameter
+(`apps/api/app/routers/lidar.py:get_output_root` passes
+`os.environ.get("APP_ENV", "development")` straight through, matching the
+raw-env-read pattern already used in `app/main.py`): local/worktree
+auto-discovery (current-worktree and sibling-worktree probing, including the
+`git worktree list` subprocess call) now only runs when `app_env ==
+"development"`. In every other environment, with no explicit
+`CAMPO_LIDAR_OUTPUT_ROOT`, it returns the same `[]`-producing fallback
+directly (tagged `SOURCE_DISCOVERY_DISABLED`), without ever listing worktrees
+or probing any directory. This makes the STAGING/production `[]` behavior an
+enforced invariant rather than a fact about the current Render checkout
+layout — see `products/lidar/tests/test_output_root_discovery.py` and
+`apps/api/tests/test_output_root_resolution.py` for the regression coverage,
+including an end-to-end case where real sibling measurement data exists on
+disk and is proven both unreturned and untouched.
+
 **Forestry — B on paper, deferred (honest not-yet-hosted) this slice.** The
 dashboard (worktree `feat/forestry-dashboard-v1`) has no static/offline data
 path — `src/api.ts` always calls `/api/forestry/*` — so hosting it would

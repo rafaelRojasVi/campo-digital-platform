@@ -26,14 +26,24 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 def get_output_root() -> Path:
     """Return the local measurement-output root to serve.
 
-    An explicit ``CAMPO_LIDAR_OUTPUT_ROOT`` always wins; otherwise the report
-    store is discovered automatically across local git worktrees. See
-    ``lidar_io.output_root_discovery`` for the precedence rules.
+    An explicit ``CAMPO_LIDAR_OUTPUT_ROOT`` always wins; otherwise, only in
+    ``APP_ENV=development``, the report store is discovered automatically
+    across local git worktrees. In any other ``APP_ENV`` (staging,
+    production, ...) that discovery is disabled — a hosted API process must
+    never inspect sibling worktrees or implicitly trust local report state —
+    and this falls back to the same "no report source configured" state the
+    API already handles safely. See ``lidar_io.output_root_discovery`` for
+    the full precedence rules.
+
+    Read straight from the process environment, like the ``APP_ENV`` checks
+    in ``app.main``, so resolving this never requires the full
+    ``app.config.Settings`` (and its database credentials) to be configured.
     """
 
     resolution = resolve_report_root(
         REPO_ROOT,
         env_value=os.environ.get("CAMPO_LIDAR_OUTPUT_ROOT"),
+        app_env=os.environ.get("APP_ENV", "development"),
     )
     return resolution.path
 
