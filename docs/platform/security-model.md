@@ -128,11 +128,19 @@ LOCAL, STAGING, and PRODUCTION must not share credentials. Staging uses syntheti
 
 Claude/AI tooling is not a runtime security component. It must respect private-data, architecture, permission, and evidence rules exactly like human engineering work.
 
+## Session and token strategy
+
+Decided: real (non-dev-auth) sessions are hashed-cookie, Postgres-backed
+(`platform.session`, migration `0007`). The server issues a
+`secrets.token_urlsafe(32)` raw secret as the session cookie value and
+persists only its SHA-256 hash — the raw secret itself is never stored. See
+`apps/api/app/session_store.py` (`PlatformSessionStore`) and
+`../adr/ADR-006-restrict-dev-auth-to-development.md`.
+
 ## Open decisions
 
 - production identity provider;
 - final user/role model;
-- session/token strategy;
 - production network topology;
 - signed-object delivery implementation;
 - audit retention;

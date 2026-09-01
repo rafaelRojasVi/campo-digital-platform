@@ -12,30 +12,26 @@ the DB-safety check passes" and "APP_ENV=development so the router is
 mounted", so these tests can no longer drive the router's behavior through
 real HTTP calls (that would 404 under APP_ENV=test).
 
-Instead, each test exercises the same underlying code the router's handlers
-call internally — either by calling those handler functions directly with a
+Instead, each test exercises the router's handler functions directly, with a
 locally constructed, non-ambient ``Settings(app_env="development", ...)``
 (which legitimately satisfies ``assert_dev_auth_allowed`` without touching
-process ``os.environ``), or, for the default-grant-seeding behavior, by
-mirroring the handler's own repository calls per the reviewer's ruling in
-task-4-report.md. Test intent is preserved; only the transport is not HTTP.
+process ``os.environ``). Test intent is preserved; only the transport is not
+HTTP.
 """
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
-from app.access_repository import (
-    grant_product_role,
-    list_grants_for_user,
-    resolve_or_create_app_user,
-)
+from app.access_repository import resolve_or_create_app_user
 from app.config import Settings
 from app.deps import get_current_app_user
-from app.dev_auth import DEFAULT_SEED_GRANTS, DEV_IDENTITY_KIND, DevSessionStore
-from app.routers.dev_auth import DevLoginRequest, dev_login
+from app.dev_auth import DEV_IDENTITY_KIND, DevSessionStore
+from app.routers.dev_auth import DevLoginRequest, dev_login, logout
 from app.session_store import PlatformSessionStore
 from fastapi import HTTPException, Response
-from sqlalchemy import Connection
+from sqlalchemy import Connection, text
 
 
 def _development_settings() -> Settings:
@@ -103,29 +99,49 @@ def test_dev_login_unknown_identity_returns_422(integration_connection: Connecti
     assert exc_info.value.status_code == 422
 
 
-def test_dev_login_seeds_default_grants_for_new_user(integration_connection: Connection) -> None:
-    """A first-time dev-admin login seeds DEFAULT_SEED_GRANTS, mirroring
-    exactly what routers/dev_auth.py's dev_login handler does internally
-    (resolve_or_create_app_user, then grant_product_role per default grant,
-    since list_grants_for_user is empty for a brand-new user)."""
+def test_dev_login_seeds_grants_sets_cookie_and_audits_session(
+    integration_connection: Connection,
+) -> None:
+    """Calling the real dev_login handler for a first-time dev-admin login
+    must: seed DEFAULT_SEED_GRANTS, set a session cookie with the expected
+    security flags, and record a session.created audit event — exercising
+    the handler itself rather than reimplementing its body, so this test
+    would fail if dev_login stopped doing any of the above."""
 
     identity_key = "dev-admin"
+    response = Response()
+
+    result = dev_login(
+        DevLoginRequest(identity_key=identity_key),
+        response,
+        _development_settings(),
+        DevSessionStore(),
+        integration_connection,
+    )
+
+    assert result.identity_key == identity_key
+    product_keys = {grant.product_key for grant in result.product_grants}
+    assert product_keys == {"lidar", "forestry", "transelect"}
+
+    set_cookie_header = response.headers.get("set-cookie")
+    assert set_cookie_header is not None
+    assert "HttpOnly" in set_cookie_header
+    assert "samesite=lax" in set_cookie_header.lower()
+
     user = resolve_or_create_app_user(
         integration_connection,
         identity_kind=DEV_IDENTITY_KIND,
         identity_key=identity_key,
         display_name="Dev Admin",
     )
-    assert not list_grants_for_user(integration_connection, app_user_id=user.id)
-
-    for product_key, role in DEFAULT_SEED_GRANTS[identity_key]:
-        grant_product_role(
-            integration_connection, app_user_id=user.id, product_key=product_key, role=role
-        )
-
-    grants = list_grants_for_user(integration_connection, app_user_id=user.id)
-    product_keys = {grant.product_key for grant in grants}
-    assert product_keys == {"lidar", "forestry", "transelect"}
+    audit_row = integration_connection.execute(
+        text(
+            "SELECT event_type FROM platform.audit_event "
+            "WHERE actor_app_user_id = :app_user_id AND event_type = 'session.created'"
+        ),
+        {"app_user_id": user.id},
+    ).one_or_none()
+    assert audit_row is not None
 
 
 def test_session_lifecycle_create_resolve_and_logout_clear(
@@ -160,3 +176,33 @@ def test_session_lifecycle_create_resolve_and_logout_clear(
 
     session_store.clear_session(token)
     assert session_store.resolve_session(token) is None
+
+
+def test_logout_revokes_platform_session(integration_connection: Connection) -> None:
+    """POST /auth/logout's handler must invalidate the caller's server-side
+    PlatformSessionStore session, not just clear the cookie — otherwise a
+    cleared cookie leaves a fully valid platform.session row reachable by
+    anyone who still has the raw secret."""
+
+    user = resolve_or_create_app_user(
+        integration_connection,
+        identity_kind=DEV_IDENTITY_KIND,
+        identity_key="dev-logout-subject",
+        display_name="Dev Logout Subject",
+    )
+    platform_sessions = PlatformSessionStore()
+    raw_secret = platform_sessions.create_session(
+        integration_connection, app_user_id=user.id, ttl=timedelta(hours=1)
+    )
+    assert platform_sessions.resolve_session(integration_connection, raw_secret) == user.id
+
+    logout(
+        Response(),
+        DevSessionStore(),
+        platform_sessions,
+        integration_connection,
+        user.identity_key,
+        raw_secret,
+    )
+
+    assert platform_sessions.resolve_session(integration_connection, raw_secret) is None

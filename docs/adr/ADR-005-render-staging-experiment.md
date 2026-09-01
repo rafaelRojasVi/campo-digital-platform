@@ -84,6 +84,12 @@ migration success, which a build-step migration does not).
 
 ### `APP_ENV=staging` and dev-auth
 
+**Superseded by `ADR-006-restrict-dev-auth-to-development.md`.** This
+section is kept as the historical record of the original decision; dev-auth
+is no longer enabled in staging — see ADR-006 for the current behavior and
+rationale. The rest of this ADR (staging deployment architecture, region,
+migration execution, object storage, health check) is unaffected.
+
 `app.config.Settings.app_env` was extended from
 `Literal["development", "test", "production"]` to
 `Literal["development", "test", "staging", "production"]`. This was the one

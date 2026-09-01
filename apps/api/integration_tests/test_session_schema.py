@@ -10,17 +10,25 @@ from sqlalchemy import Connection, text
 
 
 def test_session_table_has_expected_columns(integration_connection: Connection) -> None:
-    rows = integration_connection.execute(
-        text(
-            """
+    rows = (
+        integration_connection.execute(
+            text(
+                """
             SELECT column_name FROM information_schema.columns
             WHERE table_schema = 'platform' AND table_name = 'session'
             """
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert set(rows) == {
-        "id", "session_secret_hash", "app_user_id",
-        "created_at", "last_seen_at", "expires_at",
+        "id",
+        "session_secret_hash",
+        "app_user_id",
+        "created_at",
+        "last_seen_at",
+        "expires_at",
     }
 
 

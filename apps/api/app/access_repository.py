@@ -174,5 +174,7 @@ def maybe_grant_bootstrap_admin(
         return False
 
     for product_key in _BOOTSTRAP_PRODUCT_KEYS:
-        grant_product_role(connection, app_user_id=app_user_id, product_key=product_key, role=Role.ADMIN)
+        grant_product_role(
+            connection, app_user_id=app_user_id, product_key=product_key, role=Role.ADMIN
+        )
     return True

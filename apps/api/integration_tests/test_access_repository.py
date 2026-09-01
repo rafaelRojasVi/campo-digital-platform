@@ -95,49 +95,78 @@ def _bootstrap_settings() -> Settings:
     )
 
 
-def test_bootstrap_grants_admin_on_all_products_for_matching_identity(integration_connection: Connection) -> None:
+def test_bootstrap_grants_admin_on_all_products_for_matching_identity(
+    integration_connection: Connection,
+) -> None:
     user = resolve_or_create_app_user(
-        integration_connection, identity_kind="entra", identity_key="tenant-x:oid-y",
+        integration_connection,
+        identity_kind="entra",
+        identity_key="tenant-x:oid-y",
         display_name="Bootstrap Admin",
     )
 
     granted = maybe_grant_bootstrap_admin(
-        integration_connection, settings=_bootstrap_settings(),
-        tenant_id="tenant-x", object_id="oid-y", app_user_id=user.id,
+        integration_connection,
+        settings=_bootstrap_settings(),
+        tenant_id="tenant-x",
+        object_id="oid-y",
+        app_user_id=user.id,
     )
 
     assert granted is True
-    grants = {g.product_key: g.role.value for g in list_grants_for_user(integration_connection, app_user_id=user.id)}
+    grants = {
+        g.product_key: g.role.value
+        for g in list_grants_for_user(integration_connection, app_user_id=user.id)
+    }
     assert grants == {"lidar": "admin", "forestry": "admin", "transelect": "admin"}
 
 
-def test_bootstrap_does_not_fire_for_non_matching_identity(integration_connection: Connection) -> None:
+def test_bootstrap_does_not_fire_for_non_matching_identity(
+    integration_connection: Connection,
+) -> None:
     user = resolve_or_create_app_user(
-        integration_connection, identity_kind="entra", identity_key="tenant-x:someone-else",
+        integration_connection,
+        identity_kind="entra",
+        identity_key="tenant-x:someone-else",
         display_name="Regular User",
     )
 
     granted = maybe_grant_bootstrap_admin(
-        integration_connection, settings=_bootstrap_settings(),
-        tenant_id="tenant-x", object_id="someone-else", app_user_id=user.id,
+        integration_connection,
+        settings=_bootstrap_settings(),
+        tenant_id="tenant-x",
+        object_id="someone-else",
+        app_user_id=user.id,
     )
 
     assert granted is False
     assert list_grants_for_user(integration_connection, app_user_id=user.id) == ()
 
 
-def test_bootstrap_does_not_fire_if_user_already_has_a_grant(integration_connection: Connection) -> None:
+def test_bootstrap_does_not_fire_if_user_already_has_a_grant(
+    integration_connection: Connection,
+) -> None:
     user = resolve_or_create_app_user(
-        integration_connection, identity_kind="entra", identity_key="tenant-x:oid-y",
+        integration_connection,
+        identity_kind="entra",
+        identity_key="tenant-x:oid-y",
         display_name="Bootstrap Admin",
     )
-    grant_product_role(integration_connection, app_user_id=user.id, product_key="forestry", role=Role.VIEWER)
+    grant_product_role(
+        integration_connection, app_user_id=user.id, product_key="forestry", role=Role.VIEWER
+    )
 
     granted = maybe_grant_bootstrap_admin(
-        integration_connection, settings=_bootstrap_settings(),
-        tenant_id="tenant-x", object_id="oid-y", app_user_id=user.id,
+        integration_connection,
+        settings=_bootstrap_settings(),
+        tenant_id="tenant-x",
+        object_id="oid-y",
+        app_user_id=user.id,
     )
 
     assert granted is False
-    grants = {g.product_key: g.role.value for g in list_grants_for_user(integration_connection, app_user_id=user.id)}
+    grants = {
+        g.product_key: g.role.value
+        for g in list_grants_for_user(integration_connection, app_user_id=user.id)
+    }
     assert grants == {"forestry": "viewer"}

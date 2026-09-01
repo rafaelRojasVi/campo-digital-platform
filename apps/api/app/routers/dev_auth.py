@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import Connection
 
@@ -25,6 +25,7 @@ from app.deps import (
     get_current_app_user,
     get_current_identity_key,
     get_db_connection,
+    get_platform_session_store,
     get_session_store,
 )
 from app.dev_auth import (
@@ -34,6 +35,7 @@ from app.dev_auth import (
     DevSessionStore,
     assert_dev_auth_allowed,
 )
+from app.session_store import PlatformSessionStore
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -121,9 +123,22 @@ def me(
 def logout(
     response: Response,
     session_store: Annotated[DevSessionStore, Depends(get_session_store)],
+    platform_sessions: Annotated[PlatformSessionStore, Depends(get_platform_session_store)],
+    connection: Annotated[Connection, Depends(get_db_connection)],
     identity_key: Annotated[str, Depends(get_current_identity_key)],
+    session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)] = None,
 ) -> None:
-    """Clear the current dev session."""
+    """Clear the current session, both server-side and via the cookie.
+
+    ``get_current_identity_key`` (via ``get_current_app_user``) already
+    proved a session resolved, from either PlatformSessionStore or
+    DevSessionStore — but not which one. Clearing on both stores is safe:
+    each ``clear_session`` call is a no-op delete against a hash that won't
+    match rows it doesn't own.
+    """
 
     del identity_key  # authenticates the call; the token itself is read via the cookie
+    if session_token is not None:
+        platform_sessions.clear_session(connection, session_token)
+        session_store.clear_session(session_token)
     response.delete_cookie(SESSION_COOKIE_NAME)

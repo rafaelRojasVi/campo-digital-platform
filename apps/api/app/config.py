@@ -68,9 +68,7 @@ class Settings(BaseSettings):
         default=None, validation_alias="PLATFORM_BOOTSTRAP_ADMIN_OBJECT_ID"
     )
 
-    enable_onedrive_import: bool = Field(
-        default=False, validation_alias="ENABLE_ONEDRIVE_IMPORT"
-    )
+    enable_onedrive_import: bool = Field(default=False, validation_alias="ENABLE_ONEDRIVE_IMPORT")
     staging_execution_max_bytes: int = Field(
         default=25 * 1024 * 1024,
         validation_alias="STAGING_EXECUTION_MAX_BYTES",

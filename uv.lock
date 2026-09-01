@@ -291,7 +291,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", marker = "extra == 'api'", specifier = ">=1.13" },
-    { name = "cryptography", marker = "extra == 'api'", specifier = ">=43.0,<44" },
+    { name = "cryptography", marker = "extra == 'api'", specifier = ">=43.0" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.111" },
     { name = "jupyterlab", marker = "extra == 'analysis'", specifier = ">=4.2" },
     { name = "laspy", extras = ["lazrs"], specifier = ">=2.5" },

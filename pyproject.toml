@@ -39,7 +39,7 @@ api = [
   "sqlalchemy>=2.0",
   "uvicorn>=0.30",
   "msal>=1.28,<2",
-  "cryptography>=43.0,<44",
+  "cryptography>=43.0",
 ]
 
 [project.scripts]

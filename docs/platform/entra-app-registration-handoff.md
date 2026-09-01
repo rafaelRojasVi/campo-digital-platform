@@ -67,3 +67,10 @@ second permission grant is needed:
   only `openid profile` (sign-in) and, for a small set of upload-capable
   users, read access to the specific OneDrive/SharePoint location
   configured in `config/source-catalog.yaml`.
+
+## Related documentation
+
+[Platform documentation](README.md) ·
+[Security model](security-model.md) ·
+[ADR-006 — Restrict dev-auth to development](../adr/ADR-006-restrict-dev-auth-to-development.md) ·
+[OneDrive source-system boundary](../source-systems/onedrive.md)
