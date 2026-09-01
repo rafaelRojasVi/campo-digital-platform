@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import Connection, text
 
 from app.access import Role
+from app.config import Settings
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,3 +149,30 @@ def list_grants_for_user(
     ).all()
 
     return tuple(ProductGrant(product_key=row.product_key, role=Role(row.role)) for row in rows)
+
+
+_BOOTSTRAP_PRODUCT_KEYS = ("lidar", "forestry", "transelect")
+
+
+def maybe_grant_bootstrap_admin(
+    connection: Connection,
+    *,
+    settings: Settings,
+    tenant_id: str,
+    object_id: str,
+    app_user_id: int,
+) -> bool:
+    """Grant one-time bootstrap ADMIN if this identity matches config and holds no grants."""
+
+    configured_tenant = settings.platform_bootstrap_admin_tenant_id
+    configured_object = settings.platform_bootstrap_admin_object_id
+    if not configured_tenant or not configured_object:
+        return False
+    if configured_tenant != tenant_id or configured_object != object_id:
+        return False
+    if list_grants_for_user(connection, app_user_id=app_user_id):
+        return False
+
+    for product_key in _BOOTSTRAP_PRODUCT_KEYS:
+        grant_product_role(connection, app_user_id=app_user_id, product_key=product_key, role=Role.ADMIN)
+    return True
