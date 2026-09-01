@@ -89,6 +89,13 @@ campo-stop:
 # campo-demo/campo-status/campo-stop above — see docs/superpowers/plans/
 # 2026-09-01-platform-ingestion-access-foundation.md. Requires a local .env
 # (copy .env.example) with POSTGRES_PASSWORD set for the dev database.
+#
+# Caution: this serves the SAME apps/api/app/main:app process that
+# lidar-dev/campo-demo start (scripts/lidar_dev.py), on a fixed port 8000
+# with no free-port fallback. Do not run platform-local alongside
+# lidar-dev/campo-demo: besides the port clash, lidar-dev deliberately never
+# runs migrations, so the /ingesta and /auth routers this app now also
+# mounts will fail against a lidar-dev-started process.
 platform-local:
 	docker compose up -d --wait postgres
 	PYTHONPATH=apps/api uv run alembic upgrade head

@@ -20,6 +20,13 @@ Readiness is checked against ``/health`` (dependency-free liveness), not
 ``/ready`` (which requires a live PostgreSQL connection), so this launcher
 does not force a database dependency just to demo the viewer.
 
+``apps/api/app/main.py`` now also mounts the platform ingestion/access
+routers (``/ingesta``, ``/auth``) alongside the LiDAR router on the same
+app. Those endpoints need migrations applied, which this launcher
+intentionally does not do — they will fail against a process started here.
+Use ``make platform-local`` (not this launcher) to exercise them, and never
+run both against the same port at once (see the Makefile).
+
 Safety model mirrors ``scripts/_local_process.py`` / the Forestry and
 Transelec worktree launchers: ``stop`` re-verifies each recorded PID against
 ``/proc/<pid>/cmdline`` before signaling it, so it only ever stops processes
