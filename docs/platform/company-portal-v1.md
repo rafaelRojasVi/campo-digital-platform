@@ -94,11 +94,15 @@ owned launchers:
 - **LiDAR** — `make lidar-dev` / `make lidar-status` / `make lidar-stop` in
   *this* worktree (`scripts/lidar_dev.py`, new in this change — LiDAR had no
   single-command launcher before). It starts the existing FastAPI app and
-  the existing Vite viewer on free ports. It does not run migrations, does
-  not ingest anything, and does not change scientific/measurement behavior.
-  Readiness is checked against `/health` (dependency-free), not `/ready`
-  (which requires PostgreSQL), so demoing the viewer does not force a
-  database dependency.
+  the existing Vite viewer on free ports. It does not ingest anything and
+  does not change scientific/measurement behavior. The viewer's own
+  readiness is checked against `/health` (dependency-free), not `/ready`
+  (which requires PostgreSQL), so the *viewer* never depends on the
+  database — but the shared API it starts alongside it now also serves the
+  platform ingestion/access routers, so starting it brings up the local
+  `postgres` service and applies migrations first (`scripts/_platform_db.py`;
+  see [source ingestion](source-ingestion.md) and
+  [production platform V1](production-platform-v1.md)).
 - **Forestry** — `make forestry-dev` / `-status` / `-stop`, unchanged,
   invoked in the sibling worktree checked out at
   `feat/forestry-dashboard-v1`.

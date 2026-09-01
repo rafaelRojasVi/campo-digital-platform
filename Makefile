@@ -1,4 +1,4 @@
-.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check lidar-dev lidar-status lidar-stop campo-demo campo-status campo-stop platform-local platform-worker platform-worker-concurrency
+.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check lidar-dev lidar-status lidar-stop campo-demo campo-status campo-stop ensure-platform-db platform-local platform-worker platform-worker-concurrency
 
 N ?= 2
 
@@ -85,28 +85,34 @@ campo-status:
 campo-stop:
 	uv run python scripts/campo_demo.py stop
 
-# Local platform ingestion/access foundation. Deliberately independent of
-# campo-demo/campo-status/campo-stop above — see docs/superpowers/plans/
+# Local platform ingestion/access foundation. See docs/superpowers/plans/
 # 2026-09-01-platform-ingestion-access-foundation.md. Requires a local .env
 # (copy .env.example) with POSTGRES_PASSWORD set for the dev database.
 #
-# Caution: this serves the SAME apps/api/app/main:app process that
-# lidar-dev/campo-demo start (scripts/lidar_dev.py), on a fixed port 8000
-# with no free-port fallback. Do not run platform-local alongside
-# lidar-dev/campo-demo: besides the port clash, lidar-dev deliberately never
-# runs migrations, so the /ingesta and /auth routers this app now also
-# mounts will fail against a lidar-dev-started process.
-platform-local:
-	docker compose up -d --wait postgres
-	PYTHONPATH=apps/api uv run alembic upgrade head
-	APP_ENV=development PYTHONPATH=apps/api uv run uvicorn app.main:app --reload --port 8000
+# ensure-platform-db is the one shared readiness step (bring up `postgres`,
+# apply migrations to head) used by every local entry point that touches the
+# shared platform schema — this target, lidar-dev/campo-demo (via
+# scripts/lidar_dev.py), and the worker targets below. See
+# scripts/_platform_db.py for why this gives migrations a single,
+# predictable owner without requiring only one process be allowed to run
+# them.
+ensure-platform-db:
+	uv run python scripts/ensure_platform_db.py
 
-platform-worker:
+# Foreground, --reload dev server for the shared app.main:app process — the
+# SAME process lidar-dev/campo-demo start in the background on a
+# free-chosen port. scripts/platform_local.py refuses to start (rather than
+# collide on port 8000) if lidar-dev/campo-demo already owns a running
+# instance; use that instance instead, or `make lidar-stop` first.
+platform-local:
+	uv run python scripts/platform_local.py
+
+platform-worker: ensure-platform-db
 	APP_ENV=development PYTHONPATH=apps/api uv run python -m app.worker
 
 # Run N concurrent local workers claiming from the same PostgreSQL queue via
 # SELECT ... FOR UPDATE SKIP LOCKED. Override with `make platform-worker-concurrency N=4`.
-platform-worker-concurrency:
+platform-worker-concurrency: ensure-platform-db
 	@for i in $$(seq 1 $(N)); do \
 		APP_ENV=development PYTHONPATH=apps/api uv run python -m app.worker & \
 	done; \

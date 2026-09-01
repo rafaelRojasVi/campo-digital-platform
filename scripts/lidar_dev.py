@@ -12,20 +12,21 @@ alongside the Forestry and Transelec local demos without a port clash.
 
 It does NOT:
 
-- run migrations or touch the database schema;
 - ingest or write any source/measurement data;
 - change any scientific/measurement behavior.
 
 Readiness is checked against ``/health`` (dependency-free liveness), not
-``/ready`` (which requires a live PostgreSQL connection), so this launcher
-does not force a database dependency just to demo the viewer.
+``/ready`` (which requires a live PostgreSQL connection) — the viewer itself
+never depends on the database.
 
-``apps/api/app/main.py`` now also mounts the platform ingestion/access
-routers (``/ingesta``, ``/auth``) alongside the LiDAR router on the same
-app. Those endpoints need migrations applied, which this launcher
-intentionally does not do — they will fail against a process started here.
-Use ``make platform-local`` (not this launcher) to exercise them, and never
-run both against the same port at once (see the Makefile).
+``apps/api/app/main.py`` mounts the platform ingestion/access routers
+(``/ingesta``, ``/auth``) alongside the LiDAR router on the same app, so
+starting the API here also brings up the local ``postgres`` service and
+applies migrations first (see ``scripts/_platform_db.py``), the one shared
+readiness step every launcher of this app uses. This is the SAME process
+``make platform-local`` starts (in foreground, with ``--reload``, for active
+ingestion/access development instead); the two refuse to run at once — see
+``scripts/platform_local.py``.
 
 Safety model mirrors ``scripts/_local_process.py`` / the Forestry and
 Transelec worktree launchers: ``stop`` re-verifies each recorded PID against
@@ -51,6 +52,7 @@ from _local_process import (  # noqa: E402
     stop_process,
     wait_for_http,
 )
+from _platform_db import PlatformDatabaseError, ensure_platform_database_ready  # noqa: E402
 
 from lidar_io.output_root_discovery import (  # noqa: E402
     SOURCE_CURRENT_WORKTREE,
@@ -91,6 +93,11 @@ def start_api() -> tuple[int, int]:
     if existing is not None and is_ours(existing):
         log(f"API already running on port {existing.port}")
         return existing.port, existing.pid
+
+    try:
+        ensure_platform_database_ready()
+    except PlatformDatabaseError as exc:
+        raise LauncherError(str(exc)) from exc
 
     port = find_free_port(API_PREFERRED_PORT)
     marker = f"uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port {port}"

@@ -26,6 +26,11 @@ def test_start_api_adopts_an_already_running_instance(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(lidar_dev, "spawn", fail_if_spawned)
 
+    def fail_if_db_checked() -> None:
+        raise AssertionError("must not touch the database when adopting an existing process")
+
+    monkeypatch.setattr(lidar_dev, "ensure_platform_database_ready", fail_if_db_checked)
+
     port, pid = lidar_dev.start_api()
 
     assert (port, pid) == (8000, 123)
@@ -36,6 +41,7 @@ def test_start_api_spawns_a_new_process_when_none_is_recorded(
 ) -> None:
     monkeypatch.setattr(lidar_dev, "load_process", lambda _dir, _name: None)
     monkeypatch.setattr(lidar_dev, "find_free_port", lambda _preferred: 8123)
+    monkeypatch.setattr(lidar_dev, "ensure_platform_database_ready", lambda: None)
 
     spawned = ManagedProcess(name="api", pid=555, port=8123, marker="m")
     monkeypatch.setattr(lidar_dev, "spawn", lambda *a, **k: spawned)
@@ -49,10 +55,28 @@ def test_start_api_spawns_a_new_process_when_none_is_recorded(
 def test_start_api_raises_when_it_never_becomes_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(lidar_dev, "load_process", lambda _dir, _name: None)
     monkeypatch.setattr(lidar_dev, "find_free_port", lambda _preferred: 8123)
+    monkeypatch.setattr(lidar_dev, "ensure_platform_database_ready", lambda: None)
     monkeypatch.setattr(lidar_dev, "spawn", lambda *a, **k: ManagedProcess("api", 555, 8123, "m"))
     monkeypatch.setattr(lidar_dev, "wait_for_http", lambda _url, _timeout: False)
 
     with pytest.raises(lidar_dev.LauncherError):
+        lidar_dev.start_api()
+
+
+def test_start_api_raises_when_database_is_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(lidar_dev, "load_process", lambda _dir, _name: None)
+
+    def raise_db_error() -> None:
+        raise lidar_dev.PlatformDatabaseError("db not ready")
+
+    monkeypatch.setattr(lidar_dev, "ensure_platform_database_ready", raise_db_error)
+
+    def fail_if_spawned(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("must not spawn the API when the database is not ready")
+
+    monkeypatch.setattr(lidar_dev, "spawn", fail_if_spawned)
+
+    with pytest.raises(lidar_dev.LauncherError, match="db not ready"):
         lidar_dev.start_api()
 
 
