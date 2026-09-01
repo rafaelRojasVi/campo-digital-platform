@@ -8,14 +8,21 @@ implemented (Phase 5 of the [platform roadmap](roadmap.md)).
 **FACT** — local module navigation/composition (portal home, per-module
 shells, iframe embedding, module switcher, back navigation) is implemented.
 
-**LIMITATION** — this is a local development demo shell. There is no
-authentication, no production routing, no deployment, and no multi-tenant
-access. See [Production platform V1](production-platform-v1.md) and
-[Environments and infrastructure costs](environments-and-costs.md) for what
-production would still require.
+**FACT** — the portal is also deployed to a $0 Render STAGING blueprint
+(`render.yaml`, `ADR-005`), explicitly LOCAL/STAGING-aware
+([ADR-007](../adr/ADR-007-hosted-product-composition-v1.md)), with one
+hosted product module (LiDAR) and an honest not-yet-hosted state for the
+other two. This is still not production: STAGING has no real sign-in
+mechanism (dev-auth is development-only per
+[ADR-006](../adr/ADR-006-restrict-dev-auth-to-development.md), and Entra ID
+sign-in remains externally blocked), no durable object storage, and no
+multi-tenant access. See [Production platform V1](production-platform-v1.md)
+and [Environments and infrastructure costs](environments-and-costs.md) for
+what production would still require.
 
-**OPEN QUESTION** — none of the above is scheduled; Phase 6 (production
-deployment) remains unstarted.
+**OPEN QUESTION** — Entra ID sign-in, and therefore any real STAGING
+authentication, remains externally blocked; Phase 6 (production deployment)
+remains unstarted.
 
 ## Purpose
 
@@ -38,21 +45,27 @@ shared front door, shared branding, and a shared local demo launcher.
   directly import another product application." The portal does not import
   any product's frontend code; it treats each product dashboard as an
   external URL.
-- **Local composition strategy: iframe.** Each product dashboard keeps
-  running as its own independent Vite dev server (or, later, its own
-  deployed origin) on its own port. The portal embeds it inside a thin
-  Campo Digital header (`← Campo Digital`, current module name, a compact
-  module switcher, "Abrir en pestaña nueva") using an `<iframe>` that fills
-  the remaining viewport.
-- **This iframe composition is a LOCAL DEMO strategy, not a production
-  routing architecture.** It was chosen because it lets three independently
-  developed, independently versioned dashboards be demoed from one URL
-  without rewriting any of them. Production integration (Phase 6) will need
-  a real decision about routing, embedding vs. server-side composition, and
-  cross-origin session/auth — none of that is decided here.
+- **Composition strategy: iframe, in both LOCAL and STAGING.** Each product
+  dashboard keeps running as its own independent origin — a local Vite dev
+  server in LOCAL, or its own deployed Render static site in STAGING. The
+  portal embeds it inside a thin Campo Digital header (`← Campo Digital`,
+  current module name, a compact module switcher, "Abrir en pestaña nueva")
+  using an `<iframe>` that fills the remaining viewport. This was chosen
+  because it lets independently developed, independently versioned
+  dashboards be composed from one URL without rewriting any of them —
+  including once a dashboard becomes hosted, per
+  [ADR-007](../adr/ADR-007-hosted-product-composition-v1.md).
 - The portal never imports, reads, or renders another product's source code.
   It only knows: a module's id, its display copy/facts, and (at runtime) the
-  URL and status a launcher told it about.
+  URL and status a launcher (LOCAL) or build-time hosted-module registry
+  (STAGING) told it about.
+- **The portal is explicitly LOCAL/STAGING-aware**, not just "always assume
+  local." `apps/portal/src/runtime/environment.ts` resolves a build-time
+  `CampoEnvironment` from `VITE_CAMPO_ENV`; `/estado` and every module's
+  unavailable-state copy branch on it, so a public STAGING visitor never
+  sees local-only language like "Demo no iniciada" or "Iniciado por Campo
+  Demo." See [ADR-007](../adr/ADR-007-hosted-product-composition-v1.md) for
+  the full mechanism and the per-product hosting decision it records.
 
 ## Information architecture
 
@@ -78,7 +91,32 @@ Routes:
 
 - `/` — company home, three product panels.
 - `/modulo/lidar`, `/modulo/forestal`, `/modulo/transelec` — module shells.
-- `/estado` — developer/status diagnostics (ports, URLs, ownership).
+- `/estado` — status diagnostics. LOCAL: ports, URLs, process ownership.
+  STAGING: hosted availability, no process-ownership column.
+- `/archivos` — the ingestion/access UI (upload, jobs, audit), first-class
+  in the Home nav. LOCAL: local dev-identity sign-in. STAGING: an honest
+  "sign-in not available yet" message, since dev-auth is
+  development-only ([ADR-006](../adr/ADR-006-restrict-dev-auth-to-development.md))
+  and no other sign-in exists yet.
+
+## STAGING hosted composition
+
+See [ADR-007](../adr/ADR-007-hosted-product-composition-v1.md) for the full
+decision record. Summary:
+
+- **LiDAR is hosted.** `campo-digital-lidar-staging` is a new Render free
+  static site (`render.yaml`) serving `products/lidar/dashboard` unmodified,
+  talking to the already-deployed `campo-digital-api-staging` service via
+  the same same-origin `/api/*` rewrite the portal itself uses. No new
+  backend, no new database, no synthetic or real data shipped — the hosted
+  state is a genuinely empty `GET /runs` response, verified against a local
+  API instance configured the same way Render's fresh checkout will be.
+- **Forestry and Transelec are not hosted this slice.** The portal shows an
+  honest "not yet available publicly" state for both — never a fake green
+  status — because hosting either safely would require either fabricating
+  synthetic business data (Forestry) or standing up durable storage this
+  free tier does not support for a design that was never meant to be public
+  (Transelec). See ADR-007's classification for the evidence behind both.
 
 ## Local demo orchestrator
 
