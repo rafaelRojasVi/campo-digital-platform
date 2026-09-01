@@ -9,7 +9,9 @@
 #
 # Design decisions, known limitations, and rationale are recorded in
 # docs/adr/ADR-005-render-staging-experiment.md. Read that before changing
-# this file.
+# this file. The hosted LiDAR static site added below (and the portal's
+# STAGING env vars) are recorded in
+# docs/adr/ADR-007-hosted-product-composition-v1.md.
 #
 # Apply from the Render Dashboard: New > Blueprint > select this repo/branch.
 # This file does not provision anything by itself.
@@ -35,7 +37,7 @@ services:
     plan: free
     region: virginia
     repo: https://github.com/rafaelRojasVi/campo-digital-platform.git
-    branch: feat/render-staging-v1
+    branch: feat/hosted-composition-v1
     # preDeployCommand is a paid-plan-only feature, so migrations run as the
     # last build step instead — once per deploy, not on every process
     # restart/wake. alembic upgrade head (including 0001's `CREATE EXTENSION
@@ -99,9 +101,47 @@ services:
     type: web
     runtime: static
     repo: https://github.com/rafaelRojasVi/campo-digital-platform.git
-    branch: feat/render-staging-v1
+    branch: feat/hosted-composition-v1
     buildCommand: cd apps/portal && npm ci && npm run build
     staticPublishPath: apps/portal/dist
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://campo-digital-api-staging.onrender.com/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      # Build-time only (static site — these are read by `vite build`, not by
+      # anything at request time). See
+      # apps/portal/src/runtime/environment.ts and
+      # apps/portal/src/runtime/hostedModules.ts.
+      - key: VITE_CAMPO_ENV
+        value: staging
+      - key: VITE_LIDAR_HOSTED_URL
+        value: https://campo-digital-lidar-staging.onrender.com
+
+  # Static build of the LiDAR product dashboard (products/lidar/dashboard).
+  # Talks to the SAME already-deployed campo-digital-api-staging service via
+  # the identical same-origin /api/* rewrite pattern used by the portal above
+  # — apps/api/app/routers/lidar.py has no DB dependency and already
+  # resolves to an empty [] with no CAMPO_LIDAR_OUTPUT_ROOT set (see
+  # docs/adr/ADR-007-hosted-product-composition-v1.md), so this adds a
+  # second free static site and zero new backend surface, zero new data.
+  #
+  # Same NOTE as campo-digital-portal-staging above: verify this service's
+  # actual onrender.com URL after first deploy and update both this file's
+  # /api rewrite destination pattern (none needed here — this service has no
+  # other Render service depending on ITS hostname except the portal's
+  # VITE_LIDAR_HOSTED_URL above and Module.tsx's iframe allowlist in
+  # apps/portal/src/lib/safeUrl.ts) if the hostname differs.
+  - name: campo-digital-lidar-staging
+    type: web
+    runtime: static
+    repo: https://github.com/rafaelRojasVi/campo-digital-platform.git
+    branch: feat/hosted-composition-v1
+    buildCommand: cd products/lidar/dashboard && npm ci && npm run build
+    staticPublishPath: products/lidar/dashboard/dist
     routes:
       - type: rewrite
         source: /api/*
