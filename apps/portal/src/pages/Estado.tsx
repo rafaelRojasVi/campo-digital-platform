@@ -26,6 +26,7 @@ export function Estado() {
               <th>Estado</th>
               <th>URL local</th>
               <th>Iniciado por Campo Demo</th>
+              <th>Mediciones persistidas</th>
             </tr>
           </thead>
           <tbody>
@@ -39,6 +40,7 @@ export function Estado() {
                     <code>{status.url ?? '—'}</code>
                   </td>
                   <td>{status.owned === undefined ? '—' : status.owned ? 'sí' : 'no (ya estaba activo)'}</td>
+                  <td>{status.measurementCount === undefined ? '—' : status.measurementCount}</td>
                 </tr>
               )
             })}

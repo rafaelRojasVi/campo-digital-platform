@@ -45,12 +45,28 @@ from _local_process import (  # noqa: E402
     wait_for_http,
 )
 
+from lidar_io.output_root_discovery import (  # noqa: E402
+    SOURCE_CURRENT_WORKTREE,
+    SOURCE_DISCOVERED_WORKTREE,
+    SOURCE_ENV,
+    SOURCE_NONE,
+    resolve_report_root,
+)
+from lidar_io.run_store import discover_measurement_paths  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_ROOT = REPO_ROOT / "products" / "lidar" / "dashboard"
 STATE_DIR = REPO_ROOT / ".lidar-dev"
 
 API_PREFERRED_PORT = 8000
 VIEWER_PREFERRED_PORT = 5174
+
+REPORT_SOURCE_LABELS = {
+    SOURCE_ENV: "explicit CAMPO_LIDAR_OUTPUT_ROOT",
+    SOURCE_CURRENT_WORKTREE: "current worktree",
+    SOURCE_DISCOVERED_WORKTREE: "discovered local report store",
+    SOURCE_NONE: "none found",
+}
 
 
 class LauncherError(RuntimeError):
@@ -159,21 +175,47 @@ def command_up() -> int:
     return 0
 
 
+def measurement_status() -> tuple[int, str, Path]:
+    """Returns (persisted measurement count, human-readable report source, output root).
+
+    Service state (is the API/viewer process running) and data state (are
+    there any persisted measurements to show) are independent facts: an API
+    can be up with zero measurements, or a report store can be discovered
+    while the API itself is stopped.
+    """
+
+    resolution = resolve_report_root(
+        REPO_ROOT,
+        env_value=os.environ.get("CAMPO_LIDAR_OUTPUT_ROOT"),
+    )
+    count = len(discover_measurement_paths(resolution.path))
+    source_label = REPORT_SOURCE_LABELS.get(resolution.source, resolution.source)
+    return count, source_label, resolution.path
+
+
 def command_status() -> int:
+    service_labels = {"api": "LiDAR API", "viewer": "Viewer"}
+
     for name, probe in (("api", "/health"), ("viewer", "/")):
+        label = service_labels[name]
         process = load_process(STATE_DIR, name)
 
         if process is None:
-            print(f"{name:8} not started")
+            print(f"{label}: not started")
             continue
 
         if not is_ours(process):
-            print(f"{name:8} stale record (PID {process.pid} is gone)")
+            print(f"{label}: stale record (PID {process.pid} is gone)")
             continue
 
         healthy = wait_for_http(f"http://127.0.0.1:{process.port}{probe}", 2)
-        state = "responding" if healthy else "process alive, not responding"
-        print(f"{name:8} PID {process.pid} · port {process.port} · {state}")
+        state = "running" if healthy else "process alive, not responding"
+        print(f"{label}: {state} (PID {process.pid} · port {process.port})")
+
+    count, source_label, output_root = measurement_status()
+    print(f"Persisted measurements: {count}")
+    print(f"Report source: {source_label}")
+    print(f"  (path: {output_root})")
 
     return 0
 

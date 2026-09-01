@@ -6,9 +6,13 @@ these tests run fast and never start a real uvicorn/vite process.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from scripts import lidar_dev
 from scripts._local_process import ManagedProcess
+
+from lidar_io.output_root_discovery import ReportRootResolution
 
 
 def test_start_api_adopts_an_already_running_instance(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,3 +69,65 @@ def test_command_stop_stops_both_recorded_processes_in_order(
 
     assert lidar_dev.command_stop() == 0
     assert order == ["viewer", "api"]
+
+
+# ------------------------------------------------------------- measurement_status
+
+
+def test_measurement_status_reports_count_and_human_readable_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output_root = tmp_path / "reports" / "out"
+    output_root.mkdir(parents=True)
+
+    monkeypatch.setattr(
+        lidar_dev,
+        "resolve_report_root",
+        lambda repo_root, *, env_value: ReportRootResolution(output_root, "discovered-worktree"),
+    )
+    monkeypatch.setattr(lidar_dev, "discover_measurement_paths", lambda _root: [1, 2, 3])
+
+    count, source_label, path = lidar_dev.measurement_status()
+
+    assert count == 3
+    assert source_label == "discovered local report store"
+    assert path == output_root
+
+
+def test_measurement_status_reports_zero_when_nothing_found(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output_root = tmp_path / "reports" / "out"
+
+    monkeypatch.setattr(
+        lidar_dev,
+        "resolve_report_root",
+        lambda repo_root, *, env_value: ReportRootResolution(output_root, "none"),
+    )
+    monkeypatch.setattr(lidar_dev, "discover_measurement_paths", lambda _root: [])
+
+    count, source_label, path = lidar_dev.measurement_status()
+
+    assert count == 0
+    assert source_label == "none found"
+    assert path == output_root
+
+
+# ------------------------------------------------------------- command_status
+
+
+def test_command_status_distinguishes_service_state_from_data_state(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(lidar_dev, "load_process", lambda _dir, _name: None)
+    monkeypatch.setattr(
+        lidar_dev, "measurement_status", lambda: (14, "discovered local report store", Path("/x"))
+    )
+
+    assert lidar_dev.command_status() == 0
+
+    out = capsys.readouterr().out
+    assert "LiDAR API" in out
+    assert "Viewer" in out
+    assert "Persisted measurements: 14" in out
+    assert "Report source: discovered local report store" in out

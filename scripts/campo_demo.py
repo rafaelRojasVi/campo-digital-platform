@@ -37,7 +37,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -50,6 +50,9 @@ from _local_process import (  # noqa: E402
     stop_process,
     wait_for_http,
 )
+
+from lidar_io.output_root_discovery import resolve_report_root  # noqa: E402
+from lidar_io.run_store import discover_measurement_paths  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PORTAL_ROOT = REPO_ROOT / "apps" / "portal"
@@ -169,6 +172,17 @@ def probe_lidar(repo_root: Path = REPO_ROOT, probe_timeout: float = 1.5) -> tupl
     return True, url
 
 
+def lidar_measurement_count(repo_root: Path = REPO_ROOT) -> int:
+    """Counts API-visible persisted LiDAR measurements, independent of
+    whether the LiDAR API/viewer processes are currently running."""
+
+    resolution = resolve_report_root(
+        repo_root,
+        env_value=os.environ.get("CAMPO_LIDAR_OUTPUT_ROOT"),
+    )
+    return len(discover_measurement_paths(resolution.path))
+
+
 def probe_forestry(
     worktree_root: Path | None, probe_timeout: float = 1.5
 ) -> tuple[bool, str | None]:
@@ -255,6 +269,7 @@ class ModuleResult:
     url: str | None
     owned: bool
     detail: str
+    measurement_count: int | None = None
 
 
 ProbeFn = Callable[[Path | None], tuple[bool, str | None]]
@@ -346,14 +361,22 @@ def start_portal() -> tuple[int, int]:
     return process.port, process.pid
 
 
+def _module_payload(result: ModuleResult) -> dict[str, str | bool | int | None]:
+    payload: dict[str, str | bool | int | None] = {
+        "status": result.status,
+        "url": result.url,
+        "owned": result.owned,
+    }
+    if result.measurement_count is not None:
+        payload["measurementCount"] = result.measurement_count
+    return payload
+
+
 def write_runtime_config(portal_port: int, modules: dict[str, ModuleResult]) -> None:
     payload = {
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "portal": {"port": portal_port},
-        "modules": {
-            module_id: {"status": result.status, "url": result.url, "owned": result.owned}
-            for module_id, result in modules.items()
-        },
+        "modules": {module_id: _module_payload(result) for module_id, result in modules.items()},
     }
 
     public_dir = PORTAL_ROOT / "public"
@@ -422,6 +445,7 @@ def resolve_modules(read_only: bool) -> dict[str, ModuleResult]:
                 url,
                 owned=False,
                 detail="observed only (status is read-only)",
+                measurement_count=lidar_measurement_count() if module_id == "lidar" else None,
             )
         return modules
 
@@ -436,6 +460,7 @@ def resolve_modules(read_only: bool) -> dict[str, ModuleResult]:
             "transelec", transelec_worktree, probe_transelec, transelec_worktree, "transelec-dev"
         ),
     }
+    modules["lidar"] = replace(modules["lidar"], measurement_count=lidar_measurement_count())
     return modules
 
 
@@ -451,6 +476,10 @@ def print_summary(portal_port: int | None, modules: dict[str, ModuleResult]) -> 
         mark = "✓" if result.status == "available" else "✗"
         detail = result.url or "no disponible localmente"
         print(f"[campo-demo] {labels[module_id]:<10} {mark} {detail}")
+
+    lidar_measurements = modules["lidar"].measurement_count
+    if lidar_measurements is not None:
+        print(f"[campo-demo] LiDAR measurements: {lidar_measurements}")
 
     if portal_port is not None:
         print()

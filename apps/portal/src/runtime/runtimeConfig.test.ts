@@ -56,3 +56,31 @@ describe('moduleStatusFor', () => {
     expect(status).toEqual({ status: 'unavailable' })
   })
 })
+
+describe('parseRuntimeConfig measurementCount', () => {
+  it('parses a numeric measurementCount for a module', () => {
+    const config = parseRuntimeConfig({
+      modules: {
+        lidar: { status: 'available', url: 'http://127.0.0.1:5174/', measurementCount: 14 },
+      },
+    })
+
+    expect(config.modules.lidar?.measurementCount).toBe(14)
+  })
+
+  it('is undefined when the module carries no measurementCount', () => {
+    const config = parseRuntimeConfig({
+      modules: { forestal: { status: 'available' } },
+    })
+
+    expect(config.modules.forestal?.measurementCount).toBeUndefined()
+  })
+
+  it('drops a non-numeric measurementCount rather than trusting it', () => {
+    const config = parseRuntimeConfig({
+      modules: { lidar: { status: 'available', measurementCount: 'fourteen' } },
+    })
+
+    expect(config.modules.lidar?.measurementCount).toBeUndefined()
+  })
+})

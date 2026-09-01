@@ -11,21 +11,31 @@ from fastapi.responses import FileResponse
 
 from lidar_core.models import MeasurementRun, VolumeComparisonRecord
 from lidar_io.comparison_store import read_comparison_record
-from lidar_io.run_store import MEASUREMENT_FILENAME, read_measurement_run
+from lidar_io.output_root_discovery import resolve_report_root
+from lidar_io.run_store import (
+    MEASUREMENT_FILENAME,
+    discover_measurement_paths,
+    read_measurement_run,
+)
 
 router = APIRouter()
 
-DEFAULT_OUTPUT_ROOT = Path("products/lidar/reports/out")
+REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
 def get_output_root() -> Path:
-    """Return the configured local measurement-output root."""
+    """Return the local measurement-output root to serve.
 
-    configured = os.environ.get(
-        "CAMPO_LIDAR_OUTPUT_ROOT",
-        str(DEFAULT_OUTPUT_ROOT),
+    An explicit ``CAMPO_LIDAR_OUTPUT_ROOT`` always wins; otherwise the report
+    store is discovered automatically across local git worktrees. See
+    ``lidar_io.output_root_discovery`` for the precedence rules.
+    """
+
+    resolution = resolve_report_root(
+        REPO_ROOT,
+        env_value=os.environ.get("CAMPO_LIDAR_OUTPUT_ROOT"),
     )
-    return Path(configured)
+    return resolution.path
 
 
 def _safe_component(value: str, *, field: str) -> str:
@@ -108,7 +118,7 @@ def list_runs(
 
     runs: list[MeasurementRun] = []
 
-    for measurement_path in sorted(output_root.glob(f"*/{MEASUREMENT_FILENAME}")):
+    for measurement_path in discover_measurement_paths(output_root):
         try:
             run = read_measurement_run(measurement_path)
         except (OSError, ValueError):

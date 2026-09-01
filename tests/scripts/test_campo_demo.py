@@ -292,6 +292,67 @@ def test_write_runtime_config_produces_a_stakeholder_safe_shape(
     assert set(written["modules"]["lidar"].keys()) == {"status", "url", "owned"}
 
 
+def test_write_runtime_config_includes_measurement_count_when_present(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    portal_root = tmp_path / "apps" / "portal"
+    monkeypatch.setattr(campo_demo, "PORTAL_ROOT", portal_root)
+
+    modules = {
+        "lidar": campo_demo.ModuleResult(
+            "available", "http://127.0.0.1:5174/", True, "started", measurement_count=14
+        ),
+        "forestal": campo_demo.ModuleResult("unavailable", None, False, "missing worktree"),
+        "transelec": campo_demo.ModuleResult(
+            "available", "http://127.0.0.1:5180/", False, "adopted"
+        ),
+    }
+
+    campo_demo.write_runtime_config(5100, modules)
+
+    written = json.loads((portal_root / "public" / "campo-runtime.json").read_text())
+
+    assert written["modules"]["lidar"]["measurementCount"] == 14
+    # No filesystem path is ever exposed to the stakeholder-facing portal.
+    assert "path" not in written["modules"]["lidar"]
+    assert "measurementCount" not in written["modules"]["forestal"]
+
+
+# ---------------------------------------------------------- lidar measurement count
+
+
+def test_lidar_measurement_count_delegates_to_output_root_discovery(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from lidar_io.output_root_discovery import ReportRootResolution
+
+    output_root = tmp_path / "reports" / "out"
+
+    monkeypatch.setattr(
+        campo_demo,
+        "resolve_report_root",
+        lambda repo_root, *, env_value: ReportRootResolution(output_root, "discovered-worktree"),
+    )
+    monkeypatch.setattr(campo_demo, "discover_measurement_paths", lambda _root: [1, 2, 3, 4])
+
+    assert campo_demo.lidar_measurement_count() == 4
+
+
+def test_resolve_modules_attaches_measurement_count_only_to_lidar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(campo_demo, "discover_worktrees", lambda: [])
+    monkeypatch.setattr(campo_demo, "find_worktree_for_branch", lambda _wt, _b: None)
+    monkeypatch.setattr(campo_demo, "probe_lidar", lambda: (True, "http://127.0.0.1:5174/"))
+    monkeypatch.setattr(campo_demo, "lidar_measurement_count", lambda: 14)
+
+    modules = campo_demo.resolve_modules(read_only=True)
+
+    assert modules["lidar"].measurement_count == 14
+    assert modules["forestal"].measurement_count is None
+    assert modules["transelec"].measurement_count is None
+
+
 # -------------------------------------------------------------- ownership state
 
 
@@ -319,3 +380,38 @@ def test_ownership_state_round_trips_and_defaults_to_unowned(
         "forestal_owned": False,
         "transelec_owned": False,
     }
+
+
+# ---------------------------------------------------------------- print_summary
+
+
+def test_print_summary_reports_lidar_measurements_separately_from_availability(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    modules = {
+        "lidar": campo_demo.ModuleResult(
+            "available", "http://127.0.0.1:5174/", True, "started", measurement_count=14
+        ),
+        "forestal": campo_demo.ModuleResult("available", "http://127.0.0.1:5175/", True, "started"),
+        "transelec": campo_demo.ModuleResult("unavailable", None, False, "missing worktree"),
+    }
+
+    campo_demo.print_summary(5100, modules)
+
+    out = capsys.readouterr().out
+    assert "LiDAR measurements: 14" in out
+
+
+def test_print_summary_omits_lidar_measurements_line_when_count_is_unknown(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    modules = {
+        "lidar": campo_demo.ModuleResult("unavailable", None, False, "missing worktree"),
+        "forestal": campo_demo.ModuleResult("unavailable", None, False, "missing worktree"),
+        "transelec": campo_demo.ModuleResult("unavailable", None, False, "missing worktree"),
+    }
+
+    campo_demo.print_summary(5100, modules)
+
+    out = capsys.readouterr().out
+    assert "LiDAR measurements" not in out

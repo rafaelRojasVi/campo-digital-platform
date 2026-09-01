@@ -6,6 +6,7 @@ export interface ModuleRuntimeStatus {
   status: ModuleStatus
   url?: string
   owned?: boolean
+  measurementCount?: number
 }
 
 export interface CampoRuntimeConfig {
@@ -35,6 +36,8 @@ function normalizeModule(value: unknown): ModuleRuntimeStatus | undefined {
     status: record.status,
     url: typeof record.url === 'string' ? record.url : undefined,
     owned: typeof record.owned === 'boolean' ? record.owned : undefined,
+    measurementCount:
+      typeof record.measurementCount === 'number' ? record.measurementCount : undefined,
   }
 }
 
