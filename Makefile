@@ -1,4 +1,6 @@
-.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check lidar-dev lidar-status lidar-stop campo-demo campo-status campo-stop
+.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check lidar-dev lidar-status lidar-stop campo-demo campo-status campo-stop platform-local platform-worker platform-worker-concurrency
+
+N ?= 2
 
 setup:
 	uv sync --all-extras --dev
@@ -82,4 +84,24 @@ campo-status:
 
 campo-stop:
 	uv run python scripts/campo_demo.py stop
+
+# Local platform ingestion/access foundation. Deliberately independent of
+# campo-demo/campo-status/campo-stop above — see docs/superpowers/plans/
+# 2026-09-01-platform-ingestion-access-foundation.md. Requires a local .env
+# (copy .env.example) with POSTGRES_PASSWORD set for the dev database.
+platform-local:
+	docker compose up -d --wait postgres
+	PYTHONPATH=apps/api uv run alembic upgrade head
+	APP_ENV=development PYTHONPATH=apps/api uv run uvicorn app.main:app --reload --port 8000
+
+platform-worker:
+	APP_ENV=development PYTHONPATH=apps/api uv run python -m app.worker
+
+# Run N concurrent local workers claiming from the same PostgreSQL queue via
+# SELECT ... FOR UPDATE SKIP LOCKED. Override with `make platform-worker-concurrency N=4`.
+platform-worker-concurrency:
+	@for i in $$(seq 1 $(N)); do \
+		APP_ENV=development PYTHONPATH=apps/api uv run python -m app.worker & \
+	done; \
+	wait
 

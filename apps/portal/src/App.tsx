@@ -1,5 +1,6 @@
 import { RouterProvider, useRouter } from './router/Router'
 import { Home } from './pages/Home'
+import { Ingesta } from './pages/Ingesta'
 import { ModulePage } from './pages/Module'
 import { Estado } from './pages/Estado'
 
@@ -8,6 +9,10 @@ function Routes() {
 
   if (pathname === '/estado') {
     return <Estado />
+  }
+
+  if (pathname === '/ingesta') {
+    return <Ingesta />
   }
 
   if (pathname.startsWith('/modulo/')) {
