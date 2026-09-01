@@ -25,7 +25,7 @@ from app.database import build_engine
 from app.inspection.forestry_inspector import inspect_forestry_zip
 from app.inspection.lidar_inspector import inspect_lidar_file
 from app.inspection.transelec_inspector import inspect_transelec_workbook
-from app.jobs import ClaimedJob, claim_next_job, complete_job, fail_job
+from app.jobs import ClaimedJob, claim_next_job, complete_job, fail_job, fail_job_terminal
 from app.object_store import LocalObjectStore, ObjectStore
 
 _IDLE_SLEEP_SECONDS = 2.0
@@ -59,6 +59,21 @@ def run_one_job(connection: Connection, store: ObjectStore, *, worker_id: str) -
             job_id=claimed.id,
             worker_id=worker_id,
             error_summary="Source snapshot has no object_storage_key.",
+        )
+        connection.commit()
+        return True
+
+    if not store.exists(claimed.object_storage_key):
+        # Render's free-tier filesystem is ephemeral: a job row can outlive
+        # the local object it references across a redeploy or spin-down/wake
+        # cycle. Retrying would just hit the same missing object forever, so
+        # this fails the job terminally on the spot rather than through
+        # fail_job's attempt-count-based requeue.
+        fail_job_terminal(
+            connection,
+            job_id=claimed.id,
+            worker_id=worker_id,
+            error_summary="source object unavailable (ephemeral storage cycled)",
         )
         connection.commit()
         return True

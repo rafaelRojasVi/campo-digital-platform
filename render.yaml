@@ -79,6 +79,13 @@ services:
         fromDatabase:
           name: campo-digital-db-staging
           property: password
+      # Staging-only in-process execution backend (app.execution). Kept well
+      # below production upload limits (2 GiB) — this adapter demonstrates
+      # small/metadata-scale jobs, not real workloads. See
+      # docs/superpowers/specs/2026-09-01-secure-file-access-slice-design.md
+      # section 6.
+      - key: STAGING_EXECUTION_MAX_BYTES
+        value: "26214400" # 25 MiB
 
   # Static portal build. Calls the API through a same-origin /api/* rewrite
   # (mirrors apps/portal/vite.config.ts's dev proxy) instead of CORS, so the

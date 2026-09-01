@@ -195,6 +195,46 @@ def fail_job(connection: Connection, *, job_id: int, worker_id: str, error_summa
     )
 
 
+def fail_job_terminal(
+    connection: Connection, *, job_id: int, worker_id: str, error_summary: str
+) -> None:
+    """Fail a job immediately, bypassing ``fail_job``'s attempt-count retry.
+
+    For failures that a retry cannot fix — the source object no longer
+    resolves in ephemeral storage, or a staging-only execution guard refused
+    the job outright — requeueing would just repeat the same failure until
+    ``max_attempts`` is exhausted. This marks the job (and, if one is
+    in-flight, its current attempt) failed on the spot instead.
+    """
+
+    connection.execute(
+        text(
+            """
+            UPDATE platform.processing_job
+            SET status = 'failed',
+                error_summary = :error_summary,
+                lease_owner = NULL,
+                lease_expires_at = NULL,
+                finished_at = now()
+            WHERE id = :job_id
+            """
+        ),
+        {"job_id": job_id, "error_summary": error_summary[:2000]},
+    )
+    connection.execute(
+        text(
+            """
+            UPDATE platform.processing_attempt
+            SET status = 'failed', finished_at = now(), error_summary = :error_summary
+            WHERE processing_job_id = :job_id
+              AND worker_id = :worker_id
+              AND status = 'running'
+            """
+        ),
+        {"job_id": job_id, "worker_id": worker_id, "error_summary": error_summary[:2000]},
+    )
+
+
 def reap_stale_leases(connection: Connection) -> int:
     """Reset expired-lease running jobs back to queued. Returns count reset."""
 

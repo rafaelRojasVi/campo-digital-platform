@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -138,6 +140,113 @@ def test_worker_end_to_end_produces_artifact(integration_engine: Engine, tmp_pat
                 text("DELETE FROM platform.generated_artifact WHERE processing_job_id = :id"),
                 {"id": job_id},
             )
+            cleanup_conn.execute(
+                text("DELETE FROM platform.processing_attempt WHERE processing_job_id = :id"),
+                {"id": job_id},
+            )
+            cleanup_conn.execute(
+                text("DELETE FROM platform.processing_job WHERE id = :id"), {"id": job_id}
+            )
+            cleanup_conn.execute(
+                text("DELETE FROM platform.ingestion_run WHERE id = :id"), {"id": run_id}
+            )
+            cleanup_conn.execute(
+                text("DELETE FROM platform.source_snapshot WHERE id = :id"), {"id": snapshot_id}
+            )
+            cleanup_conn.execute(
+                text("DELETE FROM platform.source_asset WHERE id = :id"), {"id": asset_id}
+            )
+            cleanup_conn.execute(
+                text("DELETE FROM platform.source_system WHERE id = :id"), {"id": system_id}
+            )
+            cleanup_conn.commit()
+
+
+def test_missing_object_fails_job_terminally_without_retry(
+    integration_engine: Engine, tmp_path: Path
+) -> None:
+    """A source_snapshot.object_storage_key that no longer resolves — Render's
+    free-tier filesystem is ephemeral and cycles on redeploy/spin-down/wake —
+    must fail the job on its very first claim with a distinct, visible error,
+    never a silent crash or a retry that would just repeat the same failure.
+    """
+
+    store = LocalObjectStore(tmp_path / "object-store")
+    digest = hashlib.sha256(uuid.uuid4().bytes).hexdigest()
+    # A well-formed key that is never store.put() into this fresh store —
+    # simulates the object having existed at upload time and since vanished.
+    never_stored_key = f"sha256/{digest[:2]}/{digest[2:]}"
+
+    with integration_engine.connect() as setup_conn:
+        system_id = setup_conn.execute(
+            text(
+                "INSERT INTO platform.source_system (system_key) VALUES ('worker_e2e_missing_object') "
+                "RETURNING id"
+            )
+        ).scalar_one()
+        asset_id = setup_conn.execute(
+            text(
+                "INSERT INTO platform.source_asset (source_system_id, identity_kind, identity_key) "
+                "VALUES (:sid, 'relative_path', 'missing.xlsx') RETURNING id"
+            ),
+            {"sid": system_id},
+        ).scalar_one()
+        snapshot_id = setup_conn.execute(
+            text(
+                "INSERT INTO platform.source_snapshot "
+                "(source_asset_id, content_sha256, byte_size, object_storage_key) "
+                "VALUES (:aid, :sha, 5, :key) RETURNING id"
+            ),
+            {"aid": asset_id, "sha": digest, "key": never_stored_key},
+        ).scalar_one()
+        run_id = setup_conn.execute(
+            text(
+                "INSERT INTO platform.ingestion_run (source_snapshot_id, product_key) "
+                "VALUES (:sid, 'transelect') RETURNING id"
+            ),
+            {"sid": snapshot_id},
+        ).scalar_one()
+        job_id = enqueue_processing_job(
+            setup_conn,
+            ingestion_run_id=run_id,
+            product_key="transelect",
+            requested_by_app_user_id=None,
+        )
+        setup_conn.commit()
+
+    try:
+        with integration_engine.connect() as worker_conn:
+            did_work = run_one_job(worker_conn, store, worker_id="e2e-worker-missing-object")
+        assert did_work is True
+
+        with integration_engine.connect() as check_conn:
+            job_row = check_conn.execute(
+                text(
+                    "SELECT status, error_summary, attempt_count FROM platform.processing_job "
+                    "WHERE id = :id"
+                ),
+                {"id": job_id},
+            ).one()
+            assert job_row.status == "failed"
+            assert job_row.error_summary == "source object unavailable (ephemeral storage cycled)"
+            # Claimed exactly once and failed terminally on that same attempt
+            # -- fail_job_terminal bypasses the attempt-count-based requeue
+            # that fail_job() would otherwise apply.
+            assert job_row.attempt_count == 1
+
+            attempt_row = check_conn.execute(
+                text(
+                    "SELECT status, error_summary FROM platform.processing_attempt "
+                    "WHERE processing_job_id = :id"
+                ),
+                {"id": job_id},
+            ).one()
+            assert attempt_row.status == "failed"
+            assert (
+                attempt_row.error_summary == "source object unavailable (ephemeral storage cycled)"
+            )
+    finally:
+        with integration_engine.connect() as cleanup_conn:
             cleanup_conn.execute(
                 text("DELETE FROM platform.processing_attempt WHERE processing_job_id = :id"),
                 {"id": job_id},
