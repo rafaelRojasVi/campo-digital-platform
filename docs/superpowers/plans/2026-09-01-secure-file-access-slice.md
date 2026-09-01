@@ -49,9 +49,14 @@ conventions: `apps/api/app/access_repository.py`, `apps/api/app/dev_auth.py`,
 
 - Do not implement application code for anything gated on the Graph scope
   before Task 7's RESULT is recorded. No default/guessed scope.
-- Single-tenant Entra app registration, confidential client
-  (authorization-code + PKCE via `msal`). Never a public client, never
-  client-credentials/app-only tokens for Graph calls.
+- Entra app registration in Campo Digital's own dedicated Entra tenant
+  (created via Azure free-account signup, not an unrelated existing
+  tenant), supporting **any organizational directory + personal
+  Microsoft accounts** (not single-tenant, not personal-accounts-only —
+  see the 2026-09-01 revision in the spec, section 1). Confidential
+  client (authorization-code + PKCE via `msal`), MSAL authority
+  `https://login.microsoftonline.com/common`. Never a public client,
+  never client-credentials/app-only tokens for Graph calls.
 - `identity_kind = "entra"`, `identity_key = f"{tenant_id}:{oid}"`. Never
   email/UPN as an identity key.
 - Sign-in requests only `openid profile` scope. The Graph scope is a
@@ -132,6 +137,20 @@ Docs:
 ---
 
 ### Task 1: Entra app-registration handoff document
+
+**Status: done** (`docs: add Entra app-registration handoff for tenant
+admin`), but **revised 2026-09-01** — the embedded Step 1 markdown below
+is the original, now-superseded text kept for history. The actual
+committed file, `docs/platform/entra-app-registration-handoff.md`, has
+since been corrected in place for the account-type/tenant-ownership
+evidence described in the spec's 2026-09-01 revision note (section 1):
+supported account types are "any organizational directory + personal
+Microsoft accounts" (not single-tenant), a "Prerequisite: create the
+tenant" section was added (Azure free-account signup — no personal
+Microsoft account can create an Entra tenant directly), and "What
+happens after this" now reflects the confirmed personal-OneDrive source
+instead of an assumed SharePoint library. Treat the live file as
+authoritative, not the block below.
 
 **Files:**
 - Create: `docs/platform/entra-app-registration-handoff.md`
@@ -1000,22 +1019,42 @@ ignored env file.
 
 - [ ] **Step 1: Write the script**
 
+**Revised 2026-09-01:** the source is now confirmed personal OneDrive
+(spec section 2 revision), not an unknown drive/site type — so this
+script no longer searches broadly (`/sites?search=`) or requests
+`Sites.Read.All`. It requests only delegated `Files.Read`, and follows
+the confirmed shape directly: list the signing-in user's own OneDrive
+root, find the `remoteItem`-faceted child for the shared Campo Digital
+folder, and resolve it via `remoteItem.parentReference.driveId` +
+`remoteItem.id`. It does not use `GET /me/drive/sharedWithMe` — that
+endpoint is deprecated and documented to stop returning data after
+November 2026. It also uses the `common` authority so a personal
+Microsoft account sign-in works, matching the app registration's
+account-type change in Task 1.
+
 ```python
 # scripts/graph_discovery_spike.py
 """Throwaway Microsoft Graph discovery spike.
 
-Run manually, once, against a real Campo Digital sign-in, to determine
-which drive/site actually holds `00 Hub Digital CampoDigital` and its
-stable driveId/itemId (or siteId). Never touches client file content —
-only metadata calls (`/me/drives`, `/sites?search=`, `children`).
+Run manually, once, against a real Campo Digital sign-in (a personal
+Microsoft account), to confirm the shared `00 Hub Digital CampoDigital`
+folder's remoteItem shape and record its stable driveId/itemId. Never
+touches client file content — only metadata calls (own drive root,
+children). Deliberately does NOT call the deprecated
+`GET /me/drive/sharedWithMe` (stops returning data after November 2026)
+and does NOT request `Sites.Read.All` — the source is confirmed personal
+OneDrive, not SharePoint, so only delegated `Files.Read` is requested,
+per the least-privilege decision in the spec's section 2 revision.
 
 Usage:
     uv run python scripts/graph_discovery_spike.py
 
-Requires ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET in the
-environment (see docs/platform/entra-app-registration-handoff.md). Opens a
-device-code sign-in prompt in the terminal — sign in as a real Campo
-Digital user who has access to the source material.
+Requires ENTRA_CLIENT_ID in the environment (see
+docs/platform/entra-app-registration-handoff.md; ENTRA_TENANT_ID is not
+used here — the authority is `common` so this also works for a personal
+Microsoft account sign-in). Opens a device-code sign-in prompt in the
+terminal — sign in as the real Campo Digital user (personal Microsoft
+account) who already has the shared folder in their own OneDrive.
 """
 
 from __future__ import annotations
@@ -1028,22 +1067,16 @@ import msal
 import requests
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
-KNOWN_TOP_LEVEL_FOLDERS = (
-    "00 Hub Digital CampoDigital",
-    "01_Gestion_Predial_Forestal",
-    "02_Clientes_Mapeo_y_Geomatica",
-    "03_Proyecto_Transelec",
-)
+SHARED_FOLDER_NAME = "00 Hub Digital CampoDigital"
 
 
 def _acquire_token() -> str:
-    tenant_id = os.environ["ENTRA_TENANT_ID"]
     client_id = os.environ["ENTRA_CLIENT_ID"]
 
     app = msal.PublicClientApplication(
-        client_id, authority=f"https://login.microsoftonline.com/{tenant_id}"
+        client_id, authority="https://login.microsoftonline.com/common"
     )
-    flow = app.initiate_device_flow(scopes=["Files.Read", "Sites.Read.All"])
+    flow = app.initiate_device_flow(scopes=["Files.Read"])
     if "user_code" not in flow:
         raise RuntimeError(f"Failed to create device flow: {flow}")
     print(flow["message"])
@@ -1064,27 +1097,42 @@ def _get(token: str, path: str) -> dict:
 def main() -> None:
     token = _acquire_token()
 
-    print("\n=== /me/drives ===")
-    drives = _get(token, "/me/drives")
-    print(json.dumps(drives, indent=2))
+    print("\n=== id_token claims (tid/oid) ===")
+    # msal doesn't expose claims from the device-flow result directly by
+    # path here; if needed, decode the ID token from `result` in
+    # _acquire_token and print `tid`/`oid` to confirm the identity-key
+    # shape documented in the spec's section 1 revision before Task 8
+    # relies on it.
 
-    print("\n=== /sites?search=CampoDigital ===")
-    sites = _get(token, "/sites?search=CampoDigital")
-    print(json.dumps(sites, indent=2))
+    print("\n=== /me/drive/root/children ===")
+    own_root = _get(token, "/me/drive/root/children")
+    print(json.dumps(own_root, indent=2))
 
-    for drive in drives.get("value", []):
-        drive_id = drive["id"]
-        print(f"\n=== children of drive {drive_id} root ===")
-        children = _get(token, f"/drives/{drive_id}/root/children")
-        for item in children.get("value", []):
-            marker = " <-- known top-level folder" if item["name"] in KNOWN_TOP_LEVEL_FOLDERS else ""
-            print(f"  {item['name']}  (id={item['id']}){marker}")
+    shared_folder = next(
+        (
+            item
+            for item in own_root.get("value", [])
+            if item.get("name") == SHARED_FOLDER_NAME and "remoteItem" in item
+        ),
+        None,
+    )
+    if shared_folder is None:
+        raise RuntimeError(
+            f"No remoteItem-faceted child named {SHARED_FOLDER_NAME!r} found in "
+            "/me/drive/root/children. Do not fall back to the deprecated "
+            "/me/drive/sharedWithMe endpoint — investigate the exact folder "
+            "name/placement in the signing-in user's own OneDrive instead."
+        )
 
-    for site in sites.get("value", []):
-        site_id = site["id"]
-        print(f"\n=== drives of site {site.get('displayName')} ({site_id}) ===")
-        site_drives = _get(token, f"/sites/{site_id}/drives")
-        print(json.dumps(site_drives, indent=2))
+    remote = shared_folder["remoteItem"]
+    remote_drive_id = remote["parentReference"]["driveId"]
+    remote_item_id = remote["id"]
+    print(f"\nremoteItem driveId={remote_drive_id} itemId={remote_item_id}")
+
+    print(f"\n=== /drives/{remote_drive_id}/items/{remote_item_id}/children ===")
+    children = _get(token, f"/drives/{remote_drive_id}/items/{remote_item_id}/children")
+    for item in children.get("value", []):
+        print(f"  {item['name']}  (id={item['id']})")
 
 
 if __name__ == "__main__":
@@ -1144,19 +1192,26 @@ type and IDs come only from the real discovery run):
 ## RESULT (fill in real date) — Graph discovery
 
 Discovery run via `scripts/graph_discovery_spike.py` against a real Campo
-Digital sign-in.
+Digital sign-in (personal Microsoft account). Confirmed pre-discovery
+(browser URL inspection, 2026-09-01): `00 Hub Digital CampoDigital` is a
+personal OneDrive owned by a different personal Microsoft account,
+appearing as a `remoteItem` in the signing-in user's own OneDrive — this
+run exists to record the exact stable IDs and confirm `Files.Read`
+against a real token, not to re-decide the drive type.
 
-- `00 Hub Digital CampoDigital` resolved to: [personal/business OneDrive
-  drive the signing-in user owns | OneDrive shared by another user |
-  SharePoint/Teams document library] — record which one, with the exact
-  Graph response field that proves it (e.g. `driveType`, `webUrl`).
-- Stable identifiers: `driveId = <value>` [and/or `siteId = <value>`],
-  root `itemId = <value>` for `00 Hub Digital CampoDigital`.
-- Chosen least-privileged Graph scope, per the spec's decision tree:
-  [`Files.Read` | `Files.Read.All` | `Sites.Selected`] — state which branch
-  of the decision tree applied and why.
-- If `Sites.Selected`: record that the tenant admin still needs to run
-  `PUT /sites/{site-id}/permissions` once, and the exact request body used.
+- `remoteItem.parentReference.driveId = <value>`,
+  `remoteItem.id = <value>` for `00 Hub Digital CampoDigital`, resolved
+  from `/me/drive/root/children`.
+- Chosen least-privileged Graph scope: `Files.Read`, confirmed sufficient
+  to enumerate `/drives/{driveId}/items/{itemId}/children` for the
+  resolved remote item. [If insufficient: record the exact Graph error
+  under `Files.Read` and the justification for escalating to
+  `Files.Read.All` — never straight to a Sites/tenant-admin permission,
+  which does not apply to this personal-OneDrive source.]
+- `tid`/`oid` observed on the real ID token (confirms or corrects the
+  spec section 1 revision's documented-but-unverified expectation that
+  `tid` is the constant personal-account placeholder
+  `9188040d-6c67-4c5b-b112-36a304b66dad`): `tid = <value>`, `oid = <value>`.
 ```
 
 - [ ] **Step 2: Add stable IDs to `config/source-catalog.yaml`**
@@ -1233,6 +1288,25 @@ def test_resolve_identity_from_claims_uses_tid_and_oid_never_email() -> None:
     assert identity_key == "tenant-x:oid-y"
 
 
+def test_resolve_identity_from_claims_handles_personal_microsoft_account() -> None:
+    # Revised 2026-09-01: the app registration now supports personal
+    # Microsoft accounts (spec section 1 revision). Public documentation
+    # says personal-account sign-ins carry a constant placeholder `tid`
+    # (the well-known "consumers" tenant ID) rather than a real
+    # organizational tenant ID — confirm this against Task 6/7's real
+    # discovery output before trusting it further; this test only checks
+    # that resolve_identity_from_claims does not special-case or reject
+    # that placeholder value.
+    claims = {
+        "tid": "9188040d-6c67-4c5b-b112-36a304b66dad", "oid": "oid-personal",
+        "name": "Someone",
+    }
+    tenant_id, object_id, identity_key = resolve_identity_from_claims(claims)
+    assert tenant_id == "9188040d-6c67-4c5b-b112-36a304b66dad"
+    assert object_id == "oid-personal"
+    assert identity_key == "9188040d-6c67-4c5b-b112-36a304b66dad:oid-personal"
+
+
 def test_resolve_identity_from_claims_requires_tid_and_oid() -> None:
     import pytest
 
@@ -1265,6 +1339,13 @@ from app.config import Settings
 
 SIGN_IN_SCOPES: tuple[str, ...] = ("openid", "profile")
 
+# Revised 2026-09-01: the app registration supports "any organizational
+# directory + personal Microsoft accounts" (spec section 1 revision), so
+# the authority must be the multi-tenant `common` endpoint, never an
+# authority pinned to the app registration's home tenant — pinning to
+# ENTRA_TENANT_ID would silently reject personal-account sign-ins.
+_AUTHORITY = "https://login.microsoftonline.com/common"
+
 
 class EntraNotConfiguredError(RuntimeError):
     """Raised when Entra settings are required but unset."""
@@ -1273,14 +1354,14 @@ class EntraNotConfiguredError(RuntimeError):
 def build_msal_app(settings: Settings) -> msal.ConfidentialClientApplication:
     """Construct the confidential-client app for one request's token exchange."""
 
-    if not (settings.entra_tenant_id and settings.entra_client_id and settings.entra_client_secret):
+    if not (settings.entra_client_id and settings.entra_client_secret):
         raise EntraNotConfiguredError(
-            "ENTRA_TENANT_ID/ENTRA_CLIENT_ID/ENTRA_CLIENT_SECRET must all be set."
+            "ENTRA_CLIENT_ID/ENTRA_CLIENT_SECRET must both be set."
         )
 
     return msal.ConfidentialClientApplication(
         settings.entra_client_id,
-        authority=f"https://login.microsoftonline.com/{settings.entra_tenant_id}",
+        authority=_AUTHORITY,
         client_credential=settings.entra_client_secret.get_secret_value(),
     )
 

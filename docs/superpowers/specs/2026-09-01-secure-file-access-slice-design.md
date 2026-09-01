@@ -34,13 +34,58 @@ real client binaries into Render's ephemeral storage.
 
 ## 1. Identity and session model
 
+### Revision (2026-09-01): Microsoft account model corrected
+
+New evidence changed a prerequisite this section originally assumed. The
+canonical Campo Digital OneDrive folder was opened directly and its URL
+proves it is a **personal OneDrive** (`onedrive.live.com`, a `remoteItem`
+shared from a different personal Microsoft account's `/personal/` drive
+root into Rafael's own OneDrive as an added shared folder) — not a
+SharePoint/Teams document library, and not hosted in any Microsoft 365
+tenant. There is no Campo Digital Microsoft 365 tenant today, and the only
+Entra directories Rafael currently sees (Institut Francais, University of
+Brighton) are unrelated organizations he is a guest in, not a Campo Digital
+tenant he can register an app under. The paragraphs below replace the
+original single-tenant/Microsoft-365-tenant assumption; everything else in
+this document (session hashing, token encryption, zero-grant bootstrap,
+the intersection authorization rule in section 3) is unaffected.
+
 ### Entra ID app registration
 
-- **Single-tenant** Azure AD app registration in Campo Digital's own
-  Microsoft 365 tenant (not multi-tenant/"any organization"). This must be
-  created manually by someone with tenant admin rights — out of band, not
-  something this repo can do. The implementer produces exact
-  step-by-step instructions for that person as part of this slice.
+- **Campo Digital needs its own dedicated Entra tenant** to own this app
+  registration — not an unrelated existing tenant (Institut Francais,
+  University of Brighton) and not a personal Microsoft account's implicit
+  identity. A personal Microsoft account cannot create an Entra tenant
+  directly; the practical, cheapest path is signing up for an **Azure free
+  account** (requires phone verification and a non-prepaid credit/debit
+  card for identity verification — a temporary authorization hold only, no
+  recurring charge as long as no paid resources are provisioned), which
+  automatically provisions a "Default Directory" Entra tenant on the
+  **Microsoft Entra ID Free** tier with the signer as Global Administrator.
+  That default tenant can be renamed (e.g. "Campo Digital") and is where
+  the app registration lives. No Microsoft 365 subscription is required —
+  Entra ID Free is sufficient for app registrations, delegated OAuth
+  flows, and the bootstrap-admin config pair below.
+- **Supported account types: "Accounts in any organizational directory
+  (Any Microsoft Entra ID tenant) and personal Microsoft accounts."** Not
+  single-tenant (the shared source material lives on a personal Microsoft
+  account, so real Campo Digital users signing in with personal accounts
+  must be supported today), and not "personal Microsoft accounts only"
+  either — the wider option preserves a clean, no-re-registration path to
+  real Campo Digital Microsoft 365 organizational accounts later, should
+  Campo Digital ever adopt one, without narrowing what can sign in today.
+  This choice only widens the identity-provider audience; it does not
+  weaken Campo's own authorization posture — `app.access.can()` still
+  denies every product action by default regardless of how someone
+  authenticated (see "First-admin bootstrap" below and section 3).
+- MSAL authority for this account-type combination is the `common`
+  endpoint (`https://login.microsoftonline.com/common`), not an
+  authority pinned to the app registration's home tenant ID — pinning to
+  the home tenant would silently exclude personal accounts and any other
+  organization's accounts. `ENTRA_TENANT_ID` is still recorded (the
+  tenant that owns the app registration, used for admin-center reference
+  and as one half of the bootstrap-admin match below), but it is no
+  longer the authority segment.
 - Confidential client (server-side authorization-code flow), so a client
   secret (or certificate) is required — stored the same way other
   production-candidate secrets are (local: ignored env file; Render:
@@ -62,6 +107,21 @@ Microsoft documents for this purpose; email/UPN can change (rename,
 domain change) and must never be used as the identity key. `email` /
 `display_name` are still stored on `app_user` as denormalized display
 data, refreshed on each login, exactly as today.
+
+Documented caveat for personal Microsoft accounts, not yet verified
+against a real token: for a personal (MSA) sign-in through an app
+registration that supports personal accounts, Microsoft's identity
+platform reportedly issues `tid = 9188040d-6c67-4c5b-b112-36a304b66dad` —
+a fixed, well-known placeholder shared by every personal-account sign-in,
+not a per-organization tenant ID — while `oid` remains a per-user object
+ID. `tid:oid` should still be collision-safe as an identity key (a
+constant `tid` for all personal accounts, combined with an `oid` that is
+itself already close to globally unique, does not introduce collisions
+with real organizational tenants' `tid:oid` pairs), but this is an
+inference from public documentation, not something this codebase has
+observed. Task 6's discovery run must print the actual `tid`/`oid`
+claims from a real sign-in and confirm this before Task 8 relies on it —
+do not treat the shape above as settled without that confirmation.
 
 ### Two-step consent: sign-in vs. file access
 
@@ -147,38 +207,71 @@ create an implicit, unreviewable privilege-escalation path.
 
 ## 2. Source type discovery (must run before choosing a Graph scope)
 
-`config/source-catalog.yaml` and `docs/source-systems/onedrive.md` both
-flag the exact source location as unconfirmed ("Exact OneDrive path still
-to be confirmed"). Whether `00 Hub Digital CampoDigital` is (a) a folder
-inside a personal/business OneDrive drive, (b) a OneDrive location shared
-by another user, or (c) a synced SharePoint/Teams document library
-materially changes the least-privileged permission choice. Do not guess.
+### Revision (2026-09-01): source location is now confirmed as personal OneDrive
+
+Opening the canonical Campo Digital folder directly (browser, URL
+inspection) confirms `00 Hub Digital CampoDigital` is **not** a
+SharePoint/Teams document library: it is a **personal** OneDrive
+(`onedrive.live.com`) owned by a different personal Microsoft account,
+appearing in Rafael's own OneDrive as an added shared folder — Graph
+represents this as a `remoteItem` whose `parentReference.driveId`/`id`
+point at the owner's drive, not Rafael's. This replaces the "most likely
+SharePoint" framing the original spec and the tenant-admin handoff
+document both carried; the decision tree below is narrowed accordingly,
+and Step 0 must still run to get the exact stable IDs, but the drive-type
+branch of the decision is no longer open.
+
+Two further corrections from the same evidence pass:
+
+- **Do not build discovery around `GET /me/drive/sharedWithMe`.**
+  Microsoft has deprecated this endpoint; it already returns degraded
+  results and is documented to stop returning data entirely after
+  November 2026. It must not become a load-bearing part of Step 0.
+- **Test the least-privilege route first, using the fact that the shared
+  folder already appears as a `remoteItem` in Rafael's own OneDrive**,
+  rather than searching for it: enumerate Rafael's own OneDrive root
+  (`GET /me/drive/root/children`), find the child whose `remoteItem`
+  facet is present, read `remoteItem.parentReference.driveId` +
+  `remoteItem.id` from it, and enumerate that item's contents via
+  `GET /drives/{drive-id}/items/{item-id}/children`. Public Microsoft
+  Graph documentation states that delegated `Files.Read` (and
+  `Files.ReadWrite`) on a **personal** Microsoft account "also grant
+  access to files shared with the signed-in user" — i.e. `Files.Read`
+  is documented to be sufficient for exactly this remoteItem shape, with
+  no `.All` variant needed. Step 0 must still confirm this against a
+  real token rather than trust the documentation alone; if delegated
+  `Files.Read` genuinely proves insufficient against the real remoteItem
+  (e.g. a 403 resolving the remote drive), only then escalate, and only
+  to `Files.Read.All`, never straight to a broader/Sites-shaped
+  permission that does not apply to a personal-OneDrive source.
 
 **Step 0 of implementation** is a short, throwaway discovery script run
 against a real Campo Digital sign-in (not client data, just Graph
-metadata calls): `GET /me/drives`, `GET /sites?search=`, and walking
-`children` from the known top-level folder names in
-`docs/source-systems/onedrive.md`, to answer: which drive/site actually
-holds this content, and what are its stable `driveId` and root
-`itemId` (or `siteId`)?
+metadata calls): request delegated `Files.Read` only, list
+`/me/drive/root/children`, locate the `remoteItem`-shaped entry for
+`00 Hub Digital CampoDigital`, and walk `children` from its resolved
+`driveId`/`itemId`, to record the stable `driveId`/`itemId` Step 7
+(`config/source-catalog.yaml`) needs.
 
-Decision tree from that result:
+Decision tree from that result (narrowed from the original three-way
+split, since the drive type is now known; kept as a tree rather than a
+single hard-coded scope because Step 0 must still verify it against a
+real token, not assume it):
 
-- **Personal/business OneDrive drive the signing-in user owns or is a
-  direct member of** → delegated `Files.Read` (not `.All`) — narrowest
-  option, typically user-consentable without tenant admin approval.
-- **OneDrive content shared by a different user** → delegated
-  `Files.Read.All` is required for Graph to resolve items the caller
-  doesn't own, even though it is still bounded to what that caller can
-  already see — this is Graph's naming, not a broader grant in practice.
-- **SharePoint/Teams-backed document library** → prefer **`Sites.Selected`**
-  over `Sites.Read.All`. `Sites.Selected` requires an admin to explicitly
-  grant the app permission to exactly one site (`PUT
-  /sites/{site-id}/permissions`, a one-time admin action documented for
-  the tenant-admin handoff), rather than every site in the tenant. This
-  is the single most important least-privilege decision in this section
-  and should be preferred whenever the discovery step confirms a
-  SharePoint-backed library.
+- **Personal OneDrive shared into the signing-in user's own OneDrive as a
+  `remoteItem`** (the confirmed case here) → delegated `Files.Read` (not
+  `.All`) — per the documented personal-account behavior above. This is
+  the expected outcome; Step 0 exists to confirm it, not to choose among
+  equally-likely branches.
+- **Delegated `Files.Read` proves insufficient in the real Step 0 run**
+  (e.g. Graph cannot resolve the remote drive/item with that scope) →
+  escalate to delegated `Files.Read.All`, and record in the RESULT entry
+  exactly what failed under `Files.Read` that justified the escalation.
+- **SharePoint/Teams-backed document library** — ruled out by the URL
+  evidence above; the `Sites.Selected` branch from the original spec is
+  retained in the handoff document only as a documented fallback in case
+  a *different* Campo Digital source later turns out to be
+  SharePoint-backed, not as an expected outcome for this source.
 
 Record the outcome (drive/site type, chosen scope, and the stable IDs) as
 a short **RESULT** entry in `docs/source-systems/onedrive.md` once known
@@ -331,9 +424,11 @@ genuine, expected outcome on the free tier, not a bug to be hidden.
    least-privileged Graph scope against a real Campo Digital sign-in.
    Record the RESULT in `docs/source-systems/onedrive.md`. No app code.
 2. **Entra app registration handoff doc** — write the exact steps for
-   Campo Digital's tenant admin (single-tenant app, redirect URIs for
-   local + Render staging, the scope chosen in step 1, `Sites.Selected`
-   grant if applicable). Blocks nothing else in parallel, but real
+   Campo Digital's tenant admin (dedicated Campo Digital Entra tenant,
+   app supporting any organizational directory + personal Microsoft
+   accounts, redirect URIs for local + Render staging, the scope chosen
+   in step 1, `Sites.Selected` grant only if a future SharePoint-backed
+   source needs it). Blocks nothing else in parallel, but real
    end-to-end testing needs it done.
 3. **Session hardening** — migration `0007` (`platform.session`,
    `platform.ms_graph_grant`), swap dev-auth's in-process session for the

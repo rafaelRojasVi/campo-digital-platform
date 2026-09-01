@@ -3,8 +3,40 @@
 ## Status
 
 Action required from someone with Global Administrator or Application
-Administrator rights in the Campo Digital Microsoft 365 tenant. Platform
-engineering cannot perform this step.
+Administrator rights in a Campo Digital Entra tenant. **No such tenant
+exists yet as of 2026-09-01** — see "Prerequisite: create the tenant"
+below before step 1. Platform engineering cannot perform either step.
+
+## Revision note (2026-09-01)
+
+Opening the canonical Campo Digital OneDrive folder directly proved it is
+a **personal** OneDrive (`onedrive.live.com`) shared from a different
+personal Microsoft account into Rafael's own OneDrive — not a
+SharePoint/Teams document library in a Microsoft 365 tenant, which this
+document originally assumed. There is no Campo Digital Microsoft 365
+tenant, and the only Entra directories currently visible (Institut
+Francais, University of Brighton) are unrelated organizations, not a
+Campo Digital tenant. This revision corrects the account-type and
+tenant-ownership guidance below; the rest of this document (redirect
+URIs, secret handling, what the registration is never used for) is
+unaffected.
+
+## Prerequisite: create the tenant
+
+A personal Microsoft account cannot create an Entra tenant directly.
+The cheapest working path: sign up for an **Azure free account**
+(https://azure.microsoft.com/free) using the Microsoft account that
+should administer Campo Digital's platform identity. This requires phone
+verification and a non-prepaid credit/debit card for identity
+verification only — a temporary authorization hold, not a recurring
+charge, as long as no paid Azure resources are provisioned. Signing up
+automatically creates a "Default Directory" Entra tenant on the
+**Microsoft Entra ID Free** tier, with the signer as Global
+Administrator. No Microsoft 365 subscription is needed. Rename the
+default directory (Entra admin center → **Overview** → **Manage
+tenant** → rename) to something identifiable, e.g. "Campo Digital." This
+tenant is what "Campo Digital tenant admin" means for the rest of this
+document.
 
 ## What this is for
 
@@ -20,9 +52,14 @@ OneDrive/SharePoint source material described in
 1. Azure Portal → **Microsoft Entra ID** → **App registrations** → **New
    registration**.
 2. Name: `Campo Digital Platform (staging)`.
-3. Supported account types: **Accounts in this organizational directory
-   only (Campo Digital tenant only — Single tenant)**. Do not choose
-   "multitenant" or "personal Microsoft accounts".
+3. Supported account types: **Accounts in any organizational directory
+   (Any Microsoft Entra ID tenant - Multitenant) and personal Microsoft
+   accounts (e.g. Skype, Xbox)**. Real Campo Digital users sign in with
+   personal Microsoft accounts today (see "Revision note" above) — this
+   is the option that includes personal accounts while also preserving a
+   clean path to real Campo Digital Microsoft 365 organizational accounts
+   later, without re-registering the app. Do not choose "personal
+   Microsoft accounts only" — it would block that future path.
 4. Redirect URI (platform — Web):
    - `http://localhost:8000/auth/entra/callback` (local development)
    - `https://campo-digital-api-staging.onrender.com/auth/entra/callback`
@@ -47,16 +84,26 @@ OneDrive/SharePoint source material described in
 
 Platform engineering runs a short, read-only discovery script against a
 real sign-in using this registration (no client data is touched — only
-Graph metadata calls like "list my drives"). That determines whether a
-second permission grant is needed:
+Graph metadata calls, e.g. listing the signing-in user's own OneDrive and
+following the `remoteItem` for the already-shared Campo Digital folder).
+The source material is confirmed to be a **personal OneDrive** shared
+into the signing-in user's own OneDrive (not a SharePoint/Teams document
+library), so the expected outcome needs only delegated `Files.Read` —
+no tenant-admin action beyond this registration itself. Two possible
+follow-ups, neither expected but both documented in case discovery finds
+otherwise:
 
-- If the source material turns out to live in a SharePoint/Teams document
-  library (the most likely case, per `docs/source-systems/onedrive.md`),
-  the tenant admin will be asked to run one more one-time action:
-  `Sites.Selected` permission grant scoped to exactly one site (not every
-  site in the tenant). Platform engineering will provide the exact
-  `POST /sites/{site-id}/permissions` request body at that point — do not
-  pre-grant broader Graph permissions in anticipation of this.
+- If delegated `Files.Read` genuinely proves insufficient against the
+  real shared folder, platform engineering escalates to delegated
+  `Files.Read.All` — still no tenant-admin action, since it's a
+  user-consentable delegated scope.
+- If a *different*, future Campo Digital source turns out to be
+  SharePoint/Teams-backed, the tenant admin may separately be asked to
+  run a one-time `Sites.Selected` permission grant scoped to exactly one
+  site (not every site in the tenant); platform engineering would provide
+  the exact `POST /sites/{site-id}/permissions` request body at that
+  point. Do not pre-grant broader Graph permissions in anticipation of
+  this — it does not apply to the OneDrive source confirmed today.
 
 ## What this registration will never be used for
 
