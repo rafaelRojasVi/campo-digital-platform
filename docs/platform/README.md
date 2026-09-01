@@ -38,10 +38,14 @@ Product-specific implementation truth remains inside each product boundary. Plat
 
 - [ADR-001 — Managed production platform](../adr/ADR-001-managed-production-platform.md)
 - [ADR-002 — Source provenance identity](../adr/ADR-002-source-provenance-identity.md)
+- [ADR-003 — Migration revision allocation convention](../adr/ADR-003-migration-revision-allocation-convention.md)
+- [ADR-004 — Revisit production cloud provider choice](../adr/ADR-004-revisit-production-cloud-provider-choice.md) (Proposed; does not supersede ADR-001)
 
 ## Research
 
 Research documents preserve dated evidence and comparisons but are not canonical architecture.
+
+- [Platform runtime infrastructure study (2026-09-01)](../research/2026-09-01-platform-runtime-infrastructure-study.md)
 
 - [Infrastructure provider study — 2026-08-27](../research/2026-08-27-infrastructure-provider-study.md)
 

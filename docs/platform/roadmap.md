@@ -250,9 +250,16 @@ are authorized to use.
 
 Finalize the production provider using then-current evidence and pricing.
 
-Current leading candidate:
+Current leading candidate (per ADR-001, Proposed, 2026-08-27):
 
 - GCP Santiago.
+
+**OPEN QUESTION** (2026-09-01) — `docs/adr/ADR-004-revisit-production-cloud-provider-choice.md`
+(Proposed, not accepted) proposes Azure Chile Central as a competing
+candidate, based on newly-confirmed regional parity and Microsoft/OneDrive
+ecosystem fit; see `docs/research/2026-09-01-platform-runtime-infrastructure-study.md`.
+Neither ADR-001 nor ADR-004 is finalized — this phase remains open pending
+team review and a real LiDAR pipeline benchmark.
 
 Production concerns:
 
