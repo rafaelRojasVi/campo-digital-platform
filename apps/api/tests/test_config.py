@@ -86,3 +86,11 @@ def test_settings_repr_does_not_expose_password() -> None:
     )
 
     assert secret not in repr(settings)
+
+
+def test_new_settings_default_safely() -> None:
+    settings = Settings(postgres_password="x")
+    assert settings.enable_onedrive_import is False
+    assert settings.staging_execution_max_bytes == 25 * 1024 * 1024
+    assert settings.entra_tenant_id is None
+    assert settings.platform_bootstrap_admin_tenant_id is None
