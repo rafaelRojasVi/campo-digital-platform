@@ -62,6 +62,32 @@ def test_me_without_session_returns_401(integration_connection: Connection) -> N
     assert exc_info.value.status_code == 401
 
 
+def test_get_current_app_user_falls_back_to_dev_auth_on_platform_session_miss(
+    integration_connection: Connection,
+) -> None:
+    """get_current_app_user must try PlatformSessionStore first, and only
+    fall back to DevSessionStore where assert_dev_auth_allowed doesn't
+    raise (APP_ENV=development). Here the PlatformSessionStore has no
+    session at all, so a hit can only come from the dev-auth fallback path
+    (assert_dev_auth_allowed -> DevSessionStore.resolve_session ->
+    resolve_or_create_app_user) — proving that branch is actually reached
+    and resolves to the expected identity, not just that it doesn't 401."""
+
+    identity_key = "dev-operator"
+    dev_sessions = DevSessionStore()
+    token = dev_sessions.create_session(identity_key)
+
+    user = get_current_app_user(
+        _development_settings(),
+        integration_connection,
+        PlatformSessionStore(),
+        dev_sessions,
+        token,
+    )
+
+    assert user.identity_key == identity_key
+
+
 def test_dev_login_unknown_identity_returns_422(integration_connection: Connection) -> None:
     """POST /auth/dev-login's handler rejects an identity_key outside
     SEEDED_DEV_IDENTITIES."""
