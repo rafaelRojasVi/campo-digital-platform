@@ -5,15 +5,18 @@ import { useRuntimeConfig } from '../runtime/useRuntimeConfig'
 
 export function Estado() {
   const { config, loading } = useRuntimeConfig()
+  const isStaging = config.environment === 'staging'
 
   return (
     <div className="estado">
       <p>
         <Link to="/">← Campo Digital</Link>
       </p>
-      <h1>Estado del entorno local</h1>
+      <h1>{isStaging ? 'Estado del entorno de staging' : 'Estado del entorno local'}</h1>
       <p className="estado__note">
-        Vista de diagnóstico para desarrollo. No representa disponibilidad en producción.
+        {isStaging
+          ? 'Entorno de staging público. No contiene datos reales de clientes.'
+          : 'Vista de diagnóstico para desarrollo. No representa disponibilidad en producción.'}
       </p>
 
       {loading ? (
@@ -24,8 +27,8 @@ export function Estado() {
             <tr>
               <th>Módulo</th>
               <th>Estado</th>
-              <th>URL local</th>
-              <th>Iniciado por Campo Demo</th>
+              <th>URL{isStaging ? '' : ' local'}</th>
+              {!isStaging && <th>Iniciado por Campo Demo</th>}
               <th>Mediciones persistidas</th>
             </tr>
           </thead>
@@ -39,7 +42,11 @@ export function Estado() {
                   <td>
                     <code>{status.url ?? '—'}</code>
                   </td>
-                  <td>{status.owned === undefined ? '—' : status.owned ? 'sí' : 'no (ya estaba activo)'}</td>
+                  {!isStaging && (
+                    <td>
+                      {status.owned === undefined ? '—' : status.owned ? 'sí' : 'no (ya estaba activo)'}
+                    </td>
+                  )}
                   <td>{status.measurementCount === undefined ? '—' : status.measurementCount}</td>
                 </tr>
               )

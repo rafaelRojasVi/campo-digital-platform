@@ -70,3 +70,24 @@ describe('Estado', () => {
     expect(row!.textContent).toContain('—')
   })
 })
+
+describe('Estado — staging', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('describes hosted availability, not local process ownership', async () => {
+    vi.stubEnv('VITE_CAMPO_ENV', 'staging')
+    vi.stubEnv('VITE_LIDAR_HOSTED_URL', 'https://campo-digital-lidar-staging.onrender.com')
+
+    render(
+      <RouterProvider>
+        <Estado />
+      </RouterProvider>,
+    )
+
+    expect(await screen.findByText('Estado del entorno de staging')).toBeInTheDocument()
+    expect(screen.queryByText('Estado del entorno local')).not.toBeInTheDocument()
+    expect(screen.queryByText('Iniciado por Campo Demo')).not.toBeInTheDocument()
+  })
+})

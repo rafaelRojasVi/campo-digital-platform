@@ -1,6 +1,6 @@
 import { RouterProvider, useRouter } from './router/Router'
 import { Home } from './pages/Home'
-import { Ingesta } from './pages/Ingesta'
+import { Archivos } from './pages/Archivos'
 import { ModulePage } from './pages/Module'
 import { Estado } from './pages/Estado'
 
@@ -11,8 +11,8 @@ function Routes() {
     return <Estado />
   }
 
-  if (pathname === '/ingesta') {
-    return <Ingesta />
+  if (pathname === '/archivos') {
+    return <Archivos />
   }
 
   if (pathname.startsWith('/modulo/')) {

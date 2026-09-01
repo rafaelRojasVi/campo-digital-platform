@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isSafeLocalUrl } from './safeUrl'
+import { isSafeIframeUrl, isSafeLocalUrl } from './safeUrl'
 
 describe('isSafeLocalUrl', () => {
   it('accepts http URLs on loopback hosts', () => {
@@ -26,5 +26,30 @@ describe('isSafeLocalUrl', () => {
 
   it('rejects malformed URLs', () => {
     expect(isSafeLocalUrl('not a url')).toBe(false)
+  })
+})
+
+describe('isSafeIframeUrl', () => {
+  it('in local, behaves exactly like isSafeLocalUrl', () => {
+    expect(isSafeIframeUrl('http://127.0.0.1:5173/', 'local')).toBe(true)
+    expect(isSafeIframeUrl('https://campo-digital-lidar-staging.onrender.com/', 'local')).toBe(
+      false,
+    )
+  })
+
+  it('in staging, accepts only the known hosted LiDAR origin over https', () => {
+    expect(
+      isSafeIframeUrl('https://campo-digital-lidar-staging.onrender.com/', 'staging'),
+    ).toBe(true)
+    expect(
+      isSafeIframeUrl('http://campo-digital-lidar-staging.onrender.com/', 'staging'),
+    ).toBe(false)
+  })
+
+  it('in staging, rejects loopback URLs, other onrender.com apps, and unsafe schemes', () => {
+    expect(isSafeIframeUrl('http://127.0.0.1:5173/', 'staging')).toBe(false)
+    expect(isSafeIframeUrl('https://someone-elses-app.onrender.com/', 'staging')).toBe(false)
+    expect(isSafeIframeUrl('javascript:alert(1)', 'staging')).toBe(false)
+    expect(isSafeIframeUrl(undefined, 'staging')).toBe(false)
   })
 })

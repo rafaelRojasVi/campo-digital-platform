@@ -6,9 +6,14 @@ import App from './App'
 function mockRuntimeFetch(body: unknown = { modules: {} }) {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => body,
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+
+      if (url.endsWith('/api/auth/me')) {
+        return { ok: false, status: 401, json: async () => ({ detail: 'Not authenticated.' }) }
+      }
+
+      return { ok: true, json: async () => body }
     }),
   )
 }
@@ -59,5 +64,16 @@ describe('App navigation', () => {
     render(<App />)
 
     expect(await screen.findByText('Estado del entorno local')).toBeInTheDocument()
+  })
+
+  it('navigates from the home footer into /archivos as a first-class entry', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await screen.findByText('Cubicación LiDAR')
+    await user.click(screen.getByText('Archivos'))
+
+    expect(window.location.pathname).toBe('/archivos')
+    await screen.findByText('Archivos')
   })
 })

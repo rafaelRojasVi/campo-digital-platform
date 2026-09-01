@@ -1,16 +1,18 @@
 import type { ModuleDefinition } from '../data/modules'
 import { MODULES } from '../data/modules'
 import { Link, useRouter } from '../router/Router'
-import { isSafeLocalUrl } from '../lib/safeUrl'
+import { isSafeIframeUrl } from '../lib/safeUrl'
+import type { CampoEnvironment } from '../runtime/environment'
 
 interface ModuleHeaderProps {
   module: ModuleDefinition
   url: string | undefined
+  environment: CampoEnvironment
 }
 
-export function ModuleHeader({ module, url }: ModuleHeaderProps) {
+export function ModuleHeader({ module, url, environment }: ModuleHeaderProps) {
   const { pathname } = useRouter()
-  const canOpenExternally = isSafeLocalUrl(url)
+  const canOpenExternally = isSafeIframeUrl(url, environment)
 
   return (
     <header className="module-header">

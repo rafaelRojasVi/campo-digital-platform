@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { moduleStatusFor, parseRuntimeConfig } from './runtimeConfig'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { buildStagingRuntimeConfig, moduleStatusFor, parseRuntimeConfig } from './runtimeConfig'
 
 describe('parseRuntimeConfig', () => {
   it('parses a well-formed config', () => {
@@ -52,8 +52,38 @@ describe('parseRuntimeConfig', () => {
 
 describe('moduleStatusFor', () => {
   it('defaults to unavailable when a module is missing from the config', () => {
-    const status = moduleStatusFor({ modules: {} }, 'lidar')
+    const status = moduleStatusFor({ environment: 'local', modules: {} }, 'lidar')
     expect(status).toEqual({ status: 'unavailable' })
+  })
+})
+
+describe('buildStagingRuntimeConfig', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('marks a hosted module available with its build-time URL', () => {
+    vi.stubEnv('VITE_LIDAR_HOSTED_URL', 'https://campo-digital-lidar-staging.onrender.com')
+    const config = buildStagingRuntimeConfig()
+
+    expect(config.environment).toBe('staging')
+    expect(config.modules.lidar).toEqual({
+      status: 'available',
+      url: 'https://campo-digital-lidar-staging.onrender.com',
+    })
+  })
+
+  it('marks forestal and transelec unavailable — honest, not fake-green', () => {
+    const config = buildStagingRuntimeConfig()
+
+    expect(config.modules.forestal).toEqual({ status: 'unavailable' })
+    expect(config.modules.transelec).toEqual({ status: 'unavailable' })
+  })
+})
+
+describe('parseRuntimeConfig environment tag', () => {
+  it('always tags local, since it only ever parses the local launcher file', () => {
+    expect(parseRuntimeConfig({ modules: {} }).environment).toBe('local')
   })
 })
 

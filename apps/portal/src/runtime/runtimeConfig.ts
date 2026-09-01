@@ -1,3 +1,6 @@
+import type { CampoEnvironment } from './environment'
+import { hostedModuleUrls } from './hostedModules'
+
 export type ModuleId = 'lidar' | 'forestal' | 'transelec'
 
 export type ModuleStatus = 'available' | 'unavailable'
@@ -10,12 +13,13 @@ export interface ModuleRuntimeStatus {
 }
 
 export interface CampoRuntimeConfig {
+  environment: CampoEnvironment
   generatedAt?: string
   portal?: { port?: number }
   modules: Partial<Record<ModuleId, ModuleRuntimeStatus>>
 }
 
-const EMPTY_CONFIG: CampoRuntimeConfig = { modules: {} }
+const EMPTY_CONFIG: CampoRuntimeConfig = { environment: 'local', modules: {} }
 
 function isModuleStatus(value: unknown): value is ModuleStatus {
   return value === 'available' || value === 'unavailable'
@@ -66,6 +70,7 @@ export function parseRuntimeConfig(raw: unknown): CampoRuntimeConfig {
   }
 
   return {
+    environment: 'local',
     generatedAt: typeof record.generatedAt === 'string' ? record.generatedAt : undefined,
     portal:
       typeof record.portal === 'object' && record.portal !== null
@@ -93,6 +98,24 @@ export async function fetchRuntimeConfig(
   } catch {
     return EMPTY_CONFIG
   }
+}
+
+/**
+ * STAGING's runtime config: no fetch, no dynamic file (Render's static
+ * hosting has no server to generate one) — everything is already compiled
+ * into this bundle from hostedModuleUrls(). Synchronous by design so
+ * useRuntimeConfig never shows a loading flicker in STAGING.
+ */
+export function buildStagingRuntimeConfig(): CampoRuntimeConfig {
+  const hosted = hostedModuleUrls()
+  const modules: CampoRuntimeConfig['modules'] = {}
+
+  for (const moduleId of ['lidar', 'forestal', 'transelec'] as const) {
+    const url = hosted[moduleId]
+    modules[moduleId] = url ? { status: 'available', url } : { status: 'unavailable' }
+  }
+
+  return { environment: 'staging', modules }
 }
 
 export function moduleStatusFor(

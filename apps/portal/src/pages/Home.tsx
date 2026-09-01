@@ -30,6 +30,7 @@ export function Home() {
             key={module.id}
             module={module}
             status={moduleStatusFor(config, module.id).status}
+            environment={config.environment}
             layout={LAYOUTS[module.id]}
           />
         ))}
@@ -38,7 +39,12 @@ export function Home() {
       <footer className="home__footer">
         <p>3 productos · fuentes trazables · evidencia preservada</p>
         <Link to="/estado" className="home__footer-link">
-          Estado del entorno local
+          {config.environment === 'staging'
+            ? 'Estado del entorno de staging'
+            : 'Estado del entorno local'}
+        </Link>
+        <Link to="/archivos" className="home__footer-link">
+          Archivos
         </Link>
       </footer>
     </div>

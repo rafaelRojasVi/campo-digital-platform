@@ -72,3 +72,33 @@ describe('Home', () => {
     expect(screen.getByText('Estado del entorno local')).toBeInTheDocument()
   })
 })
+
+describe('Home — staging awareness', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('never shows the local-only "Demo no iniciada" phrase in staging', async () => {
+    vi.stubEnv('VITE_CAMPO_ENV', 'staging')
+
+    render(
+      <RouterProvider>
+        <Home />
+      </RouterProvider>,
+    )
+
+    await screen.findByText('Cubicación LiDAR')
+    expect(screen.queryByText('Demo no iniciada')).not.toBeInTheDocument()
+  })
+
+  it('links to /archivos as a first-class nav entry', () => {
+    render(
+      <RouterProvider>
+        <Home />
+      </RouterProvider>,
+    )
+
+    const link = screen.getByText('Archivos')
+    expect(link.closest('a')).toHaveAttribute('href', '/archivos')
+  })
+})

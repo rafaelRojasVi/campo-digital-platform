@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RouterProvider } from '../router/Router'
-import { Ingesta } from './Ingesta'
+import { Archivos } from './Archivos'
 
 interface MockResponses {
   me?: unknown
@@ -38,13 +38,13 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('Ingesta', () => {
+describe('Archivos', () => {
   it('shows the local-identity picker and no upload control when logged out', async () => {
     mockPlatformFetch({ me: undefined })
 
     render(
       <RouterProvider>
-        <Ingesta />
+        <Archivos />
       </RouterProvider>,
     )
 
@@ -66,7 +66,7 @@ describe('Ingesta', () => {
 
     render(
       <RouterProvider>
-        <Ingesta />
+        <Archivos />
       </RouterProvider>,
     )
 
@@ -99,7 +99,7 @@ describe('Ingesta', () => {
 
     render(
       <RouterProvider>
-        <Ingesta />
+        <Archivos />
       </RouterProvider>,
     )
 
@@ -129,7 +129,7 @@ describe('Ingesta', () => {
 
     render(
       <RouterProvider>
-        <Ingesta />
+        <Archivos />
       </RouterProvider>,
     )
 
@@ -165,12 +165,34 @@ describe('Ingesta', () => {
 
     render(
       <RouterProvider>
-        <Ingesta />
+        <Archivos />
       </RouterProvider>,
     )
 
     await screen.findByText('Dev Admin (dev-admin)')
     await waitFor(() => expect(screen.getByText('Auditoría')).toBeInTheDocument())
     await screen.findByText('session.created')
+  })
+})
+
+describe('Archivos — staging (no sign-in mechanism yet)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('shows an honest sign-in-unavailable message instead of dead dev-login buttons', async () => {
+    vi.stubEnv('VITE_CAMPO_ENV', 'staging')
+    mockPlatformFetch({ me: undefined })
+
+    render(
+      <RouterProvider>
+        <Archivos />
+      </RouterProvider>,
+    )
+
+    await screen.findByText(/inicio de sesión/i)
+    expect(screen.queryByText('dev-admin')).not.toBeInTheDocument()
+    expect(screen.queryByText('dev-operator')).not.toBeInTheDocument()
+    expect(screen.queryByText('dev-viewer')).not.toBeInTheDocument()
   })
 })

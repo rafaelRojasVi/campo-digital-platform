@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { findModule } from '../data/modules'
 import { ModuleHeader } from '../components/ModuleHeader'
 import { Link } from '../router/Router'
-import { isSafeLocalUrl } from '../lib/safeUrl'
+import { isSafeIframeUrl } from '../lib/safeUrl'
+import type { CampoEnvironment } from '../runtime/environment'
 import { moduleStatusFor } from '../runtime/runtimeConfig'
 import { useRuntimeConfig } from '../runtime/useRuntimeConfig'
 
@@ -21,12 +22,14 @@ export function ModulePage({ moduleId }: { moduleId: string }) {
   }
 
   const runtimeStatus = moduleStatusFor(config, module.id)
-  const safeUrl = isSafeLocalUrl(runtimeStatus.url) ? runtimeStatus.url : undefined
+  const safeUrl = isSafeIframeUrl(runtimeStatus.url, config.environment)
+    ? runtimeStatus.url
+    : undefined
   const isAvailable = runtimeStatus.status === 'available' && Boolean(safeUrl)
 
   return (
     <div className="module-shell">
-      <ModuleHeader module={module} url={safeUrl} />
+      <ModuleHeader module={module} url={safeUrl} environment={config.environment} />
 
       <div className="module-shell__content">
         {loading ? (
@@ -40,7 +43,7 @@ export function ModulePage({ moduleId }: { moduleId: string }) {
             onError={() => setIframeFailed(true)}
           />
         ) : (
-          <ModuleUnavailable moduleId={module.id} />
+          <ModuleUnavailable moduleId={module.id} environment={config.environment} />
         )}
       </div>
     </div>
@@ -53,7 +56,25 @@ const EXPECTED_BRANCH: Record<string, string> = {
   transelec: 'feat/transelec-ui-reference-parity-v1',
 }
 
-function ModuleUnavailable({ moduleId }: { moduleId: string }) {
+function ModuleUnavailable({
+  moduleId,
+  environment,
+}: {
+  moduleId: string
+  environment: CampoEnvironment
+}) {
+  if (environment === 'staging') {
+    return (
+      <div className="module-shell__state module-shell__state--unavailable">
+        <p>Este módulo aún no está disponible públicamente en este entorno.</p>
+        <p className="module-shell__state-hint">
+          No se publican datos reales de clientes sin sanear primero; este módulo se habilitará
+          aquí cuando exista una versión hospedada segura.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="module-shell__state module-shell__state--unavailable">
       <p>Demo no iniciada.</p>

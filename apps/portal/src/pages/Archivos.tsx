@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from '../router/Router'
+import { getCampoEnvironment } from '../runtime/environment'
 import {
   DEV_IDENTITIES,
   devLogin,
@@ -36,7 +37,7 @@ function canRetry(role: Role | null): boolean {
   return role === 'admin' || role === 'operator'
 }
 
-export function Ingesta() {
+export function Archivos() {
   const [me, setMe] = useState<Me | null>(null)
   const [loadingMe, setLoadingMe] = useState(true)
   const [selectedProduct, setSelectedProduct] = useState<ProductKey>('forestry')
@@ -138,22 +139,32 @@ export function Ingesta() {
   }
 
   if (!me) {
+    const environment = getCampoEnvironment()
     return (
       <div className="ingesta">
         <p>
           <Link to="/">← Campo Digital</Link>
         </p>
-        <h1>Ingesta local (dev)</h1>
-        <p className="ingesta__note">
-          Autenticación local de desarrollo — no representa un mecanismo de producción.
-        </p>
-        <div className="ingesta__login" role="group" aria-label="Elegir identidad local">
-          {DEV_IDENTITIES.map((identityKey) => (
-            <button key={identityKey} type="button" onClick={() => handleLogin(identityKey)}>
-              {identityKey}
-            </button>
-          ))}
-        </div>
+        <h1>Archivos</h1>
+        {environment === 'staging' ? (
+          <p className="ingesta__note">
+            El inicio de sesión de plataforma aún no está disponible en este entorno (queda
+            pendiente la integración con Entra ID).
+          </p>
+        ) : (
+          <>
+            <p className="ingesta__note">
+              Autenticación local de desarrollo — no representa un mecanismo de producción.
+            </p>
+            <div className="ingesta__login" role="group" aria-label="Elegir identidad local">
+              {DEV_IDENTITIES.map((identityKey) => (
+                <button key={identityKey} type="button" onClick={() => handleLogin(identityKey)}>
+                  {identityKey}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     )
   }
@@ -165,7 +176,7 @@ export function Ingesta() {
       <p>
         <Link to="/">← Campo Digital</Link>
       </p>
-      <h1>Ingesta local (dev)</h1>
+      <h1>Archivos</h1>
       <p className="ingesta__note">
         Autenticación local de desarrollo — no representa un mecanismo de producción.
       </p>

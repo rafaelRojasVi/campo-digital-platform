@@ -10,7 +10,7 @@ describe('ModuleHeader', () => {
   it('shows the external-open action for a safe loopback URL', () => {
     render(
       <RouterProvider>
-        <ModuleHeader module={forestal} url="http://127.0.0.1:5175/" />
+        <ModuleHeader module={forestal} url="http://127.0.0.1:5175/" environment="local" />
       </RouterProvider>,
     )
 
@@ -23,7 +23,7 @@ describe('ModuleHeader', () => {
   it('hides the external-open action instead of using an unsafe URL', () => {
     render(
       <RouterProvider>
-        <ModuleHeader module={forestal} url="javascript:alert(1)" />
+        <ModuleHeader module={forestal} url="javascript:alert(1)" environment="local" />
       </RouterProvider>,
     )
 
@@ -33,7 +33,34 @@ describe('ModuleHeader', () => {
   it('hides the external-open action when no URL is known yet', () => {
     render(
       <RouterProvider>
-        <ModuleHeader module={forestal} url={undefined} />
+        <ModuleHeader module={forestal} url={undefined} environment="local" />
+      </RouterProvider>,
+    )
+
+    expect(screen.queryByText('Abrir en pestaña nueva')).not.toBeInTheDocument()
+  })
+
+  it('accepts the known staging hosted origin as a safe external-open target', () => {
+    render(
+      <RouterProvider>
+        <ModuleHeader
+          module={forestal}
+          url="https://campo-digital-lidar-staging.onrender.com/"
+          environment="staging"
+        />
+      </RouterProvider>,
+    )
+
+    expect(screen.getByText('Abrir en pestaña nueva')).toHaveAttribute(
+      'href',
+      'https://campo-digital-lidar-staging.onrender.com/',
+    )
+  })
+
+  it('in staging, rejects a loopback URL that would only be safe locally', () => {
+    render(
+      <RouterProvider>
+        <ModuleHeader module={forestal} url="http://127.0.0.1:5175/" environment="staging" />
       </RouterProvider>,
     )
 
