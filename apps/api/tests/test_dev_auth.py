@@ -24,6 +24,13 @@ def test_dev_auth_allowed_in_test() -> None:
     assert_dev_auth_allowed(_settings("test"))
 
 
+def test_dev_auth_allowed_in_staging() -> None:
+    # Render staging has no managed identity provider yet, so dev-auth is the
+    # only way to demonstrate the authorization layer there. See
+    # docs/adr/ADR-005-render-staging-experiment.md.
+    assert_dev_auth_allowed(_settings("staging"))
+
+
 def test_dev_auth_rejected_in_production() -> None:
     with pytest.raises(DevAuthDisabledInProductionError):
         assert_dev_auth_allowed(_settings("production"))

@@ -50,6 +50,11 @@ def test_dev_auth_routes_mounted_in_development() -> None:
     assert "AUTH_MOUNTED=True" in output
 
 
+def test_dev_auth_routes_mounted_in_staging() -> None:
+    output = _run_with_env("staging")
+    assert "AUTH_MOUNTED=True" in output
+
+
 def test_dev_auth_routes_not_mounted_in_production() -> None:
     output = _run_with_env("production")
     assert "AUTH_MOUNTED=False" in output

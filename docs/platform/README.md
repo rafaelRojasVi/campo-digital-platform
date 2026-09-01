@@ -40,6 +40,7 @@ Product-specific implementation truth remains inside each product boundary. Plat
 - [ADR-002 — Source provenance identity](../adr/ADR-002-source-provenance-identity.md)
 - [ADR-003 — Migration revision allocation convention](../adr/ADR-003-migration-revision-allocation-convention.md)
 - [ADR-004 — Revisit production cloud provider choice](../adr/ADR-004-revisit-production-cloud-provider-choice.md) (Proposed; does not supersede ADR-001)
+- [ADR-005 — Render STAGING experiment](../adr/ADR-005-render-staging-experiment.md) (Accepted for staging only; not a production provider decision)
 
 ## Research
 
