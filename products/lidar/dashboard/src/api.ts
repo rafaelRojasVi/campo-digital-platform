@@ -255,6 +255,10 @@ export interface VolumeComparisonRecord {
   created_at: string
 }
 
+import { DEMO_COMPARISONS, DEMO_RUNS } from './demoData'
+
+const DEMO_MODE = import.meta.env.VITE_CAMPO_DEMO === 'true'
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`/api${path}`)
 
@@ -278,12 +282,22 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 export function listRuns(): Promise<MeasurementRun[]> {
+  if (DEMO_MODE) {
+    return Promise.resolve(DEMO_RUNS)
+  }
   return getJson<MeasurementRun[]>('/runs')
 }
 
 export function getRun(
   runId: string,
 ): Promise<MeasurementRun> {
+  if (DEMO_MODE) {
+    const run = DEMO_RUNS.find((candidate) => candidate.run_id === runId)
+    if (!run) {
+      return Promise.reject(new Error(`demo run not found: ${runId}`))
+    }
+    return Promise.resolve(run)
+  }
   return getJson<MeasurementRun>(
     `/runs/${encodeURIComponent(runId)}`,
   )
@@ -292,9 +306,16 @@ export function getRun(
 export function listComparisons(
   runId: string,
 ): Promise<VolumeComparisonRecord[]> {
+  if (DEMO_MODE) {
+    return Promise.resolve(DEMO_COMPARISONS[runId] ?? [])
+  }
   return getJson<VolumeComparisonRecord[]>(
     `/runs/${encodeURIComponent(runId)}/comparisons`,
   )
+}
+
+export function isDemoMode(): boolean {
+  return DEMO_MODE
 }
 
 export function artifactUrl(
