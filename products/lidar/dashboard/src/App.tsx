@@ -11,6 +11,7 @@ import './App.css'
 import {
   artifactUrl,
   getRun,
+  isDemoMode,
   listRuns,
   type MeasurementArtifact,
   type MeasurementRun,
@@ -674,6 +675,12 @@ function App() {
 
   return (
     <div className="app-shell">
+      {isDemoMode() ? (
+        <div className="demo-banner" role="status">
+          DEMO — DATOS DE DEMOSTRACIÓN. Los registros mostrados son sintéticos y no corresponden a
+          ningún cliente real.
+        </div>
+      ) : null}
       <aside className="sidebar">
         <div className="brand">
           <p className="eyebrow">
