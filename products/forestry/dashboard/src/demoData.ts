@@ -141,7 +141,7 @@ const SPECS: DemoFeatureSpec[] = [
     ordinal: 5,
     objectId: 1006,
     codPredial: 'DEMO-06',
-    nomPredio: 'Predio Rio Claro',
+    nomPredio: 'Predio Mirador del Bosque',
     nRodal: 'R1',
     codUso: 'BN',
     uso2024: 'BN',
