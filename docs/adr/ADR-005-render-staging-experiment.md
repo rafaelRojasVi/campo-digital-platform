@@ -53,6 +53,15 @@ the task that produced this ADR ("Do NOT add a paid background worker yet")
 require a paid plan), so enabling processing later requires a paid resource
 decision, not just a config change.
 
+**Update**: a later, separately-scoped task added
+`app.execution.InProcessStagingExecutionBackend`, which claims and processes
+small, non-LiDAR jobs from inside this same web service process (still no
+separate worker service — this ADR's paid-worker constraint is unaffected).
+See `docs/superpowers/specs/2026-09-01-secure-file-access-slice-design.md`
+section 6 for the current behavior; the paragraph above and the
+"jobs visibly queue but never complete" consequence below describe this
+ADR's original scope only.
+
 ### Region
 
 Render's currently supported regions are Oregon, Ohio, Virginia (all US),
@@ -177,7 +186,10 @@ instance for a condition that should instead surface as a 503 to callers.
   a paid DB plan before it silently disappears.
 - No worker means ingestion jobs visibly queue but never complete in this
   environment — expected, not a bug, until a worker/background-service
-  decision is made.
+  decision is made. **Update**: since the in-process adapter noted above was
+  added, this is only true for LiDAR jobs and jobs over the staging size
+  limit, which are now terminally failed with an explicit rejection reason
+  rather than left queued forever.
 - `render blueprints validate render.yaml` requires the target branch to
   exist on the remote. It could not be run against `feat/render-staging-v1`
   itself without pushing (explicitly out of scope for the task that produced

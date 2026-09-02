@@ -29,8 +29,14 @@ databases:
 
 services:
   # Shared FastAPI platform app (ingestion/access/RBAC + product inspectors).
-  # No background worker is deployed yet (explicitly deferred, see ADR-005):
-  # uploaded jobs will queue in Postgres but not be processed.
+  # No separate background worker service is deployed (still deferred, see
+  # ADR-005). Non-LiDAR jobs under STAGING_EXECUTION_MAX_BYTES below are
+  # instead claimed and processed in-process by this same web service via
+  # app.execution.InProcessStagingExecutionBackend (wired in app.main's
+  # lifespan when APP_ENV=staging) — see
+  # docs/superpowers/specs/2026-09-01-secure-file-access-slice-design.md
+  # section 6. LiDAR jobs and anything over the size limit still just queue
+  # and are terminally failed with an explicit rejection reason.
   - name: campo-digital-api-staging
     type: web
     runtime: python
