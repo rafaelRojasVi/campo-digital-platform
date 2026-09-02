@@ -2,6 +2,15 @@
   min-height: 100vh;
 }
 
+.demo-banner {
+  background: #7a1f1f;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+  padding: 0.5rem 1rem;
+  letter-spacing: 0.02em;
+}
+
 .topbar {
   position: sticky;
   z-index: 20;
