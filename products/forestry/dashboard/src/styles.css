@@ -77,6 +77,15 @@ button {
   height: 100%;
 }
 
+.demo-banner {
+  background: #7a1f1f;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+  padding: 0.5rem 1rem;
+  letter-spacing: 0.02em;
+}
+
 .app__body {
   position: relative;
   display: flex;
