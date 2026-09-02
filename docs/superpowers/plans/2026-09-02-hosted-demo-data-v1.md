@@ -1325,12 +1325,14 @@ Ported from `feat/transelec-ui-reference-parity-v1` (worktree: `/home/rafael/dev
 ```bash
 BRANCH=feat/transelec-ui-reference-parity-v1
 for f in package.json vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json \
-         tsconfig.node.json .oxlintrc.json index.html src/main.tsx src/App.css \
+         tsconfig.node.json .oxlintrc.json .gitignore index.html src/main.tsx src/App.css \
          src/test/setup.ts; do
   mkdir -p "products/transelect/dashboard/$(dirname "$f")"
   git show "$BRANCH:products/transelect/dashboard/$f" > "products/transelect/dashboard/$f"
 done
 ```
+
+`.gitignore` is in this list deliberately — Task 4's equivalent step for Forestry omitted it, which left `node_modules/` untracked-but-not-ignored until Task 7 caught it. Do not repeat that gap here.
 
 - [ ] **Step 2: Trim dependencies**
 
