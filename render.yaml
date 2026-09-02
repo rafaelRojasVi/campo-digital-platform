@@ -174,7 +174,6 @@ services:
     branch: main
     buildCommand: cd products/forestry/dashboard && npm ci && npm run build
     staticPublishPath: products/forestry/dashboard/dist
-    plan: free
     routes:
       - type: rewrite
         source: /*
@@ -189,7 +188,6 @@ services:
     branch: main
     buildCommand: cd products/transelect/dashboard && npm ci && npm run build
     staticPublishPath: products/transelect/dashboard/dist
-    plan: free
     routes:
       - type: rewrite
         source: /*
