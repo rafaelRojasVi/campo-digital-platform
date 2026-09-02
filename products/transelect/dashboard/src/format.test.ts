@@ -11,7 +11,7 @@ describe('formatNumber', () => {
 
 describe('formatPercent', () => {
   it('appends a percent sign to the same es-CL number shape', () => {
-    expect(formatPercent(67.92452830188679)).toBe('67,92%')
+    expect(formatPercent((108 / 159) * 100)).toBe('67,92%')
   })
 })
 
