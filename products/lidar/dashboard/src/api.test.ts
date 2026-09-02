@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('api.ts demo mode', () => {
-  const originalFetch = global.fetch
+  const originalFetch = globalThis.fetch
 
   beforeEach(() => {
     vi.stubEnv('VITE_CAMPO_DEMO', 'true')
-    global.fetch = vi.fn(() => {
+    globalThis.fetch = vi.fn(() => {
       throw new Error('demo mode must never call fetch')
     }) as unknown as typeof fetch
   })
@@ -13,7 +13,7 @@ describe('api.ts demo mode', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.resetModules()
-    global.fetch = originalFetch
+    globalThis.fetch = originalFetch
   })
 
   it('listRuns() resolves the 3 bundled demo runs without fetching', async () => {
