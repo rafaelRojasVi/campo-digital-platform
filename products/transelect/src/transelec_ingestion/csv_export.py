@@ -1,35 +1,46 @@
 """TR-FUNC-037's CSV export: field set (TR-OPEN-04) and formula-injection hardening.
 
-**TR-OPEN-04 is not fully resolved by the ratified matrix/audit.** Both
-documents confirm the export is 17-of-30 fields and that Actualizable's set
-(the most recent file, per the implementation plan's chosen default)
-includes ``Predio Ref`` and excludes raw ``Estado`` relative to v0 — but
-neither document enumerates the other 15 field names verbatim (confirmed by
-direct search of both ratified documents; this is a genuine documentation
-gap, not something this module invents a workaround for by re-reading the
-real, external HTML source files, which this task must not touch).
+**Corrected from an earlier draft of this module.** TR-OPEN-04's field set
+was originally a best-effort guess because neither ratified document
+enumerated the literal field names. The source forensic audit now records
+the exact, ordered field list confirmed by direct read of `exportCSV()` in
+both source HTML files (see that document's "Exact field list, confirmed by
+direct read" notes under the v0 and Actualizable sections). Actualizable's
+order (the more recent, more-used file, and the one whose KPI set this
+task already implements) is:
 
-``EXPORT_FIELDS_V1`` below is therefore a best-effort, clearly-labeled
-default: it satisfies both hard constraints the audit *does* establish
-(includes ``predio_ref``, excludes ``estado``, exactly 17 of the 30 A:AD
-fields) and otherwise selects the fields the audit calls out as
-operationally central (business identity, status, owner, surface, dates,
-sector) over ones it calls out as "dead" in the source JS or provisional in
-meaning (``hoy_raw`` — never ingestion time and type-inconsistent by
-design; ``fecha_90_dias`` — TR-OPEN-03; ``id_predio_unico_ii``/``id_pmf`` —
-the Y/Z merged-cell columns, "not read by any TR-FUNC-* logic in V1" per the
-design doc; ``tramite`` — 100% empty in the reviewed workbook). The
-duplicate-``Carpeta`` column exported is ``carpeta_normalizada`` (AC, not E)
-under the single header "Carpeta", following the audit's own observation
-that both HTML files' embedded JSON can only keep one ``Carpeta`` value per
-row and last-key-wins in a plain JS object literal built by iterating
-columns A→AD — this is itself TR-OPEN-02, unresolved, and trivially
-revisable (this list is the one place a future correction changes).
+``PMF, Predio Ref, Carpeta, PAS, Estado resumido, Tipo de rechazo, Tipo de
+propietario, Rol, N Predio, N Area de Corta, Superficie de corta, Fecha de
+ingreso, N Ingreso, Empresa, ID_Predo_Unico, Sector, Observación auxiliar``
 
-This whole field list is a single named constant so TR-OPEN-04's eventual
-resolution is a one-place change, per the implementation plan's own
-"changeable in one place later" framing — it does not require touching the
-router or any test beyond this module's own.
+``EXPORT_FIELDS_V1`` below reproduces that order with two settled
+adjustments (not re-derived here — the corrected audit doc already decided
+both):
+
+1. **``Carpeta`` is split into its two positionally-distinct source
+   fields**, ``carpeta_source`` (column E) and ``carpeta_normalizada``
+   (column AC), each its own labeled column — Actualizable's single
+   ``Carpeta`` export value has *ambiguous* provenance (a JS object-key
+   collision silently picks one of the two source columns, and which one
+   was never independently confirmed), so exporting both, positionally,
+   is more faithful than guessing which one Javier's export happens to
+   keep.
+2. **``Observación auxiliar`` ships as an always-empty reserved column.**
+   The audit confirms this field is sourced from the ``Pendientes`` sheet
+   (per the source HTML's own footer text), not from any ``Resumen`` A:AD
+   field — populating it would require exactly the auxiliary-sheet
+   auto-merge this design's non-goals rule out for V1
+   (`docs/superpowers/specs/2026-09-02-transelec-hosted-pilot-v2-design.md`,
+   "No automatic merge of historical `Resumen` sheets, `Pendientes`,
+   `Reingresos`, or `Urgentes 07May` into current state"). The column is
+   kept for structural familiarity with what Javier is used to opening,
+   deliberately unmapped to any `transelec_resumen_row` column so it
+   always renders blank.
+
+Net result: **18 columns, not a literal 17** — the corrected matrix's
+TR-FUNC-037 row documents why. This is still a single named constant, so a
+future correction (e.g. Javier confirming a preference between the two
+``Carpeta`` columns) is a one-place change.
 
 CSV formula-injection hardening is a **separate, mandatory, security**
 requirement, independent of the field-set question above: any cell value
@@ -53,16 +64,25 @@ import io
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+# Never a real transelec_resumen_row column — .get() always returns None
+# for it, so this column always renders blank. See the module docstring's
+# "Observación auxiliar" note: it is sourced from the Pendientes sheet,
+# which this design's non-goals exclude from any V1 auto-merge.
+_OBSERVACION_AUXILIAR_RESERVED_COLUMN = "_observacion_auxiliar_reserved_v1"
+
 # (destination column name, Spanish CSV header) — see the module docstring
-# for the rationale behind each inclusion/exclusion. Order here is the order
-# columns are written in the exported file.
+# for the rationale behind each inclusion/exclusion/split. Order here is the
+# order columns are written in the exported file, matching Actualizable's
+# own export order with Carpeta split into its two positional source fields.
 EXPORT_FIELDS_V1: tuple[tuple[str, str], ...] = (
     ("pmf", "PMF"),
-    ("carpeta_normalizada", "Carpeta"),
+    ("predio_ref", "Predio Ref"),
+    ("carpeta_source", "Carpeta (col. E)"),
+    ("carpeta_normalizada", "Carpeta (col. AC)"),
     ("pas", "PAS"),
     ("estado_resumido", "Estado resumido"),
-    ("tipo_propietario", "Tipo de propietario"),
     ("tipo_rechazo", "Tipo de rechazo"),
+    ("tipo_propietario", "Tipo de propietario"),
     ("rol", "Rol"),
     ("numero_predio", "N Predio"),
     ("numero_area_corta", "N Area de Corta"),
@@ -72,11 +92,10 @@ EXPORT_FIELDS_V1: tuple[tuple[str, str], ...] = (
     ("empresa", "Empresa"),
     ("id_predio_unico", "ID_Predo_Unico"),
     ("sector", "Sector"),
-    ("predio_ref", "Predio Ref"),
-    ("id_transelec", "ID TRANSELEC"),
+    (_OBSERVACION_AUXILIAR_RESERVED_COLUMN, "Observación auxiliar"),
 )
 
-assert len(EXPORT_FIELDS_V1) == 17  # module-load invariant: TR-OPEN-04's 17-field default
+assert len(EXPORT_FIELDS_V1) == 18  # 17 Actualizable fields, Carpeta split into 2, net +1
 
 _DANGEROUS_LEADING_CHARACTERS = ("=", "+", "-", "@")
 
@@ -112,6 +131,16 @@ def _render_cell(value: Any) -> str:
     return neutralize_formula_injection(rendered)
 
 
+def _render_row_cell(row: Mapping[str, Any], column: str) -> str:
+    if column == _OBSERVACION_AUXILIAR_RESERVED_COLUMN:
+        # Always blank, unconditionally -- never read from `row`, even if a
+        # caller's dict happens to carry this exact key. The guarantee is
+        # "this column is never populated," not merely "no real
+        # transelec_resumen_row column happens to be named this."
+        return ""
+    return _render_cell(row.get(column))
+
+
 def render_transelec_export_csv(rows: Sequence[Mapping[str, Any]]) -> bytes:
     """Render ``rows`` (dicts keyed by destination column name) as export CSV bytes.
 
@@ -126,6 +155,6 @@ def render_transelec_export_csv(rows: Sequence[Mapping[str, Any]]) -> bytes:
     writer.writerow(header for _, header in EXPORT_FIELDS_V1)
 
     for row in rows:
-        writer.writerow(_render_cell(row.get(column)) for column, _ in EXPORT_FIELDS_V1)
+        writer.writerow(_render_row_cell(row, column) for column, _ in EXPORT_FIELDS_V1)
 
     return ("\ufeff" + buffer.getvalue()).encode("utf-8")

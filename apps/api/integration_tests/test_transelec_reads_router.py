@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import csv
 import io
+import time
 from collections.abc import Generator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -220,7 +221,7 @@ def _injection_workbook(tmp_path: Path) -> bytes:
             estado_resumido="=SUM(1+1)",
             pas="+1+1",
             empresa="-2+3",
-            id_transelec="@cmd|'/c calc'!A1",
+            sector="@cmd|'/c calc'!A1",
             carpeta_normalizada="Carpeta normal",
         )
     ]
@@ -632,6 +633,76 @@ def test_pmf_detail_drawer_never_needs_a_csrf_token(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Report — TR-FUNC-034, the real renderReport() template (Actualizable's
+# wording), with the hardcoded 14-08-2026 replaced by the active import's
+# own publish date.
+# ---------------------------------------------------------------------------
+
+
+def test_report_text_matches_hand_computed_values_from_the_fixture(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    _login(client, "dev-admin")
+    _publish_fixture(client, integration_engine, _rich_fixture_workbook(tmp_path))
+
+    active = client.get("/transelec/imports/active").json()
+    published_at = datetime.fromisoformat(active["published_at"])
+    expected_corte = published_at.strftime("%d-%m-%Y")
+
+    body = client.get("/transelec/report").json()
+
+    assert body["basis_estado_resumido"] == "estado_resumido_first_row"
+    assert body["basis_pending_priority"] == "pending_priority_legacy"
+
+    # Hand-computed from the rich fixture (see the summary test above):
+    # pmf_count=6, predio_count=6, rol_count=6, surface_total=32.5,
+    # aprobados=3, en_tramite=1, avance_por_pmf.pendiente_o_tachado=2
+    # (3+1+2=6), rate=3/6*100=50.0, con_servidumbre_predio_count=1.
+    expected_text = (
+        "REPORTE EJECUTIVO · SEGUIMIENTO CONAF\n"
+        f"Corte de información: {expected_corte}\n"
+        "\n"
+        "El alcance seleccionado comprende 6 PMF, 6 predios identificados y 6 roles, "
+        "con 32,50 ha de superficie de corta.\n"
+        "\n"
+        "Estado resumido: 3 PMF aprobados (50,00%), 1 en trámite y 2 PMF con registros "
+        "Pendiente o Tachado. Se identifican 1 predios con servidumbre firmada.\n"
+        "\n"
+        "Criterio: los PMF y predios se cuentan sin duplicados; la superficie "
+        "corresponde a la suma de las áreas de corta filtradas. El N.º de ingreso se "
+        "vincula al PMF correspondiente. Las resoluciones no pueden verificarse porque "
+        "la fuente no incluye un campo específico para ellas."
+    )
+    assert body["text"] == expected_text
+
+
+def test_report_reflects_the_active_imports_publish_date_not_request_time(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    """The literal source template hardcodes a snapshot date; this must
+    never be replaced with request-time `now()` either — two calls a
+    moment apart must return the identical date/`generated_at`, and that
+    date must match the fixture's own publish timestamp, not whenever the
+    test happened to call the endpoint."""
+
+    _login(client, "dev-admin")
+    _publish_fixture(client, integration_engine, _rich_fixture_workbook(tmp_path))
+
+    active = client.get("/transelec/imports/active").json()
+
+    first = client.get("/transelec/report").json()
+    time.sleep(0.05)
+    second = client.get("/transelec/report").json()
+
+    assert first["generated_at"] == second["generated_at"]
+    assert first["generated_at"] == active["published_at"]
+
+    expected_corte = datetime.fromisoformat(active["published_at"]).strftime("%d-%m-%Y")
+    assert f"Corte de información: {expected_corte}" in first["text"]
+    assert "Corte de información: 14-08-2026" not in first["text"]
+
+
+# ---------------------------------------------------------------------------
 # Filter-consistency — TR-FUNC-017's acceptance test, automated
 # ---------------------------------------------------------------------------
 
@@ -790,12 +861,20 @@ def test_export_csv_field_set_and_bom_and_delimiter(
     text_body = response.content.decode("utf-8-sig")
     reader = csv.reader(io.StringIO(text_body), delimiter=";")
     header = next(reader)
-    assert len(header) == 17
+    # 17 Actualizable fields, Carpeta split into 2 positional columns: 18.
+    assert len(header) == 18
     assert "PMF" in header
     assert "Predio Ref" in header  # Actualizable's addition
     assert "Estado" not in header  # raw Estado excluded, per Actualizable
+    assert "Carpeta (col. E)" in header
+    assert "Carpeta (col. AC)" in header
+    assert "Observación auxiliar" in header
     data_rows = list(reader)
     assert len(data_rows) == 7
+    # Observación auxiliar is always empty (Pendientes-sheet field, out of
+    # scope for V1's auto-merge non-goals) — never populated for any row.
+    auxiliar_index = header.index("Observación auxiliar")
+    assert all(row[auxiliar_index] == "" for row in data_rows)
 
 
 def test_export_csv_neutralizes_a_real_exported_row_with_dangerous_values(
@@ -820,7 +899,7 @@ def test_export_csv_neutralizes_a_real_exported_row_with_dangerous_values(
 
     assert record["PAS"] == "'+1+1"
     assert record["Empresa"] == "'-2+3"
-    assert record["ID TRANSELEC"] == "'@cmd|'/c calc'!A1"
+    assert record["Sector"] == "'@cmd|'/c calc'!A1"
     assert record["Estado resumido"] == "'=SUM(1+1)"
     for value in record.values():
         assert not value.startswith(("=", "+", "-", "@"))

@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-import datetime as dt
 import logging
 import tempfile
 import uuid
@@ -639,6 +638,34 @@ def _require_active_import_id(connection: Connection) -> int:
     return active_import_id
 
 
+def _read_latest_publish_event(connection: Connection, *, import_id: int) -> Row[Any]:
+    """The most recent ``transelec_publish_event`` row for ``import_id``.
+
+    Every activation (Step C/D) always inserts exactly one such row in the
+    same transaction that sets ``active_import_id``
+    (``app.transelec_publication.activate_import``) — so if an import is
+    active, at least one publish_event for it must exist.
+
+    Shared by ``/imports/active`` and ``/report`` so "when is this data
+    from" has exactly one source of truth, never two independently
+    computed dates.
+    """
+
+    return connection.execute(
+        text(
+            """
+            SELECT pe.event_type, pe.occurred_at, pe.actor_user_id, u.display_name
+            FROM platform.transelec_publish_event AS pe
+            JOIN platform.app_user AS u ON u.id = pe.actor_user_id
+            WHERE pe.import_id = :import_id
+            ORDER BY pe.occurred_at DESC, pe.id DESC
+            LIMIT 1
+            """
+        ),
+        {"import_id": import_id},
+    ).one()
+
+
 def _fetch_filtered_rows(
     connection: Connection, *, import_id: int, filters: TranselecFilters
 ) -> Sequence[Row[Any]]:
@@ -1134,26 +1161,55 @@ def get_owner_status(
 # GET /report — TR-FUNC-034
 # ---------------------------------------------------------------------------
 
-# **Documentation gap, disclosed rather than papered over**: TR-FUNC-034's
-# row says the report is a "Template string, values substituted from current
-# filtered view (verbatim template captured in the source audit)" — but
-# neither the ratified functional parity matrix nor the source forensic
-# audit actually contains that verbatim template text anywhere (confirmed by
-# direct search of both documents during this task). This template is
-# therefore a good-faith equivalent built from the same computed KPI values
-# the real report evidently uses, NOT a byte-for-byte reproduction of
-# Javier's original wording. "Today" is computed at request time, never
-# frozen, per TR-FUNC-034's own requirement and the same fix TR-FUNC-031/046
-# apply elsewhere.
+# **Corrected from an earlier draft of this route**: an earlier version
+# shipped an invented "good-faith equivalent" narrative here because the
+# functional parity matrix's TR-FUNC-034 row claimed the verbatim template
+# was already "captured in the source audit" when it was not. The source
+# forensic audit now records the real `renderReport()` template (confirmed
+# by direct read of both source HTML files) — see that document's "Report
+# template — CORRECTION" note. The text below is Actualizable's exact
+# wording (near-identical to v0's; only the "pending" sentence differs
+# slightly, and Actualizable is the more recent, more-used file).
+#
+# One deliberate change from the literal source: the real template hardcodes
+# `Corte de información: 14-08-2026` — a frozen snapshot date, the same
+# defect class as TR-FUNC-031/046's hardcoded "today" bugs. This is replaced
+# with the active import's own publish date, read via the same
+# `_read_latest_publish_event` lookup `/imports/active` uses, so "when is
+# this data from" has exactly one source of truth in this codebase — never
+# `datetime.now()` at request time, never the literal.
 _REPORT_TEMPLATE = (
-    "Resumen ejecutivo Transelec — generado el {generated_at}.\n"
-    "En el alcance filtrado actual hay {pmf_count} PMF y {predio_count} predios "
-    "identificados, con una superficie de corta total de {surface_total:.2f} ha.\n"
-    "De los PMF evaluados (Estado resumido, primera fila por PMF): {aprobados} "
-    "Aprobados y {en_tramite} En trámite. {pendientes} PMF requieren atención "
-    "prioritaria (N° de ingreso pendiente o expediente con rechazo) y "
-    "{servidumbre} predios cuentan con servidumbre firmada."
+    "REPORTE EJECUTIVO · SEGUIMIENTO CONAF\n"
+    "Corte de información: {corte}\n"
+    "\n"
+    "El alcance seleccionado comprende {pmf_count} PMF, {predio_count} predios "
+    "identificados y {rol_count} roles, con {surface_total} ha de superficie de corta.\n"
+    "\n"
+    "Estado resumido: {aprobados} PMF aprobados ({rate}%), {en_tramite} en trámite y "
+    "{pendiente_o_tachado} PMF con registros Pendiente o Tachado. Se identifican "
+    "{servidumbre} predios con servidumbre firmada.\n"
+    "\n"
+    "Criterio: los PMF y predios se cuentan sin duplicados; la superficie corresponde "
+    "a la suma de las áreas de corta filtradas. El N.º de ingreso se vincula al PMF "
+    "correspondiente. Las resoluciones no pueden verificarse porque la fuente no "
+    "incluye un campo específico para ellas."
 )
+
+_REPORT_DATE_FORMAT = "%d-%m-%Y"  # matches the literal template's own "14-08-2026" shape
+
+
+def _fmt_es_number(value: float, *, decimals: int = 2) -> str:
+    """Render a number the way both source HTML files' `fmt()` helper reads
+    in Spanish-locale stakeholder text — comma decimal separator, per the
+    source forensic audit's own "164,63 ha" example of this exact KPI.
+
+    Not independently confirmed against `fmt()`'s own source (only its
+    *output shape* is evidenced, via that one example) — an INFERENCE, not
+    a verbatim reproduction, disclosed the same way the rest of this route
+    discloses its remaining gaps.
+    """
+
+    return f"{value:.{decimals}f}".replace(".", ",")
 
 
 class TranselecReportResponse(BaseModel):
@@ -1172,28 +1228,36 @@ def get_report(
     connection: Annotated[Connection, Depends(get_db_connection)],
     filters: Annotated[TranselecFilters, Depends(_transelec_filters)],
 ) -> TranselecReportResponse:
-    """TR-FUNC-034: executive report text, computed server-side so "today"
-    is never frozen. See the module-level comment above this route for the
-    documented gap between this text and Javier's original wording."""
+    """TR-FUNC-034: the real `renderReport()` template (Actualizable's
+    wording), values substituted from the current filtered view. The data's
+    own "as of" date comes from the active import's publish event, never
+    from request time — see the module-level comment above for the full
+    rationale and the one remaining disclosed gap (`fmt()`'s exact number
+    format is inferred, not verified against source).
+    """
 
     import_id = _require_active_import_id(connection)
     rows = _fetch_filtered_rows(connection, import_id=import_id, filters=filters)
     summary = build_summary([_to_summary_input_row(row) for row in rows])
+    publish_event = _read_latest_publish_event(connection, import_id=import_id)
 
-    generated_at = dt.datetime.now(dt.UTC).isoformat()
+    rate = (summary.aprobados_pmf_count / summary.pmf_count * 100) if summary.pmf_count else 0.0
+
     text_body = _REPORT_TEMPLATE.format(
-        generated_at=generated_at,
+        corte=publish_event.occurred_at.strftime(_REPORT_DATE_FORMAT),
         pmf_count=summary.pmf_count,
         predio_count=summary.predio_count,
-        surface_total=summary.surface_total,
+        rol_count=summary.rol_count,
+        surface_total=_fmt_es_number(summary.surface_total),
         aprobados=summary.aprobados_pmf_count,
+        rate=_fmt_es_number(rate),
         en_tramite=summary.en_tramite_pmf_count,
-        pendientes=summary.pendientes_prioritarios_pmf_count,
+        pendiente_o_tachado=summary.avance_por_pmf.pendiente_o_tachado,
         servidumbre=summary.con_servidumbre_predio_count,
     )
 
     return TranselecReportResponse(
-        generated_at=generated_at,
+        generated_at=publish_event.occurred_at.isoformat(),
         basis_estado_resumido=summary.basis_estado_resumido,  # type: ignore[arg-type]
         basis_pending_priority=summary.basis_pending_priority,  # type: ignore[arg-type]
         text=text_body,
@@ -1213,12 +1277,15 @@ def export_csv(
     connection: Annotated[Connection, Depends(get_db_connection)],
     filters: Annotated[TranselecFilters, Depends(_transelec_filters)],
 ) -> Response:
-    """TR-FUNC-037: filtered CSV export, TR-OPEN-04's 17-field default
-    (``transelec_ingestion.csv_export.EXPORT_FIELDS_V1``), with mandatory
-    CSV formula-injection hardening — see that module's docstring for the
-    full rationale. This is a deliberate, security-motivated divergence from
-    Javier's raw CSV export: neither source HTML file neutralizes a leading
-    ``=``/``+``/``-``/``@`` before writing a cell.
+    """TR-FUNC-037: filtered CSV export, the corrected 18-column field set
+    (``transelec_ingestion.csv_export.EXPORT_FIELDS_V1`` — Actualizable's
+    exact 17 fields, confirmed by direct read, with ``Carpeta`` split into
+    its two positional source columns and ``Observación auxiliar`` shipped
+    always-empty), with mandatory CSV formula-injection hardening — see
+    that module's docstring for the full rationale. The hardening is a
+    deliberate, security-motivated divergence from Javier's raw CSV export:
+    neither source HTML file neutralizes a leading ``=``/``+``/``-``/``@``
+    before writing a cell.
     """
 
     import_id = _require_active_import_id(connection)
@@ -1384,23 +1451,7 @@ def get_active_import(
         {"snapshot_id": imp.source_snapshot_id},
     ).scalar_one_or_none()
 
-    # Every activation (Step C/D) always inserts exactly one
-    # transelec_publish_event row in the same transaction that sets
-    # active_import_id (app.transelec_publication.activate_import) — so if
-    # an import is active, at least one publish_event for it must exist.
-    publish_event = connection.execute(
-        text(
-            """
-            SELECT pe.event_type, pe.occurred_at, pe.actor_user_id, u.display_name
-            FROM platform.transelec_publish_event AS pe
-            JOIN platform.app_user AS u ON u.id = pe.actor_user_id
-            WHERE pe.import_id = :import_id
-            ORDER BY pe.occurred_at DESC, pe.id DESC
-            LIMIT 1
-            """
-        ),
-        {"import_id": import_id},
-    ).one()
+    publish_event = _read_latest_publish_event(connection, import_id=import_id)
 
     return TranselecActiveImportResponse(
         import_id=imp.id,
