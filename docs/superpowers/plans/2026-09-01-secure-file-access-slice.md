@@ -285,6 +285,7 @@ while waiting for tenant-admin action.
 ```python
 # apps/api/tests/test_config.py (add to existing file)
 
+
 def test_new_settings_default_safely() -> None:
     settings = Settings(postgres_password="x")
     assert settings.enable_onedrive_import is False
@@ -493,17 +494,25 @@ from sqlalchemy import Connection, text
 
 
 def test_session_table_has_expected_columns(connection: Connection) -> None:
-    rows = connection.execute(
-        text(
-            """
+    rows = (
+        connection.execute(
+            text(
+                """
             SELECT column_name FROM information_schema.columns
             WHERE table_schema = 'platform' AND table_name = 'session'
             """
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert set(rows) == {
-        "id", "session_secret_hash", "app_user_id",
-        "created_at", "last_seen_at", "expires_at",
+        "id",
+        "session_secret_hash",
+        "app_user_id",
+        "created_at",
+        "last_seen_at",
+        "expires_at",
     }
 
 
@@ -592,9 +601,7 @@ def test_create_and_resolve_round_trip(connection: Connection) -> None:
     store = PlatformSessionStore()
     app_user_id = _make_user(connection)
 
-    raw_secret = store.create_session(
-        connection, app_user_id=app_user_id, ttl=timedelta(hours=8)
-    )
+    raw_secret = store.create_session(connection, app_user_id=app_user_id, ttl=timedelta(hours=8))
     connection.commit()
 
     resolved = store.resolve_session(connection, raw_secret)
@@ -623,13 +630,11 @@ def test_raw_secret_is_never_stored(connection: Connection) -> None:
 
     store = PlatformSessionStore()
     app_user_id = _make_user(connection)
-    raw_secret = store.create_session(
-        connection, app_user_id=app_user_id, ttl=timedelta(hours=8)
-    )
+    raw_secret = store.create_session(connection, app_user_id=app_user_id, ttl=timedelta(hours=8))
 
-    stored_hashes = connection.execute(
-        text("SELECT session_secret_hash FROM platform.session")
-    ).scalars().all()
+    stored_hashes = (
+        connection.execute(text("SELECT session_secret_hash FROM platform.session")).scalars().all()
+    )
     assert raw_secret not in stored_hashes
 ```
 
@@ -665,9 +670,7 @@ def _hash_secret(raw_secret: str) -> str:
 class PlatformSessionStore:
     """Issues and resolves durable, hashed-secret sessions in `platform.session`."""
 
-    def create_session(
-        self, connection: Connection, *, app_user_id: int, ttl: timedelta
-    ) -> str:
+    def create_session(self, connection: Connection, *, app_user_id: int, ttl: timedelta) -> str:
         """Issue a new session for `app_user_id`, returning the raw cookie secret."""
 
         raw_secret = secrets.token_urlsafe(32)
@@ -725,6 +728,7 @@ Expected: PASS
 ```python
 # apps/api/app/dev_auth.py — replace assert_dev_auth_allowed
 
+
 def assert_dev_auth_allowed(settings: Settings) -> None:
     """Raise unless the configured environment permits dev-only auth."""
 
@@ -748,6 +752,7 @@ if os.environ.get("APP_ENV", "development") == "development":
 ```python
 # apps/api/tests/test_dev_auth.py — replace test_dev_auth_allowed_in_staging
 
+
 def test_dev_auth_rejected_in_staging() -> None:
     # ADR-005 originally allowed dev-auth in staging; the secure-file-access
     # slice closes that exposure now that real Entra sign-in exists.
@@ -770,6 +775,7 @@ going through the dev-login HTTP endpoint.
 
 ```python
 # apps/api/tests/test_main_dev_auth_gate.py — replace the staging test
+
 
 def test_dev_auth_routes_not_mounted_in_staging() -> None:
     output = _run_with_env("staging")
@@ -843,8 +849,11 @@ def _load_app_user(connection: Connection, app_user_id: int) -> AppUser:
         {"id": app_user_id},
     ).one()
     return AppUser(
-        id=row.id, identity_kind=row.identity_kind, identity_key=row.identity_key,
-        display_name=row.display_name, email=row.email,
+        id=row.id,
+        identity_kind=row.identity_kind,
+        identity_key=row.identity_key,
+        display_name=row.display_name,
+        email=row.email,
     )
 ```
 
@@ -900,29 +909,41 @@ def _bootstrap_settings() -> Settings:
 
 def test_bootstrap_grants_admin_on_all_products_for_matching_identity(connection) -> None:
     user = resolve_or_create_app_user(
-        connection, identity_kind="entra", identity_key="tenant-x:oid-y",
+        connection,
+        identity_kind="entra",
+        identity_key="tenant-x:oid-y",
         display_name="Bootstrap Admin",
     )
 
     granted = maybe_grant_bootstrap_admin(
-        connection, settings=_bootstrap_settings(),
-        tenant_id="tenant-x", object_id="oid-y", app_user_id=user.id,
+        connection,
+        settings=_bootstrap_settings(),
+        tenant_id="tenant-x",
+        object_id="oid-y",
+        app_user_id=user.id,
     )
 
     assert granted is True
-    grants = {g.product_key: g.role.value for g in list_grants_for_user(connection, app_user_id=user.id)}
+    grants = {
+        g.product_key: g.role.value for g in list_grants_for_user(connection, app_user_id=user.id)
+    }
     assert grants == {"lidar": "admin", "forestry": "admin", "transelect": "admin"}
 
 
 def test_bootstrap_does_not_fire_for_non_matching_identity(connection) -> None:
     user = resolve_or_create_app_user(
-        connection, identity_kind="entra", identity_key="tenant-x:someone-else",
+        connection,
+        identity_kind="entra",
+        identity_key="tenant-x:someone-else",
         display_name="Regular User",
     )
 
     granted = maybe_grant_bootstrap_admin(
-        connection, settings=_bootstrap_settings(),
-        tenant_id="tenant-x", object_id="someone-else", app_user_id=user.id,
+        connection,
+        settings=_bootstrap_settings(),
+        tenant_id="tenant-x",
+        object_id="someone-else",
+        app_user_id=user.id,
     )
 
     assert granted is False
@@ -931,18 +952,25 @@ def test_bootstrap_does_not_fire_for_non_matching_identity(connection) -> None:
 
 def test_bootstrap_does_not_fire_if_user_already_has_a_grant(connection) -> None:
     user = resolve_or_create_app_user(
-        connection, identity_kind="entra", identity_key="tenant-x:oid-y",
+        connection,
+        identity_kind="entra",
+        identity_key="tenant-x:oid-y",
         display_name="Bootstrap Admin",
     )
     grant_product_role(connection, app_user_id=user.id, product_key="forestry", role=Role.VIEWER)
 
     granted = maybe_grant_bootstrap_admin(
-        connection, settings=_bootstrap_settings(),
-        tenant_id="tenant-x", object_id="oid-y", app_user_id=user.id,
+        connection,
+        settings=_bootstrap_settings(),
+        tenant_id="tenant-x",
+        object_id="oid-y",
+        app_user_id=user.id,
     )
 
     assert granted is False
-    grants = {g.product_key: g.role.value for g in list_grants_for_user(connection, app_user_id=user.id)}
+    grants = {
+        g.product_key: g.role.value for g in list_grants_for_user(connection, app_user_id=user.id)
+    }
     assert grants == {"forestry": "viewer"}
 ```
 
@@ -981,7 +1009,9 @@ def maybe_grant_bootstrap_admin(
         return False
 
     for product_key in _BOOTSTRAP_PRODUCT_KEYS:
-        grant_product_role(connection, app_user_id=app_user_id, product_key=product_key, role=Role.ADMIN)
+        grant_product_role(
+            connection, app_user_id=app_user_id, product_key=product_key, role=Role.ADMIN
+        )
     return True
 ```
 
@@ -1279,8 +1309,10 @@ from app.entra_auth import resolve_identity_from_claims
 
 def test_resolve_identity_from_claims_uses_tid_and_oid_never_email() -> None:
     claims = {
-        "tid": "tenant-x", "oid": "oid-y",
-        "preferred_username": "someone@campodigital.cl", "name": "Someone",
+        "tid": "tenant-x",
+        "oid": "oid-y",
+        "preferred_username": "someone@campodigital.cl",
+        "name": "Someone",
     }
     tenant_id, object_id, identity_key = resolve_identity_from_claims(claims)
     assert tenant_id == "tenant-x"
@@ -1298,7 +1330,8 @@ def test_resolve_identity_from_claims_handles_personal_microsoft_account() -> No
     # that resolve_identity_from_claims does not special-case or reject
     # that placeholder value.
     claims = {
-        "tid": "9188040d-6c67-4c5b-b112-36a304b66dad", "oid": "oid-personal",
+        "tid": "9188040d-6c67-4c5b-b112-36a304b66dad",
+        "oid": "oid-personal",
         "name": "Someone",
     }
     tenant_id, object_id, identity_key = resolve_identity_from_claims(claims)
@@ -1355,9 +1388,7 @@ def build_msal_app(settings: Settings) -> msal.ConfidentialClientApplication:
     """Construct the confidential-client app for one request's token exchange."""
 
     if not (settings.entra_client_id and settings.entra_client_secret):
-        raise EntraNotConfiguredError(
-            "ENTRA_CLIENT_ID/ENTRA_CLIENT_SECRET must both be set."
-        )
+        raise EntraNotConfiguredError("ENTRA_CLIENT_ID/ENTRA_CLIENT_SECRET must both be set.")
 
     return msal.ConfidentialClientApplication(
         settings.entra_client_id,
@@ -1409,8 +1440,18 @@ from app.access_repository import (
 )
 from app.audit import record_audit_event
 from app.config import Settings, get_settings
-from app.deps import SESSION_COOKIE_NAME, get_current_app_user, get_db_connection, get_platform_session_store
-from app.entra_auth import SIGN_IN_SCOPES, build_msal_app, redirect_uri, resolve_identity_from_claims
+from app.deps import (
+    SESSION_COOKIE_NAME,
+    get_current_app_user,
+    get_db_connection,
+    get_platform_session_store,
+)
+from app.entra_auth import (
+    SIGN_IN_SCOPES,
+    build_msal_app,
+    redirect_uri,
+    resolve_identity_from_claims,
+)
 from app.session_store import PlatformSessionStore
 
 router = APIRouter(prefix="/auth/entra", tags=["auth"])
@@ -1458,10 +1499,17 @@ def callback(
     display_name = str(result["id_token_claims"].get("name", identity_key))
 
     user = resolve_or_create_app_user(
-        connection, identity_kind="entra", identity_key=identity_key, display_name=display_name,
+        connection,
+        identity_kind="entra",
+        identity_key=identity_key,
+        display_name=display_name,
     )
     maybe_grant_bootstrap_admin(
-        connection, settings=settings, tenant_id=tenant_id, object_id=object_id, app_user_id=user.id,
+        connection,
+        settings=settings,
+        tenant_id=tenant_id,
+        object_id=object_id,
+        app_user_id=user.id,
     )
 
     raw_secret = session_store.create_session(connection, app_user_id=user.id, ttl=_SESSION_TTL)
@@ -1482,7 +1530,9 @@ def graph_consent_start(
 
     grants = list_grants_for_user(connection, app_user_id=user.id)
     if not any(can(g.role, Action.UPLOAD) for g in grants):
-        raise HTTPException(status_code=403, detail="Graph file access requires an upload-capable grant.")
+        raise HTTPException(
+            status_code=403, detail="Graph file access requires an upload-capable grant."
+        )
 
     graph_scope = _required_graph_scope(settings)
     msal_app = build_msal_app(settings)
@@ -1516,6 +1566,7 @@ out of order.
 # apps/api/app/main.py — add near the other router includes
 
 from app.routers.entra_auth import router as entra_auth_router
+
 ...
 app.include_router(entra_auth_router)
 ```
@@ -1538,9 +1589,7 @@ from app.main import app
 
 
 def test_callback_creates_user_and_session_cookie(connection) -> None:
-    fake_result = {
-        "id_token_claims": {"tid": "tenant-x", "oid": "oid-y", "name": "Someone"}
-    }
+    fake_result = {"id_token_claims": {"tid": "tenant-x", "oid": "oid-y", "name": "Someone"}}
     with patch("app.routers.entra_auth.build_msal_app") as build_msal_app:
         build_msal_app.return_value.acquire_token_by_authorization_code.return_value = fake_result
         client = TestClient(app)
@@ -1600,7 +1649,10 @@ from app.access_repository import grant_product_role, resolve_or_create_app_user
 
 def test_list_users_requires_admin_on_some_product(client, connection) -> None:
     viewer = resolve_or_create_app_user(
-        connection, identity_kind="entra", identity_key="t:viewer", display_name="Viewer",
+        connection,
+        identity_kind="entra",
+        identity_key="t:viewer",
+        display_name="Viewer",
     )
     grant_product_role(connection, app_user_id=viewer.id, product_key="forestry", role=Role.VIEWER)
     connection.commit()
@@ -1611,22 +1663,32 @@ def test_list_users_requires_admin_on_some_product(client, connection) -> None:
 
 def test_admin_can_set_and_revoke_a_grant(client, connection) -> None:
     admin = resolve_or_create_app_user(
-        connection, identity_kind="entra", identity_key="t:admin", display_name="Admin",
+        connection,
+        identity_kind="entra",
+        identity_key="t:admin",
+        display_name="Admin",
     )
     grant_product_role(connection, app_user_id=admin.id, product_key="lidar", role=Role.ADMIN)
     target = resolve_or_create_app_user(
-        connection, identity_kind="entra", identity_key="t:target", display_name="Target",
+        connection,
+        identity_kind="entra",
+        identity_key="t:target",
+        display_name="Target",
     )
     connection.commit()
 
     cookies = {"campo_session": _login_as(admin.id)}
     set_response = client.put(
-        f"/access/users/{target.id}/grants/forestry", json={"role": "operator"}, cookies=cookies,
+        f"/access/users/{target.id}/grants/forestry",
+        json={"role": "operator"},
+        cookies=cookies,
     )
     assert set_response.status_code == 200
 
     revoke_response = client.put(
-        f"/access/users/{target.id}/grants/forestry", json={"role": None}, cookies=cookies,
+        f"/access/users/{target.id}/grants/forestry",
+        json={"role": None},
+        cookies=cookies,
     )
     assert revoke_response.status_code == 200
 ```
@@ -1702,7 +1764,9 @@ def list_users(
 
     return [
         UserWithGrantsView(
-            id=row.id, identity_kind=row.identity_kind, display_name=row.display_name,
+            id=row.id,
+            identity_kind=row.identity_kind,
+            display_name=row.display_name,
             grants=[
                 GrantView(product_key=g.product_key, role=g.role.value)
                 for g in list_grants_for_user(connection, app_user_id=row.id)
@@ -1725,7 +1789,9 @@ def set_grant(
     if product_key not in PRODUCT_KEYS:
         raise HTTPException(status_code=422, detail="Unknown product_key.")
 
-    ensure_can(connection, app_user_id=user.id, product_key=product_key, action=Action.MANAGE_ACCESS)
+    ensure_can(
+        connection, app_user_id=user.id, product_key=product_key, action=Action.MANAGE_ACCESS
+    )
 
     if payload.role is None:
         connection.execute(
@@ -1738,13 +1804,20 @@ def set_grant(
         event_type = "grant.revoked"
     else:
         grant_product_role(
-            connection, app_user_id=target_user_id, product_key=product_key, role=payload.role,
+            connection,
+            app_user_id=target_user_id,
+            product_key=product_key,
+            role=payload.role,
         )
         event_type = "grant.set"
 
     record_audit_event(
-        connection, actor_app_user_id=user.id, event_type=event_type, product_key=product_key,
-        subject_kind="app_user", subject_id=str(target_user_id),
+        connection,
+        actor_app_user_id=user.id,
+        event_type=event_type,
+        product_key=product_key,
+        subject_kind="app_user",
+        subject_id=str(target_user_id),
         metadata={"role": payload.role.value if payload.role else None},
     )
 
@@ -1760,6 +1833,7 @@ def set_grant(
 # apps/api/app/main.py
 
 from app.routers.access_admin import router as access_admin_router
+
 ...
 app.include_router(access_admin_router)
 ```
@@ -2166,13 +2240,17 @@ from app.execution import job_is_within_staging_limits
 
 def test_job_within_limits_when_small_and_not_lidar() -> None:
     assert job_is_within_staging_limits(
-        product_key="forestry", byte_size=1024, max_bytes=25_000_000,
+        product_key="forestry",
+        byte_size=1024,
+        max_bytes=25_000_000,
     ) == (True, None)
 
 
 def test_job_over_size_cap_is_rejected() -> None:
     within, reason = job_is_within_staging_limits(
-        product_key="forestry", byte_size=30_000_000, max_bytes=25_000_000,
+        product_key="forestry",
+        byte_size=30_000_000,
+        max_bytes=25_000_000,
     )
     assert within is False
     assert reason == "exceeds staging execution size limit"
@@ -2180,7 +2258,9 @@ def test_job_over_size_cap_is_rejected() -> None:
 
 def test_lidar_jobs_are_always_rejected_in_staging() -> None:
     within, reason = job_is_within_staging_limits(
-        product_key="lidar", byte_size=10, max_bytes=25_000_000,
+        product_key="lidar",
+        byte_size=10,
+        max_bytes=25_000_000,
     )
     assert within is False
     assert reason == "not processed in staging"
@@ -2340,6 +2420,7 @@ Expected: PASS
 
 ```python
 # apps/api/integration_tests/test_worker_end_to_end.py (append)
+
 
 def test_missing_object_fails_job_with_distinct_summary(connection, tmp_path) -> None:
     # ...enqueue a job whose source_snapshot.object_storage_key does not
@@ -2505,6 +2586,7 @@ key in one place).
 ```python
 # apps/api/app/routers/entra_auth.py — add after graph_consent_start
 
+
 @router.get("/graph-consent/callback")
 def graph_consent_callback(
     request: Request,
@@ -2519,7 +2601,8 @@ def graph_consent_callback(
     graph_scope = _required_graph_scope(settings)
     msal_app = build_msal_app(settings)
     result = msal_app.acquire_token_by_authorization_code(
-        code, scopes=[graph_scope],
+        code,
+        scopes=[graph_scope],
         redirect_uri=redirect_uri(settings, path="/auth/entra/graph-consent/callback"),
     )
     if "access_token" not in result:
@@ -2622,7 +2705,9 @@ class GraphClient:
     def _to_item(raw: dict) -> GraphItem:
         parent = raw.get("parentReference") or {}
         return GraphItem(
-            item_id=raw["id"], name=raw["name"], is_folder="folder" in raw,
+            item_id=raw["id"],
+            name=raw["name"],
+            is_folder="folder" in raw,
             parent_item_id=parent.get("id"),
         )
 ```
@@ -2653,10 +2738,15 @@ def test_resolves_beneath_root_true_for_direct_child() -> None:
 
 def test_resolves_beneath_root_false_for_unrelated_item() -> None:
     chain = {
-        "elsewhere": GraphItem(item_id="elsewhere", name="f.txt", is_folder=False, parent_item_id=None),
+        "elsewhere": GraphItem(
+            item_id="elsewhere", name="f.txt", is_folder=False, parent_item_id=None
+        ),
     }
     client = _client_with_chain(chain)
-    assert client.resolves_beneath_root(drive_id="d", item_id="elsewhere", root_item_id="root") is False
+    assert (
+        client.resolves_beneath_root(drive_id="d", item_id="elsewhere", root_item_id="root")
+        is False
+    )
 ```
 
 - [ ] **Step 6: Run test to verify it fails, then passes**
@@ -2704,15 +2794,17 @@ def _project_graph_config(product_key: str) -> tuple[str, str]:
     catalog = yaml.safe_load(_SOURCE_CATALOG_PATH.read_text(encoding="utf-8"))
     project = catalog["projects"].get(product_key)
     if not project or "graph" not in project:
-        raise HTTPException(status_code=404, detail="No OneDrive source configured for this product.")
+        raise HTTPException(
+            status_code=404, detail="No OneDrive source configured for this product."
+        )
     return project["graph"]["drive_id"], project["graph"]["root_item_id"]
 
 
-def _graph_client_for(connection: Connection, settings: Settings, *, app_user_id: int) -> GraphClient:
+def _graph_client_for(
+    connection: Connection, settings: Settings, *, app_user_id: int
+) -> GraphClient:
     row = connection.execute(
-        text(
-            "SELECT access_token_encrypted FROM platform.ms_graph_grant WHERE app_user_id = :id"
-        ),
+        text("SELECT access_token_encrypted FROM platform.ms_graph_grant WHERE app_user_id = :id"),
         {"id": app_user_id},
     ).one_or_none()
     if row is None:
@@ -2776,6 +2868,7 @@ built.
 ```python
 # apps/api/app/main.py
 from app.routers.onedrive import router as onedrive_router
+
 ...
 app.include_router(onedrive_router)
 ```

@@ -269,13 +269,9 @@ def test_non_development_env_never_shells_out_to_git_worktree_list(
     inspecting sibling worktrees is disallowed, not just using their data."""
 
     def _fail_if_called(repo_root: Path) -> list[Path]:
-        raise AssertionError(
-            "discover_worktree_paths must not be called outside development"
-        )
+        raise AssertionError("discover_worktree_paths must not be called outside development")
 
-    monkeypatch.setattr(
-        output_root_discovery, "discover_worktree_paths", _fail_if_called
-    )
+    monkeypatch.setattr(output_root_discovery, "discover_worktree_paths", _fail_if_called)
 
     resolution = resolve_report_root(
         tmp_path / "current",
