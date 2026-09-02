@@ -10,6 +10,7 @@ export interface ModuleRuntimeStatus {
   url?: string
   owned?: boolean
   measurementCount?: number
+  demo?: boolean
 }
 
 export interface CampoRuntimeConfig {
@@ -42,6 +43,7 @@ function normalizeModule(value: unknown): ModuleRuntimeStatus | undefined {
     owned: typeof record.owned === 'boolean' ? record.owned : undefined,
     measurementCount:
       typeof record.measurementCount === 'number' ? record.measurementCount : undefined,
+    demo: typeof record.demo === 'boolean' ? record.demo : undefined,
   }
 }
 
@@ -112,7 +114,7 @@ export function buildStagingRuntimeConfig(): CampoRuntimeConfig {
 
   for (const moduleId of ['lidar', 'forestal', 'transelec'] as const) {
     const url = hosted[moduleId]
-    modules[moduleId] = url ? { status: 'available', url } : { status: 'unavailable' }
+    modules[moduleId] = url ? { status: 'available', url, demo: true } : { status: 'unavailable' }
   }
 
   return { environment: 'staging', modules }

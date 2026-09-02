@@ -8,9 +8,10 @@ interface ModuleHeaderProps {
   module: ModuleDefinition
   url: string | undefined
   environment: CampoEnvironment
+  demo?: boolean
 }
 
-export function ModuleHeader({ module, url, environment }: ModuleHeaderProps) {
+export function ModuleHeader({ module, url, environment, demo }: ModuleHeaderProps) {
   const { pathname } = useRouter()
   const canOpenExternally = isSafeIframeUrl(url, environment)
 
@@ -24,6 +25,7 @@ export function ModuleHeader({ module, url, environment }: ModuleHeaderProps) {
           /
         </span>
         <span className="module-header__title">{module.title}</span>
+        {demo ? <span className="module-header__demo-badge">DEMO</span> : null}
       </div>
 
       <nav className="module-switcher" aria-label="Cambiar de módulo">

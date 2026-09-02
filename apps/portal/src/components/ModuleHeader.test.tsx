@@ -66,4 +66,32 @@ describe('ModuleHeader', () => {
 
     expect(screen.queryByText('Abrir en pestaña nueva')).not.toBeInTheDocument()
   })
+
+  it('shows a DEMO badge when demo is true', () => {
+    render(
+      <RouterProvider>
+        <ModuleHeader module={forestal} url={undefined} environment="staging" demo />
+      </RouterProvider>,
+    )
+
+    expect(screen.getByText(/DEMO/i)).toBeInTheDocument()
+  })
+
+  it('shows no DEMO badge when demo is false', () => {
+    render(
+      <RouterProvider>
+        <ModuleHeader module={forestal} url={undefined} environment="staging" demo={false} />
+      </RouterProvider>,
+    )
+    expect(screen.queryByText(/DEMO/i)).not.toBeInTheDocument()
+  })
+
+  it('shows no DEMO badge when demo is omitted', () => {
+    render(
+      <RouterProvider>
+        <ModuleHeader module={forestal} url={undefined} environment="staging" />
+      </RouterProvider>,
+    )
+    expect(screen.queryByText(/DEMO/i)).not.toBeInTheDocument()
+  })
 })

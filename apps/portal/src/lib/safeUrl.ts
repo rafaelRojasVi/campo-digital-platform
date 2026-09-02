@@ -36,7 +36,11 @@ export function isSafeLocalUrl(candidate: string | undefined | null): candidate 
  * future config bug pointing an iframe at an arbitrary onrender.com app we
  * don't own.
  */
-const ALLOWED_STAGING_HOSTNAMES = new Set(['campo-digital-lidar-staging.onrender.com'])
+const ALLOWED_STAGING_HOSTNAMES = new Set([
+  'campo-digital-lidar-staging.onrender.com',
+  'campo-digital-forestal-staging.onrender.com',
+  'campo-digital-transelec-staging.onrender.com',
+])
 
 export function isSafeIframeUrl(
   candidate: string | undefined | null,

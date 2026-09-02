@@ -29,7 +29,12 @@ export function ModulePage({ moduleId }: { moduleId: string }) {
 
   return (
     <div className="module-shell">
-      <ModuleHeader module={module} url={safeUrl} environment={config.environment} />
+      <ModuleHeader
+        module={module}
+        url={safeUrl}
+        environment={config.environment}
+        demo={runtimeStatus.demo}
+      />
 
       <div className="module-shell__content">
         {loading ? (

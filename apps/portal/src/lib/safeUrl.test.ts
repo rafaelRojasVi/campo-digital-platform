@@ -52,4 +52,22 @@ describe('isSafeIframeUrl', () => {
     expect(isSafeIframeUrl('javascript:alert(1)', 'staging')).toBe(false)
     expect(isSafeIframeUrl(undefined, 'staging')).toBe(false)
   })
+
+  it('in staging, accepts the known hosted Forestry and Transelec origins over https', () => {
+    expect(
+      isSafeIframeUrl('https://campo-digital-forestal-staging.onrender.com/...', 'staging'),
+    ).toBe(true)
+    expect(
+      isSafeIframeUrl('https://campo-digital-transelec-staging.onrender.com/...', 'staging'),
+    ).toBe(true)
+  })
+
+  it('in staging, rejects a lookalike hostname that merely starts with an allowed one', () => {
+    expect(
+      isSafeIframeUrl(
+        'https://campo-digital-forestal-staging.onrender.com.evil.example/',
+        'staging',
+      ),
+    ).toBe(false)
+  })
 })

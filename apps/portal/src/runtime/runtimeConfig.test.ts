@@ -70,6 +70,7 @@ describe('buildStagingRuntimeConfig', () => {
     expect(config.modules.lidar).toEqual({
       status: 'available',
       url: 'https://campo-digital-lidar-staging.onrender.com',
+      demo: true,
     })
   })
 
@@ -78,6 +79,26 @@ describe('buildStagingRuntimeConfig', () => {
 
     expect(config.modules.forestal).toEqual({ status: 'unavailable' })
     expect(config.modules.transelec).toEqual({ status: 'unavailable' })
+  })
+
+  it('buildStagingRuntimeConfig marks every hosted module as demo:true', () => {
+    vi.stubEnv('VITE_LIDAR_HOSTED_URL', 'https://campo-digital-lidar-staging.onrender.com')
+    vi.stubEnv('VITE_FORESTAL_HOSTED_URL', 'https://campo-digital-forestal-staging.onrender.com')
+    vi.stubEnv('VITE_TRANSELEC_HOSTED_URL', 'https://campo-digital-transelec-staging.onrender.com')
+
+    const config = buildStagingRuntimeConfig()
+
+    expect(config.modules.lidar).toEqual({
+      status: 'available',
+      url: 'https://campo-digital-lidar-staging.onrender.com',
+      demo: true,
+    })
+    vi.unstubAllEnvs()
+  })
+
+  it('parseRuntimeConfig passes through an explicit demo:false from the LOCAL launcher', () => {
+    const config = parseRuntimeConfig({ modules: { lidar: { status: 'available', demo: false } } })
+    expect(config.modules.lidar?.demo).toBe(false)
   })
 })
 

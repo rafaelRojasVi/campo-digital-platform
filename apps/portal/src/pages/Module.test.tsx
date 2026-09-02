@@ -62,6 +62,23 @@ describe('ModulePage', () => {
     expect(document.querySelector('iframe')).toBeNull()
   })
 
+  it('shows a DEMO badge when the runtime status marks the module as demo', async () => {
+    mockRuntimeFetch({
+      modules: {
+        forestal: { status: 'available', url: 'http://127.0.0.1:5175/', demo: true },
+      },
+    })
+
+    render(
+      <RouterProvider>
+        <ModulePage moduleId="forestal" />
+      </RouterProvider>,
+    )
+
+    await screen.findByTitle('Gestión Predial Forestal')
+    expect(screen.getByText(/DEMO/i)).toBeInTheDocument()
+  })
+
   it('renders a fallback for an unknown module id instead of crashing', () => {
     mockRuntimeFetch({ modules: {} })
 
