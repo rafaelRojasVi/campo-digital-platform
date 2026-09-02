@@ -13,8 +13,26 @@ import type {
   SourceFieldComparison,
 } from './types'
 
+// Fixed offset applied to every local-grid coordinate below. `lib/proj.ts`'s
+// `utmToLonLat` unconditionally reprojects any geometry as EPSG:32718 UTM
+// regardless of `storage_srid` (correct, faithful behavior of that
+// already-approved file) — so a raw 0-1300/0-650 local grid reprojects to
+// real-world latitude ~-85.5°S, past Leaflet's default Web Mercator
+// rendering cutoff of ±85.0511°, making every polygon silently unrenderable.
+// This offset moves the whole fixture to a normal, renderable latitude
+// (~-18.08°, southern Peru) while staying far — in both country and exact
+// numeric terms — from the real client estate's UTM18S envelope in
+// southern Chile (see docs/adr/ADR-008-hosted-demo-data-v1.md for the
+// forbidden numeric neighborhood this offset was chosen to avoid).
+const EASTING_BASE = 350_000
+const NORTHING_BASE = 8_000_000
+
 function rectangle(x0: number, y0: number, x1: number, y1: number): number[][][][] {
-  return [[[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]]]
+  const ex0 = EASTING_BASE + x0
+  const ex1 = EASTING_BASE + x1
+  const ny0 = NORTHING_BASE + y0
+  const ny1 = NORTHING_BASE + y1
+  return [[[[ex0, ny0], [ex1, ny0], [ex1, ny1], [ex0, ny1], [ex0, ny0]]]]
 }
 
 // P5 is an L-shape: a 400x300 block with a 150x150 notch removed from its
@@ -24,13 +42,13 @@ function rectangle(x0: number, y0: number, x1: number, y1: number): number[][][]
 const P5_L_SHAPE: number[][][][] = [
   [
     [
-      [350, 350],
-      [750, 350],
-      [750, 500],
-      [600, 500],
-      [600, 650],
-      [350, 650],
-      [350, 350],
+      [EASTING_BASE + 350, NORTHING_BASE + 350],
+      [EASTING_BASE + 750, NORTHING_BASE + 350],
+      [EASTING_BASE + 750, NORTHING_BASE + 500],
+      [EASTING_BASE + 600, NORTHING_BASE + 500],
+      [EASTING_BASE + 600, NORTHING_BASE + 650],
+      [EASTING_BASE + 350, NORTHING_BASE + 650],
+      [EASTING_BASE + 350, NORTHING_BASE + 350],
     ],
   ],
 ]
@@ -217,7 +235,7 @@ export const DEMO_SUMMARY: SnapshotSummary = {
   layer_name: DEMO_SNAPSHOT.layer_name,
   family_fingerprint: DEMO_SNAPSHOT.family_fingerprint,
   storage_srid: DEMO_SNAPSHOT.storage_srid,
-  bbox: [0, 0, 1300, 650],
+  bbox: [EASTING_BASE, NORTHING_BASE, EASTING_BASE + 1300, NORTHING_BASE + 650],
   feature_count: FEATURES.length,
   total_geometry_area_source_units: totalArea,
   total_sup_ha: totalArea / 10000,
