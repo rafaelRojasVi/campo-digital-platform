@@ -13,6 +13,8 @@ reviewed 14-Aug snapshot's 729/159/272 counts.
 from __future__ import annotations
 
 import datetime as dt
+import json
+import logging
 from collections.abc import Generator
 from datetime import timedelta
 from pathlib import Path
@@ -35,6 +37,7 @@ from app.session_store import PlatformSessionStore
 from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import Engine, text
+from sqlalchemy.exc import DataError
 
 from transelec_ingestion import import_projection
 from transelec_ingestion.xlsx_contract import EXPECTED_RESUMEN_HEADERS, RESUMEN_COLUMNS
@@ -554,6 +557,68 @@ def test_client_facing_errors_never_leak_technical_detail(
 
     assert metadata["reason"] == "contract_violation"
     assert "Resumen schema mismatch" in metadata["detail"]
+
+
+def test_a_database_failure_never_writes_row_content_to_the_audit_ledger_or_the_log(
+    client: TestClient,
+    integration_engine: Engine,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An unexpected database error must not smuggle source content out.
+
+    SQLAlchemy's StatementError family appends the failing statement AND its
+    bound parameters to str(exc) — for this projection, that is every column
+    value of the failing rows. app.audit's contract forbids putting raw
+    source content in metadata, and the process log is no better a place for
+    it, so the router records only the sanitized form.
+    """
+
+    _login(client, "dev-admin")
+    secret = "PMF-CONFIDENCIAL-001"
+    content = _workbook_bytes(
+        tmp_path,
+        "confidencial.xlsx",
+        [_source_row(pmf=secret, id_predio_unico=f"{secret}-9-9")],
+    )
+    leaking_parameters = [{"pmf": secret, "predio_group_key": f"{secret}-9-9"}]
+
+    def _fail_with_bound_parameters(connection: Any, **kwargs: Any) -> None:
+        raise DataError(
+            "INSERT INTO platform.transelec_resumen_row (pmf, predio_group_key) VALUES (%s, %s)",
+            leaking_parameters,
+            Exception("value too long for type character varying"),
+        )
+
+    monkeypatch.setattr(import_projection, "_insert_rows", _fail_with_bound_parameters)
+
+    with caplog.at_level(logging.WARNING, logger="app.routers.transelec"):
+        _, failed = _upload_and_validate(client, integration_engine, content)
+
+    assert failed.status_code == 500
+    assert secret not in failed.text
+
+    with integration_engine.connect() as connection:
+        metadata = connection.execute(
+            text(
+                "SELECT metadata FROM platform.audit_event "
+                "WHERE event_type = 'import.validation.failed' ORDER BY id DESC LIMIT 1"
+            )
+        ).scalar_one()
+
+    assert metadata["reason"] == "projection_error"
+    assert metadata["detail"] == "DataError"
+    serialized_metadata = json.dumps(metadata)
+    assert secret not in serialized_metadata
+    assert "parameters" not in serialized_metadata
+    assert "INSERT INTO" not in serialized_metadata
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert "DataError" in logged
+    assert secret not in logged
+    assert "parameters" not in logged
+    assert "INSERT INTO" not in logged
 
 
 # ---------------------------------------------------------------------------

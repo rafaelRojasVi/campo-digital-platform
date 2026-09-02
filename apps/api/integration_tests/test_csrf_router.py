@@ -13,6 +13,7 @@ from collections.abc import Generator
 from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import pytest
 from app.access_repository import (
@@ -27,6 +28,7 @@ from app.main import app
 from app.object_store import LocalObjectStore
 from app.session_store import PlatformSessionStore
 from fastapi.testclient import TestClient
+from httpx import Response
 from sqlalchemy import Engine, text
 
 _platform_sessions = PlatformSessionStore()
@@ -34,6 +36,9 @@ _platform_sessions = PlatformSessionStore()
 # TestClient addresses http://testserver, so this is the request's own origin.
 _SAME_ORIGIN = "http://testserver"
 _ATTACKER_ORIGIN = "https://evil.example"
+
+# Every pre-existing generic mutation route guarded by app.csrf.
+GENERIC_MUTATION_KINDS = ("upload", "retry")
 
 
 @pytest.fixture
@@ -118,13 +123,29 @@ def _forestry_zip_bytes() -> bytes:
     return buffer.getvalue()
 
 
-def _upload(client: TestClient, **kwargs: object) -> object:
+def _upload(client: TestClient, **kwargs: Any) -> Response:
     return client.post(
         "/ingesta/upload",
         data={"product_key": "forestry"},
         files={"file": ("predio.zip", _forestry_zip_bytes(), "application/zip")},
-        **kwargs,  # type: ignore[arg-type]
+        **kwargs,
     )
+
+
+def _queued_job_id(client: TestClient) -> int:
+    """Create one job through a fully authorized upload."""
+
+    response = _upload(client, headers={CSRF_HEADER_NAME: _token(client), "Origin": _SAME_ORIGIN})
+    assert response.status_code == 200, response.text
+    return int(response.json()["job_id"])
+
+
+def _mutation(client: TestClient, kind: str, **kwargs: Any) -> Response:
+    """Issue one generic-ingestion mutation, by route kind."""
+
+    if kind == "upload":
+        return _upload(client, **kwargs)
+    return client.post(f"/ingesta/jobs/{_queued_job_id(client)}/retry", **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -162,27 +183,92 @@ def test_csrf_token_is_never_placed_in_a_cookie(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Fail-closed on the pre-existing generic upload route
+# Fail-closed on both pre-existing generic mutation routes
+#
+# The four minimum cases (absent, mismatched, valid + same-origin,
+# cross-origin) run against every generic mutation route, matching how
+# test_transelec_router.py parametrizes the same cases over the four
+# Transelec mutations.
 # ---------------------------------------------------------------------------
 
 
-def test_upload_without_a_csrf_token_is_forbidden(client: TestClient) -> None:
+@pytest.mark.parametrize("kind", GENERIC_MUTATION_KINDS)
+def test_mutation_without_a_csrf_token_is_forbidden(client: TestClient, kind: str) -> None:
     _login(client, "dev-operator")
 
-    response = _upload(client)
+    response = _mutation(client, kind)
 
-    assert response.status_code == 403  # type: ignore[attr-defined]
-    assert response.json()["detail"] == "CSRF verification failed."  # type: ignore[attr-defined]
+    assert response.status_code == 403
+    assert response.json()["detail"] == "CSRF verification failed."
 
 
-def test_upload_with_a_mismatched_csrf_token_is_forbidden(client: TestClient) -> None:
+@pytest.mark.parametrize("kind", GENERIC_MUTATION_KINDS)
+def test_mutation_with_a_mismatched_csrf_token_is_forbidden(client: TestClient, kind: str) -> None:
     _login(client, "dev-operator")
     valid = _token(client)
     tampered = valid[:-1] + ("A" if valid[-1] != "A" else "B")
 
-    response = _upload(client, headers={CSRF_HEADER_NAME: tampered})
+    response = _mutation(client, kind, headers={CSRF_HEADER_NAME: tampered})
 
-    assert response.status_code == 403  # type: ignore[attr-defined]
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("kind", GENERIC_MUTATION_KINDS)
+def test_mutation_with_a_valid_token_and_same_origin_passes_csrf(
+    client: TestClient, kind: str
+) -> None:
+    """Not 403: the request reaches the route's own logic — 200 for the
+    upload boundary, 409 for retry (a freshly queued job is not failed)."""
+
+    _login(client, "dev-operator")
+
+    response = _mutation(
+        client, kind, headers={CSRF_HEADER_NAME: _token(client), "Origin": _SAME_ORIGIN}
+    )
+
+    assert response.status_code != 403, response.text
+    assert response.status_code in (200, 409), response.text
+
+
+@pytest.mark.parametrize("kind", GENERIC_MUTATION_KINDS)
+def test_cross_origin_mutation_is_forbidden_even_with_a_valid_token(
+    client: TestClient, kind: str
+) -> None:
+    """The Origin layer is independent of the token layer: a valid token
+    presented from an untrusted origin is still rejected."""
+
+    _login(client, "dev-operator")
+
+    response = _mutation(
+        client, kind, headers={CSRF_HEADER_NAME: _token(client), "Origin": _ATTACKER_ORIGIN}
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("kind", GENERIC_MUTATION_KINDS)
+def test_mutation_without_a_session_is_unauthenticated_not_a_csrf_failure(
+    client: TestClient, kind: str
+) -> None:
+    """No session cookie means no cookie-authenticated action to ride, so the
+    answer stays 401 rather than silently becoming a CSRF 403."""
+
+    # The retry variant needs an authorized upload to have created a job
+    # first; the session is dropped again before the mutation under test.
+    if kind == "retry":
+        _login(client, "dev-operator")
+        job_id = _queued_job_id(client)
+        client.cookies.clear()
+        response = client.post(
+            f"/ingesta/jobs/{job_id}/retry",
+            headers={CSRF_HEADER_NAME: mint_csrf_token("some-other-secret")},
+        )
+    else:
+        response = _mutation(
+            client, kind, headers={CSRF_HEADER_NAME: mint_csrf_token("some-other-secret")}
+        )
+
+    assert response.status_code == 401
 
 
 def test_upload_with_a_token_minted_for_another_session_is_forbidden(client: TestClient) -> None:
@@ -195,32 +281,7 @@ def test_upload_with_a_token_minted_for_another_session_is_forbidden(client: Tes
     _login(client, "dev-operator")
     response = _upload(client, headers={CSRF_HEADER_NAME: attacker_token})
 
-    assert response.status_code == 403  # type: ignore[attr-defined]
-
-
-def test_upload_with_a_valid_token_from_the_same_origin_succeeds(client: TestClient) -> None:
-    _login(client, "dev-operator")
-
-    response = _upload(
-        client,
-        headers={CSRF_HEADER_NAME: _token(client), "Origin": _SAME_ORIGIN},
-    )
-
-    assert response.status_code == 200, response.text  # type: ignore[attr-defined]
-
-
-def test_cross_origin_upload_is_forbidden_even_with_a_valid_token(client: TestClient) -> None:
-    """The Origin layer is independent of the token layer: a valid token
-    presented from an untrusted origin is still rejected."""
-
-    _login(client, "dev-operator")
-
-    response = _upload(
-        client,
-        headers={CSRF_HEADER_NAME: _token(client), "Origin": _ATTACKER_ORIGIN},
-    )
-
-    assert response.status_code == 403  # type: ignore[attr-defined]
+    assert response.status_code == 403
 
 
 def test_cross_origin_referer_is_forbidden_when_no_origin_header_is_sent(
@@ -233,48 +294,7 @@ def test_cross_origin_referer_is_forbidden_when_no_origin_header_is_sent(
         headers={CSRF_HEADER_NAME: _token(client), "Referer": f"{_ATTACKER_ORIGIN}/attack.html"},
     )
 
-    assert response.status_code == 403  # type: ignore[attr-defined]
-
-
-def test_upload_without_a_session_is_unauthenticated_not_a_csrf_failure(
-    client: TestClient,
-) -> None:
-    """No session cookie means no cookie-authenticated action to ride, so the
-    answer stays 401 rather than silently becoming a CSRF 403."""
-
-    response = _upload(client, headers={CSRF_HEADER_NAME: mint_csrf_token("some-other-secret")})
-
-    assert response.status_code == 401  # type: ignore[attr-defined]
-
-
-# ---------------------------------------------------------------------------
-# Fail-closed on the pre-existing generic retry route
-# ---------------------------------------------------------------------------
-
-
-def test_retry_without_a_csrf_token_is_forbidden(client: TestClient) -> None:
-    _login(client, "dev-operator")
-    upload = _upload(client, headers={CSRF_HEADER_NAME: _token(client)})
-    job_id = upload.json()["job_id"]  # type: ignore[attr-defined]
-
-    response = client.post(f"/ingesta/jobs/{job_id}/retry")
-
     assert response.status_code == 403
-
-
-def test_retry_with_a_valid_token_reaches_the_route_logic(client: TestClient) -> None:
-    """409 (not 403) proves CSRF passed and the route's own rules ran."""
-
-    _login(client, "dev-operator")
-    upload = _upload(client, headers={CSRF_HEADER_NAME: _token(client)})
-    job_id = upload.json()["job_id"]  # type: ignore[attr-defined]
-
-    response = client.post(
-        f"/ingesta/jobs/{job_id}/retry",
-        headers={CSRF_HEADER_NAME: _token(client), "Origin": _SAME_ORIGIN},
-    )
-
-    assert response.status_code == 409
 
 
 # ---------------------------------------------------------------------------

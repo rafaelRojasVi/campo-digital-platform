@@ -34,6 +34,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import Connection, Engine, text
+from sqlalchemy.exc import StatementError
 
 from app.access import Action, Role
 from app.access_repository import AppUser
@@ -54,6 +55,7 @@ from app.transelec_publication import (
 from transelec_ingestion.import_projection import (
     PARSER_VERSION,
     SCHEMA_CONTRACT_VERSION,
+    ImportProjectionError,
     ImportProjectionResult,
     validate_and_project,
 )
@@ -73,6 +75,45 @@ _SOURCE_UNAVAILABLE = "El archivo cargado ya no está disponible. Vuelva a carga
 _CONTRACT_VIOLATION = "La planilla no cumple el contrato de origen esperado. Contacte a soporte."
 _PROJECTION_FAILED = "No se pudo verificar la importación. La versión activa no cambió."
 _PUBLISH_FAILED = "No se pudo publicar la versión. La versión activa no cambió."
+
+# Exceptions whose str() is known to carry only structural information —
+# header names, column positions, row numbers, counts, ids. Everything else
+# is reduced to its type name. This is an allowlist on purpose: it must stay
+# safe for exception types nobody has audited yet, not just the ones we
+# expect today.
+_STRUCTURAL_DETAIL_EXCEPTIONS = (
+    TranselecWorkbookError,
+    ImportProjectionError,
+    ImportNotFoundError,
+)
+
+
+def _safe_failure_detail(exc: BaseException) -> str:
+    """Reduce an exception to a detail safe for the audit ledger and the log.
+
+    ``app.audit``'s contract is that callers never pass secrets or raw source
+    content in ``metadata``. A SQLAlchemy ``StatementError`` violates that if
+    passed through verbatim: its ``str()`` appends ``[SQL: ...]`` and
+    ``[parameters: ...]``, and for this router those bound parameters are
+    every projected column value of the failing rows — real Transelec
+    content, written durably to the ledger and the process log.
+
+    So only the audited, structural exception types keep their full message.
+    A database error keeps its type and, when the driver exposes one, the
+    violated constraint's name — enough to diagnose, nothing of the data.
+    """
+
+    if isinstance(exc, _STRUCTURAL_DETAIL_EXCEPTIONS):
+        return f"{type(exc).__name__}: {exc}"
+
+    if isinstance(exc, StatementError):
+        diagnostic = getattr(getattr(exc, "orig", None), "diag", None)
+        constraint = getattr(diagnostic, "constraint_name", None)
+        if constraint:
+            return f"{type(exc).__name__}: constraint {constraint}"
+        return type(exc).__name__
+
+    return type(exc).__name__
 
 
 def require_transelec_grant(action: Action) -> Callable[..., Role]:
@@ -326,10 +367,11 @@ def validate_and_project_import(
             # transelec_import row, no transelec_resumen_row rows, and
             # transelec_dashboard_state untouched.
             is_contract_violation = isinstance(exc, TranselecWorkbookError)
+            detail = _safe_failure_detail(exc)
             logger.warning(
                 "Transelec validate-and-project failed for ingestion_run_id=%s: %s",
                 ingestion_run_id,
-                exc,
+                detail,
             )
             _record_failure_audit(
                 engine,
@@ -340,7 +382,7 @@ def validate_and_project_import(
                 metadata={
                     "source_snapshot_id": run.source_snapshot_id,
                     "reason": "contract_violation" if is_contract_violation else "projection_error",
-                    "detail": str(exc),
+                    "detail": detail,
                 },
             )
             raise HTTPException(
@@ -386,7 +428,8 @@ def _activate(
             )
     except Exception as exc:
         not_found = isinstance(exc, ImportNotFoundError)
-        logger.warning("Transelec %s failed for import_id=%s: %s", event_type, import_id, exc)
+        detail = _safe_failure_detail(exc)
+        logger.warning("Transelec %s failed for import_id=%s: %s", event_type, import_id, detail)
         _record_failure_audit(
             engine,
             actor_app_user_id=user.id,
@@ -396,7 +439,7 @@ def _activate(
             metadata={
                 "event_type": event_type,
                 "reason": "import_not_found" if not_found else "activation_error",
-                "detail": str(exc),
+                "detail": detail,
             },
         )
         raise HTTPException(
