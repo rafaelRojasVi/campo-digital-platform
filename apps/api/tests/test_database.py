@@ -18,6 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 def test_build_engine_uses_configured_database_url() -> None:
     settings = Settings(
         _env_file=None,
+        app_env="development",
         postgres_db="fixture_database",
         postgres_user="fixture_user",
         postgres_password="fixture_secret",

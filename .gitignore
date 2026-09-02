@@ -59,3 +59,14 @@ products/lidar/dashboard/public/local-demo/
 .env
 .env.*
 !.env.example
+
+# Local multi-product demo launcher state (PIDs, logs) - machine-specific
+.lidar-dev/
+.campo-demo/
+
+# Local content-addressed object store (platform ingestion foundation) -
+# never commit stored binaries; see apps/api/app/object_store.py
+.local/
+
+# playwright-cli local browser-automation artifacts (snapshots, screenshots)
+.playwright-cli/

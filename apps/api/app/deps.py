@@ -1,0 +1,144 @@
+"""Shared FastAPI dependencies for platform access and object storage.
+
+Kept separate from ``app.main`` so routers can depend on these without a
+circular import, and so tests can override them cleanly via
+``app.dependency_overrides``.
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Generator
+from pathlib import Path
+from typing import Annotated
+
+from fastapi import Cookie, Depends, HTTPException
+from sqlalchemy import Connection, Engine, text
+
+from app.access import Action, Role, can
+from app.access_repository import AppUser, get_product_role, resolve_or_create_app_user
+from app.config import Settings, get_settings
+from app.database import get_database_engine
+from app.dev_auth import (
+    DEV_IDENTITY_KIND,
+    SEEDED_DEV_IDENTITIES,
+    DevAuthDisabledInProductionError,
+    DevSessionStore,
+    assert_dev_auth_allowed,
+)
+from app.object_store import LocalObjectStore, ObjectStore
+from app.session_store import PlatformSessionStore
+
+SESSION_COOKIE_NAME = "campo_session"
+
+_session_store = DevSessionStore()
+_platform_session_store = PlatformSessionStore()
+_object_store: LocalObjectStore | None = None
+
+
+def get_session_store() -> DevSessionStore:
+    """Return the process-level dev session store."""
+
+    return _session_store
+
+
+def get_platform_session_store() -> PlatformSessionStore:
+    """Return the process-level Postgres-backed session store."""
+
+    return _platform_session_store
+
+
+def get_object_store() -> ObjectStore:
+    """Return the process-level local object store."""
+
+    global _object_store
+    if _object_store is None:
+        root = Path(os.environ.get("CAMPO_OBJECT_STORE_ROOT", ".local/object-store"))
+        _object_store = LocalObjectStore(root)
+    return _object_store
+
+
+def get_db_connection(
+    engine: Annotated[Engine, Depends(get_database_engine)],
+) -> Generator[Connection, None, None]:
+    """Yield a request-scoped connection, committing on success."""
+
+    with engine.connect() as connection:
+        yield connection
+        connection.commit()
+
+
+def get_current_app_user(
+    settings: Annotated[Settings, Depends(get_settings)],
+    connection: Annotated[Connection, Depends(get_db_connection)],
+    platform_sessions: Annotated[PlatformSessionStore, Depends(get_platform_session_store)],
+    dev_sessions: Annotated[DevSessionStore, Depends(get_session_store)],
+    session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)] = None,
+) -> AppUser:
+    """Resolve the caller's app_user row: real session first, dev-auth fallback."""
+
+    if session_token is None:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+
+    app_user_id = platform_sessions.resolve_session(connection, session_token)
+    if app_user_id is not None:
+        return _load_app_user(connection, app_user_id)
+
+    try:
+        assert_dev_auth_allowed(settings)
+    except DevAuthDisabledInProductionError as exc:
+        raise HTTPException(status_code=401, detail="Not authenticated.") from exc
+
+    identity_key = dev_sessions.resolve_session(session_token)
+    if identity_key is None:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+
+    display_name = next(
+        (i.display_name for i in SEEDED_DEV_IDENTITIES if i.identity_key == identity_key),
+        identity_key,
+    )
+    return resolve_or_create_app_user(
+        connection,
+        identity_kind=DEV_IDENTITY_KIND,
+        identity_key=identity_key,
+        display_name=display_name,
+    )
+
+
+def _load_app_user(connection: Connection, app_user_id: int) -> AppUser:
+    row = connection.execute(
+        text(
+            "SELECT id, identity_kind, identity_key, display_name, email "
+            "FROM platform.app_user WHERE id = :id"
+        ),
+        {"id": app_user_id},
+    ).one()
+    return AppUser(
+        id=row.id,
+        identity_kind=row.identity_kind,
+        identity_key=row.identity_key,
+        display_name=row.display_name,
+        email=row.email,
+    )
+
+
+def get_current_identity_key(
+    user: Annotated[AppUser, Depends(get_current_app_user)],
+) -> str:
+    """Resolve the caller's identity key via the same session resolution as
+    `get_current_app_user`, so dev-auth's `/auth/logout` can authenticate the
+    call without duplicating session-lookup logic in a second place."""
+
+    return user.identity_key
+
+
+def ensure_can(
+    connection: Connection, *, app_user_id: int, product_key: str, action: Action
+) -> Role:
+    """Raise 403 unless the caller's grant for ``product_key`` permits ``action``."""
+
+    role = get_product_role(connection, app_user_id=app_user_id, product_key=product_key)
+    if not can(role, action):
+        raise HTTPException(status_code=403, detail="Not permitted for this product.")
+    assert role is not None  # can() returning True implies a grant exists
+    return role

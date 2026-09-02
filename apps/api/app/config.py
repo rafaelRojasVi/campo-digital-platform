@@ -20,8 +20,7 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    app_env: Literal["development", "test", "production"] = Field(
-        default="development",
+    app_env: Literal["development", "test", "staging", "production"] = Field(
         validation_alias="APP_ENV",
     )
 
@@ -45,6 +44,34 @@ class Settings(BaseSettings):
         validation_alias="POSTGRES_PORT",
         ge=1,
         le=65535,
+    )
+
+    entra_tenant_id: str | None = Field(default=None, validation_alias="ENTRA_TENANT_ID")
+    entra_client_id: str | None = Field(default=None, validation_alias="ENTRA_CLIENT_ID")
+    entra_client_secret: SecretStr | None = Field(
+        default=None, validation_alias="ENTRA_CLIENT_SECRET"
+    )
+    entra_redirect_base_url: str = Field(
+        default="http://localhost:8000",
+        validation_alias="ENTRA_REDIRECT_BASE_URL",
+    )
+
+    platform_token_encryption_key: SecretStr | None = Field(
+        default=None, validation_alias="PLATFORM_TOKEN_ENCRYPTION_KEY"
+    )
+
+    platform_bootstrap_admin_tenant_id: str | None = Field(
+        default=None, validation_alias="PLATFORM_BOOTSTRAP_ADMIN_TENANT_ID"
+    )
+    platform_bootstrap_admin_object_id: str | None = Field(
+        default=None, validation_alias="PLATFORM_BOOTSTRAP_ADMIN_OBJECT_ID"
+    )
+
+    enable_onedrive_import: bool = Field(default=False, validation_alias="ENABLE_ONEDRIVE_IMPORT")
+    staging_execution_max_bytes: int = Field(
+        default=25 * 1024 * 1024,
+        validation_alias="STAGING_EXECUTION_MAX_BYTES",
+        gt=0,
     )
 
     @property
