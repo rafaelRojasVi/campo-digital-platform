@@ -648,6 +648,8 @@ git commit -m "feat(lidar-dashboard): show a DEMO banner in demo mode"
 
 Ported from `feat/forestry-dashboard-v1` (worktree: `/home/rafael/dev/freelance/campo-digital-forestry-dashboard-v1`). That branch's own "synthetic" test fixture (`src/test/fixtures.ts`, `cod_predial: 'HT'`, `nom_predio: 'Hacienda Trinidad'`, coordinates near `620000, 5490000`) is **not safe to reuse** — it embeds the real Degenfeld predio identity and estate-envelope location. Do not copy that file. Everything else ported below (types, non-draft `lib/`, non-`MapView` components) is pure logic/presentation with no embedded client data — confirmed by grep during planning.
 
+> **Correction found during Task 5 execution (not caught by the planning-phase grep above):** three more files independently embed real Degenfeld data and must NOT be copied verbatim either — `lib/proj.test.ts` (real UTM estate-envelope coordinate pairs, e.g. `617298.09, 5484858.7`, and the exact `620000, 5490000` neighborhood already known to be sensitive), `lib/filters.test.ts` and `lib/mapData.test.ts` (hardcode real predio names `Lumaco`/`LUM`, `San Sebastian`, independent of ever importing `fixtures.ts`). The planning-phase grep only searched for the exact `Hacienda Trinidad`/`HT`/`620000,5490000` strings and missed these. Task 5's implementer caught this, deleted the three files from its working tree, and did not commit them — see its report. Task 6 (below) now also reconstructs these three test files against synthetic data instead.
+
 ### Task 4: Scaffold the Forestry dashboard project
 
 **Files:**
@@ -1084,11 +1086,24 @@ export function demoFeatureDetail(featureOrdinal: number): SourceFeatureDetail |
 Run: `cd products/forestry/dashboard && npm test`
 Expected: PASS.
 
+- [ ] **Step 4b: Reconstruct the three test files Task 5 could not copy (real client data)**
+
+Task 5 found that `lib/proj.test.ts`, `lib/filters.test.ts`, and `lib/mapData.test.ts` on `feat/forestry-dashboard-v1` embed real Degenfeld predio names/coordinates independent of `fixtures.ts` (see the correction note at the top of Part B). The implementation files themselves (`lib/proj.ts`, `lib/filters.ts`, `lib/mapData.ts`) were copied and committed in Task 5 and contain no client data — only their tests are missing. Write new versions of these three test files, preserving the same test *intent* against synthetic values:
+
+- `proj.test.ts`: validate `utmToLonLat`/`utmBboxToLonLatBounds`/`multiPolygonUtmBbox` with coordinate pairs of your own choosing that are nowhere near `620000, 5490000` or `617298.09, 5484858.7` — round-trip sanity (`lonLatToUtm(utmToLonLat(x, y))` ≈ `(x, y)`) is sufficient; you do not need pyproj-verified reference pairs.
+- `filters.test.ts`: validate `applyFilters`/`countActiveFilters`/`filterOptions` using this task's own `DEMO_COLLECTION` features (`DEMO-01`..`DEMO-06`) instead of `Lumaco`/`San Sebastian` — filter by predio code, uso, rodal, a 2024→2026 use-code change (use `DEMO-03`, which this fixture already changes from BN to PL), quality flag presence (`DEMO-06`), geometry validity, and text search.
+- `mapData.test.ts`: validate `tooltipHtml` using a `DEMO_COLLECTION` feature instead of `Lumaco`/`LUM` (e.g. assert the tooltip contains `Predio Los Aromos (DEMO-01)`), and keep the existing XSS-escaping test case verbatim (`nom_predio: '<img src=x>'` — that value is already synthetic/safe, not client data).
+
+Run: `cd products/forestry/dashboard && npx tsc -b --noEmit && npm test`
+Expected: clean type-check, all tests (old + 3 new/rewritten files) passing.
+
 - [ ] **Step 5: Commit**
 
 ```bash
-git add products/forestry/dashboard/src/demoData.ts products/forestry/dashboard/src/demoData.test.ts
-git commit -m "feat(forestry-dashboard): author synthetic 6-predio demo estate"
+git add products/forestry/dashboard/src/demoData.ts products/forestry/dashboard/src/demoData.test.ts \
+  products/forestry/dashboard/src/lib/proj.test.ts products/forestry/dashboard/src/lib/filters.test.ts \
+  products/forestry/dashboard/src/lib/mapData.test.ts
+git commit -m "feat(forestry-dashboard): author synthetic 6-predio demo estate, rebuild 3 tests that had leaked real data"
 ```
 
 ---
