@@ -96,7 +96,7 @@ export function MapView({
       attributionControl: true,
       zoomSnap: 0.25,
     })
-    map.setView([-40.45, -73.35], 10)
+    map.setView([-18.08, -76.4], 10)
     L.control.scale({ metric: true, imperial: false }).addTo(map)
 
     const handleBackgroundClick = (event: L.LeafletMouseEvent) => {

@@ -19,11 +19,38 @@ updates:
       timezone: "America/Santiago"
     open-pull-requests-limit: 5
 
+  - package-ecosystem: "npm"
+    directory: "/apps/portal"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:20"
+      timezone: "America/Santiago"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "npm"
+    directory: "/products/forestry/dashboard"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:25"
+      timezone: "America/Santiago"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "npm"
+    directory: "/products/transelect/dashboard"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:30"
+      timezone: "America/Santiago"
+    open-pull-requests-limit: 5
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "10:30"
+      time: "10:35"
       timezone: "America/Santiago"
     open-pull-requests-limit: 5

@@ -60,3 +60,30 @@ npm \
   audit \
   --omit=dev \
   --audit-level=high
+
+echo
+echo "=== Portal production dependencies ==="
+
+npm \
+  --prefix apps/portal \
+  audit \
+  --omit=dev \
+  --audit-level=high
+
+echo
+echo "=== Forestry dashboard production dependencies ==="
+
+npm \
+  --prefix products/forestry/dashboard \
+  audit \
+  --omit=dev \
+  --audit-level=high
+
+echo
+echo "=== Transelec dashboard production dependencies ==="
+
+npm \
+  --prefix products/transelect/dashboard \
+  audit \
+  --omit=dev \
+  --audit-level=high
