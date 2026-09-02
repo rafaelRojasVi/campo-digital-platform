@@ -168,16 +168,27 @@ test('TR-FUNC-026: the easement card selects exactly Servidumbre firmada', async
   )
 })
 
-test('TR-FUNC-027: the surface card scrolls to the KPI row without changing the filters', async ({
+test('TR-FUNC-027: the surface card resets the filters and scrolls to the KPI row', async ({
   page,
 }) => {
   await openDashboard(page)
-  await page.getByLabel('Búsqueda general').fill('')
+
+  // Start from a genuinely filtered state — starting empty cannot tell
+  // "resets the filters" apart from "leaves them alone", and the card's own
+  // sub-label promises the reset.
+  await page.getByLabel('Búsqueda general').fill('rechaz')
+  await expect(page.getByTestId('kpi-pmf')).toHaveText('4')
+
   await page.getByText('¿Cuál es la superficie de corta?').click()
 
   await expect(page.getByLabel('Búsqueda general')).toHaveValue('')
   await expect(page.getByTestId('kpi-pmf')).toHaveText('12')
   await expect(page.getByTestId('kpi-row')).toBeInViewport()
+  // The card's copy must describe that reset rather than deny it.
+  await expect(
+    page.getByText(/Limpia los filtros y lleva al indicador de superficie/),
+  ).toBeVisible()
+  await expect(page.getByText(/no cambia los filtros/)).toHaveCount(0)
 })
 
 test('TR-FUNC-028/029: the rejected and legal cards run their literal substring searches', async ({
@@ -220,6 +231,27 @@ test('TR-FUNC-031: the overdue card lists rows against a computed reference date
 
   await page.getByTestId('overdue-close').click()
   await expect(panel).toBeHidden()
+})
+
+test('TR-FUNC-017/031: the overdue panel follows a filter change instead of going stale', async ({
+  page,
+}) => {
+  await openDashboard(page)
+  await page.getByText('¿Qué ingresos superaron 90 días?').click()
+
+  const panel = page.getByTestId('overdue-panel')
+  await expect(panel).toBeVisible()
+  // Unfiltered scope: the stub serves 60 rows, all of them overdue.
+  await expect(page.getByTestId('overdue-count')).toContainText('(60 ')
+
+  // The panel's own copy claims its scope is the active filters. Changing a
+  // filter must move it with the rest of the page — the KPI row, the donuts,
+  // the hero and the table all narrow here, and the panel cannot be the one
+  // section left showing the previous filter state's rows.
+  await page.getByLabel('Búsqueda general').fill('rechaz')
+  await expect(page.getByTestId('kpi-pmf')).toHaveText('4')
+  await expect(page.getByTestId('overdue-count')).toContainText('(8 ')
+  await expect(panel).toContainText('El alcance es el de los filtros activos')
 })
 
 test('TR-FUNC-032/033: the pending zone shows count, stages and the detail table', async ({

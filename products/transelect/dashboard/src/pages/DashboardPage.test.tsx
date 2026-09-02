@@ -234,7 +234,28 @@ describe('DashboardPage', () => {
     )
   })
 
-  it('the surface quick action changes no filter (TR-FUNC-027)', async () => {
+  it('the surface quick action resets the filters and adds no filter of its own (TR-FUNC-027)', async () => {
+    stubHappyPath()
+    renderDashboard()
+    await waitFor(() => expect(screen.getByTestId('kpi-row')).toBeInTheDocument())
+
+    // Start from a genuinely filtered state: a test that starts empty cannot
+    // tell "resets the filters" apart from "leaves them alone".
+    await userEvent.type(screen.getByLabelText('Búsqueda general'), 'legal')
+    await waitFor(() =>
+      expect(api.getSummary).toHaveBeenLastCalledWith({ ...api.EMPTY_FILTERS, q: 'legal' }),
+    )
+
+    await userEvent.click(screen.getByText('¿Cuál es la superficie de corta?'))
+
+    // The source's quick() resets the filters before every branch, surface
+    // included — so the filter really is cleared, and nothing else changes.
+    await waitFor(() => expect(api.getSummary).toHaveBeenLastCalledWith(api.EMPTY_FILTERS))
+    expect(screen.getByLabelText('Búsqueda general')).toHaveValue('')
+    expect(screen.getByTestId('kpi-row')).toBeInTheDocument()
+  })
+
+  it('the surface quick action introduces no filter when nothing was filtered', async () => {
     stubHappyPath()
     renderDashboard()
     await waitFor(() => expect(screen.getByTestId('kpi-row')).toBeInTheDocument())
@@ -333,6 +354,60 @@ describe('DashboardPage', () => {
     expect(panel.queryByText('MP-OK')).not.toBeInTheDocument()
     expect(panel.queryByText('MP-FUTURE')).not.toBeInTheDocument()
     expect(panel.getByText(/02-09-2026/)).toBeInTheDocument()
+  })
+
+  it('the overdue panel re-runs against a filter change instead of showing stale rows (TR-FUNC-017/031)', async () => {
+    stubHappyPath()
+    vi.mocked(api.listRows).mockResolvedValue(
+      page(
+        [
+          makeRow({
+            source_row_number: 1,
+            pmf: 'MP-ANTES',
+            estado_resumido: 'En tramite',
+            fecha_90_dias: '2026-01-05',
+          }),
+        ],
+        1,
+      ),
+    )
+
+    renderDashboard()
+    await waitFor(() => expect(screen.getByTestId('kpi-row')).toBeInTheDocument())
+    await userEvent.click(screen.getByText('¿Qué ingresos superaron 90 días?'))
+    await waitFor(() =>
+      expect(within(screen.getByTestId('overdue-panel')).getByText('MP-ANTES')).toBeInTheDocument(),
+    )
+
+    // The panel's own copy claims its scope is the active filters, so a
+    // filter change must move it too — the rest of the page already has.
+    vi.mocked(api.listRows).mockResolvedValue(
+      page(
+        [
+          makeRow({
+            source_row_number: 2,
+            pmf: 'MP-DESPUES',
+            estado_resumido: 'Pendiente',
+            fecha_90_dias: '2026-01-05',
+          }),
+        ],
+        1,
+      ),
+    )
+    await userEvent.type(screen.getByLabelText('Búsqueda general'), 'legal')
+
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId('overdue-panel')).getByText('MP-DESPUES'),
+      ).toBeInTheDocument(),
+    )
+    const panel = within(screen.getByTestId('overdue-panel'))
+    expect(panel.queryByText('MP-ANTES')).not.toBeInTheDocument()
+    // And it was re-collected under the new filter state, not the old one.
+    expect(vi.mocked(api.listRows).mock.lastCall?.[0]).toEqual({
+      ...api.EMPTY_FILTERS,
+      q: 'legal',
+    })
   })
 
   it('pages the detail table forward and back with the API’s cursor (TR-FUNC-039)', async () => {

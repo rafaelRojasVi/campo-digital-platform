@@ -146,8 +146,15 @@ describe('QuickActions (TR-FUNC-024-031)', () => {
   it('describes what the three under-delivering cards actually do', () => {
     render(<QuickActions onQuick={() => {}} />)
     expect(screen.getByText(/no existe todavía una tabla comparativa por empresa/)).toBeInTheDocument()
-    expect(screen.getByText(/no cambia los filtros/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Limpia los filtros y lleva al indicador de superficie/),
+    ).toBeInTheDocument()
     expect(screen.getByText(/Deja el cursor en la búsqueda general/)).toBeInTheDocument()
+  })
+
+  it('does not claim the surface card leaves the filters alone — it resets them', () => {
+    render(<QuickActions onQuick={() => {}} />)
+    expect(screen.queryByText(/no cambia los filtros/)).not.toBeInTheDocument()
   })
 
   it('describes the two blunt substring searches as such', () => {

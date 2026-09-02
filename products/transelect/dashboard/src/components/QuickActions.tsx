@@ -59,9 +59,13 @@ export const QUICK_ACTIONS: QuickActionCard[] = [
     sub: 'Filtra «Servidumbre firmada».',
   },
   {
+    // The source's `quick()` calls `resetFilters()` before every branch,
+    // `surface` included, so this card does clear the filters on its way to
+    // the KPI row — it just does nothing else once it gets there. Saying it
+    // leaves the filters alone would describe the opposite of what happens.
     type: 'surface',
     title: '¿Cuál es la superficie de corta?',
-    sub: 'Lleva al indicador de superficie; no cambia los filtros.',
+    sub: 'Limpia los filtros y lleva al indicador de superficie; no calcula un desglose nuevo.',
   },
   {
     type: 'rejected',

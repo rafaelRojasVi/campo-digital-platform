@@ -106,6 +106,7 @@ export function DashboardPage({
   const [overdueReference, setOverdueReference] = useState<Date | null>(null)
 
   const requestId = useRef(0)
+  const overdueRequestId = useRef(0)
 
   // Debounce the filter state into the applied state so a burst of typing
   // produces one consistent fetch rather than one per keystroke.
@@ -233,8 +234,18 @@ export function DashboardPage({
     })
   }, [])
 
-  const runOverdueConsultation = useCallback(async (target: TranselecFilterState) => {
-    setOverdueOpen(true)
+  // The 90-day consultation reacts to the filter state exactly the way the
+  // main data effect above does, rather than being run once when the card is
+  // clicked. Its own copy tells the reader its scope is the active filters,
+  // so it must never keep showing rows computed under a filter state the
+  // rest of the page has already left behind — that would be the
+  // cross-section disagreement TR-FUNC-017 exists to prevent, appearing in
+  // the one section that opts out of the shared fetch.
+  useEffect(() => {
+    if (!overdueOpen) return
+
+    const id = ++overdueRequestId.current
+    let cancelled = false
     setOverdueLoading(true)
     setOverdueError(null)
     setOverdueRows([])
@@ -242,14 +253,20 @@ export function DashboardPage({
     const reference = observedServerNow() ?? new Date()
     setOverdueReference(reference)
 
-    const result = await collectAllRows(target)
-    setOverdueLoading(false)
-    if (!result.ok) {
-      setOverdueError(classifyFailure(result).message)
-      return
+    void collectAllRows(appliedFilters).then((result) => {
+      if (cancelled || id !== overdueRequestId.current) return
+      setOverdueLoading(false)
+      if (!result.ok) {
+        setOverdueError(classifyFailure(result).message)
+        return
+      }
+      setOverdueRows(selectOverdueRows(result.rows, reference))
+    })
+
+    return () => {
+      cancelled = true
     }
-    setOverdueRows(selectOverdueRows(result.rows, reference))
-  }, [])
+  }, [overdueOpen, appliedFilters])
 
   const handleQuick = useCallback(
     (type: QuickActionType) => {
@@ -295,11 +312,13 @@ export function DashboardPage({
           return
         case 'overdue':
           setFilters(base)
-          void runOverdueConsultation(base)
+          // Opening the panel is all this does; the effect above owns the
+          // consultation and re-runs it whenever the filter state moves.
+          setOverdueOpen(true)
           return
       }
     },
-    [options.tipo_propietario, runOverdueConsultation, showPending],
+    [options.tipo_propietario, showPending],
   )
 
   const downloadCsv = useCallback(() => {
