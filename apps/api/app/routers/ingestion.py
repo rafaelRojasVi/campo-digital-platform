@@ -278,7 +278,12 @@ def audit_log(
     user: Annotated[AppUser, Depends(get_current_app_user)],
     connection: Annotated[Connection, Depends(get_db_connection)],
 ) -> list[AuditEventView]:
-    """Admin-only cross-event audit trail, scoped to the caller's admin products."""
+    """Admin-only cross-event audit trail, scoped to the caller's admin products.
+
+    Never includes platform-level (product_key IS NULL) events: there is no
+    platform-admin concept yet, so no caller is entitled to see those through
+    this product-scoped endpoint.
+    """
 
     grants = list_grants_for_user(connection, app_user_id=user.id)
     admin_products = [grant.product_key for grant in grants if grant.role is Role.ADMIN]
@@ -292,7 +297,7 @@ def audit_log(
             SELECT id, occurred_at, actor_app_user_id, event_type,
                    product_key, subject_kind, subject_id
             FROM platform.audit_event
-            WHERE product_key = ANY(:products) OR product_key IS NULL
+            WHERE product_key = ANY(:products)
             ORDER BY occurred_at DESC
             LIMIT 200
             """

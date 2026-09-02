@@ -8,7 +8,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from sqlalchemy import Connection
 
+from app.access import Action
+from app.access_repository import AppUser
+from app.deps import ensure_can, get_current_app_user, get_db_connection
 from lidar_core.models import MeasurementRun, VolumeComparisonRecord
 from lidar_io.comparison_store import read_comparison_record
 from lidar_io.output_root_discovery import resolve_report_root
@@ -18,7 +22,28 @@ from lidar_io.run_store import (
     read_measurement_run,
 )
 
-router = APIRouter()
+LIDAR_PRODUCT_KEY = "lidar"
+
+
+def require_lidar_view(
+    user: Annotated[AppUser, Depends(get_current_app_user)],
+    connection: Annotated[Connection, Depends(get_db_connection)],
+) -> None:
+    """Require an authenticated caller with a LiDAR VIEW-capable grant.
+
+    Reuses the same access primitives (app.access.can, app.deps.ensure_can)
+    already used by app.routers.ingestion — no new authorization layer.
+    """
+
+    ensure_can(
+        connection,
+        app_user_id=user.id,
+        product_key=LIDAR_PRODUCT_KEY,
+        action=Action.VIEW,
+    )
+
+
+router = APIRouter(dependencies=[Depends(require_lidar_view)])
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 

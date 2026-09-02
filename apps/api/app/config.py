@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     )
 
     app_env: Literal["development", "test", "staging", "production"] = Field(
-        default="development",
         validation_alias="APP_ENV",
     )
 

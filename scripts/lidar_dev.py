@@ -103,8 +103,15 @@ def start_api() -> tuple[int, int]:
     marker = f"uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port {port}"
     command = ["uv", "run", "--extra", "api", *marker.split(" ")]
 
+    # APP_ENV is now required and fails closed if unset (see app.main and
+    # app.config.Settings) — set it explicitly here, like
+    # scripts/platform_local.py does, so this launcher keeps working from a
+    # shell that hasn't exported it.
+    env = dict(os.environ)
+    env["APP_ENV"] = env.get("APP_ENV", "development")
+
     log(f"starting FastAPI on 127.0.0.1:{port}…")
-    process = spawn(STATE_DIR, "api", command, REPO_ROOT, port, marker, dict(os.environ))
+    process = spawn(STATE_DIR, "api", command, REPO_ROOT, port, marker, env)
 
     if not wait_for_http(f"http://127.0.0.1:{port}/health", 60):
         raise LauncherError(

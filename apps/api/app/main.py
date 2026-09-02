@@ -24,19 +24,37 @@ from app.routers.lidar import router as lidar_router
 
 _execution_backend: ExecutionBackend | None = None
 
+_SUPPORTED_APP_ENVS = ("development", "test", "staging", "production")
+
+
+def _resolve_app_env() -> str:
+    """Read and strictly validate APP_ENV from the raw process environment.
+
+    Mirrors ``Settings.app_env``'s allowed values without requiring the full
+    ``Settings`` model (and its database credentials) to resolve, so this
+    module can decide dev-auth mounting and lifespan behavior at import time.
+    Security-sensitive environment selection must fail closed: an unset or
+    unrecognized value is rejected rather than silently defaulting to
+    development, which would otherwise mount dev-only authentication.
+    """
+
+    value = os.environ.get("APP_ENV")
+    if value not in _SUPPORTED_APP_ENVS:
+        raise RuntimeError(
+            f"APP_ENV must be explicitly set to one of {_SUPPORTED_APP_ENVS}; got {value!r}."
+        )
+    return value
+
+
+APP_ENV = _resolve_app_env()
+
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Start the staging-only in-process execution backend, if applicable.
-
-    Gated on the raw process environment, exactly like the dev-auth router
-    mount below, so importing this module — and running it in any
-    non-staging environment — never requires database credentials to
-    resolve just to decide this.
-    """
+    """Start the staging-only in-process execution backend, if applicable."""
 
     global _execution_backend
-    if os.environ.get("APP_ENV", "development") == "staging":
+    if APP_ENV == "staging":
         _execution_backend = InProcessStagingExecutionBackend(
             get_database_engine(), get_object_store(), get_settings()
         )
@@ -92,7 +110,7 @@ app.include_router(ingestion_router)
 # importing this module never depends on unrelated database credentials being
 # configured. app.dev_auth.assert_dev_auth_allowed still runs per-request
 # inside the /auth/dev-login handler as defense in depth.
-if os.environ.get("APP_ENV", "development") == "development":
+if APP_ENV == "development":
     from app.routers.dev_auth import router as dev_auth_router
 
     app.include_router(dev_auth_router)

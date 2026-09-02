@@ -9,11 +9,13 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from app.access import Role
 from app.access_repository import (
     grant_product_role,
     list_grants_for_user,
     resolve_or_create_app_user,
 )
+from app.audit import record_audit_event
 from app.deps import SESSION_COOKIE_NAME, get_object_store
 from app.dev_auth import DEFAULT_SEED_GRANTS, DEV_IDENTITY_KIND, SEEDED_DEV_IDENTITIES
 from app.main import app
@@ -239,3 +241,72 @@ def test_audit_visible_to_admin(client: TestClient) -> None:
     event_types = {event["event_type"] for event in response.json()}
     assert "upload.completed" in event_types
     assert "processing.requested" in event_types
+
+
+def test_audit_scoped_to_admin_own_product_excludes_other_products_and_platform_events(
+    client: TestClient, integration_engine: Engine
+) -> None:
+    """A product-scoped admin (Forestry only) must never see LiDAR events,
+    Transelec events, or platform-level (product_key IS NULL) events through
+    the shared /ingesta/audit endpoint."""
+
+    with integration_engine.connect() as connection:
+        forestry_admin = resolve_or_create_app_user(
+            connection,
+            identity_kind=DEV_IDENTITY_KIND,
+            identity_key="forestry-admin-only",
+            display_name="Forestry Admin",
+        )
+        grant_product_role(
+            connection,
+            app_user_id=forestry_admin.id,
+            product_key="forestry",
+            role=Role.ADMIN,
+        )
+
+        # Platform-level event, e.g. what /auth/dev-login's session.created
+        # records — no product_key at all.
+        record_audit_event(
+            connection,
+            actor_app_user_id=forestry_admin.id,
+            event_type="session.created",
+        )
+        # Other-product events the Forestry-only admin must never see.
+        record_audit_event(
+            connection,
+            actor_app_user_id=None,
+            event_type="upload.completed",
+            product_key="lidar",
+            subject_kind="source_snapshot",
+            subject_id="1",
+        )
+        record_audit_event(
+            connection,
+            actor_app_user_id=None,
+            event_type="upload.completed",
+            product_key="transelect",
+            subject_kind="source_snapshot",
+            subject_id="2",
+        )
+        # In-scope event the admin should still see.
+        record_audit_event(
+            connection,
+            actor_app_user_id=forestry_admin.id,
+            event_type="upload.completed",
+            product_key="forestry",
+            subject_kind="source_snapshot",
+            subject_id="3",
+        )
+
+        raw_secret = _platform_sessions.create_session(
+            connection, app_user_id=forestry_admin.id, ttl=timedelta(hours=8)
+        )
+        connection.commit()
+
+    client.cookies.set(SESSION_COOKIE_NAME, raw_secret)
+
+    response = client.get("/ingesta/audit")
+    assert response.status_code == 200
+
+    product_keys = {event["product_key"] for event in response.json()}
+    assert product_keys == {"forestry"}
