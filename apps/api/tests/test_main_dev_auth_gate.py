@@ -6,6 +6,12 @@ Also guards against a regression where mounting the router required full
 database settings (POSTGRES_PASSWORD) to resolve just to decide routing —
 that would break importing app.main in any environment without DB
 credentials configured, not just gate dev auth.
+
+``/auth/csrf`` (app.routers.csrf) shares the ``/auth`` prefix but is NOT
+dev-only: every environment that can authenticate a session must be able to
+obtain the CSRF token every mutation route requires. These tests therefore
+name the dev-only paths explicitly rather than matching the prefix, and
+assert the CSRF route stays mounted everywhere.
 """
 
 from __future__ import annotations
@@ -15,6 +21,8 @@ import sys
 from pathlib import Path
 
 API_ROOT = Path(__file__).resolve().parents[1]
+
+DEV_AUTH_PATHS = ("/auth/dev-login", "/auth/me", "/auth/logout")
 
 _CHECK_SCRIPT = """
 import sys
@@ -27,7 +35,8 @@ except Exception as exc:
 else:
     paths = app.openapi()["paths"]
     print("IMPORT_FAILED=False")
-    print("AUTH_MOUNTED=" + str(any("/auth" in p for p in paths)))
+    print("AUTH_MOUNTED=" + str(any(p in paths for p in {dev_auth_paths!r})))
+    print("CSRF_MOUNTED=" + str("/auth/csrf" in paths))
 """
 
 
@@ -37,7 +46,11 @@ def _run_with_env(app_env: str | None) -> str:
         env["APP_ENV"] = app_env
 
     result = subprocess.run(
-        [sys.executable, "-c", _CHECK_SCRIPT.format(api_root=str(API_ROOT))],
+        [
+            sys.executable,
+            "-c",
+            _CHECK_SCRIPT.format(api_root=str(API_ROOT), dev_auth_paths=DEV_AUTH_PATHS),
+        ],
         cwd=API_ROOT.parent.parent,
         env=env,
         capture_output=True,
@@ -70,6 +83,16 @@ def test_dev_auth_routes_not_mounted_in_production() -> None:
     output = _run_with_env("production")
     assert "IMPORT_FAILED=False" in output
     assert "AUTH_MOUNTED=False" in output
+
+
+def test_csrf_token_route_is_mounted_in_every_supported_environment() -> None:
+    """The CSRF token endpoint is not dev-only: without it, no environment
+    could satisfy the mandatory token check on any mutation route."""
+
+    for app_env in ("development", "test", "staging", "production"):
+        output = _run_with_env(app_env)
+        assert "IMPORT_FAILED=False" in output, app_env
+        assert "CSRF_MOUNTED=True" in output, app_env
 
 
 def test_app_fails_closed_when_app_env_is_unset() -> None:

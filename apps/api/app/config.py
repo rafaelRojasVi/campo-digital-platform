@@ -67,6 +67,17 @@ class Settings(BaseSettings):
         default=None, validation_alias="PLATFORM_BOOTSTRAP_ADMIN_OBJECT_ID"
     )
 
+    # Comma-separated browser origins allowed to drive state-changing
+    # requests, checked by app.csrf's second (Origin/Referer) layer. Needed
+    # wherever the frontend reaches this API through a proxy/rewrite that
+    # forwards the browser's Origin but not its Host (see render.yaml's
+    # /api/* rewrite and apps/portal/vite.config.ts's dev proxy). Empty is
+    # safe: same-origin requests are always trusted without configuration.
+    csrf_trusted_origins: str | None = Field(
+        default=None,
+        validation_alias="CSRF_TRUSTED_ORIGINS",
+    )
+
     enable_onedrive_import: bool = Field(default=False, validation_alias="ENABLE_ONEDRIVE_IMPORT")
     staging_execution_max_bytes: int = Field(
         default=25 * 1024 * 1024,

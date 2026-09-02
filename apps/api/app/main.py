@@ -19,6 +19,7 @@ from app.database import (
 )
 from app.deps import get_object_store
 from app.execution import ExecutionBackend, InProcessStagingExecutionBackend
+from app.routers.csrf import router as csrf_router
 from app.routers.ingestion import router as ingestion_router
 from app.routers.lidar import router as lidar_router
 
@@ -103,6 +104,11 @@ def readiness(
 
 app.include_router(lidar_router)
 app.include_router(ingestion_router)
+
+# Always mounted, in every APP_ENV: any environment that can authenticate a
+# session must also be able to obtain the CSRF token app.csrf.require_csrf
+# demands on every mutation route.
+app.include_router(csrf_router)
 
 # Router mounting must not require full DB configuration to resolve (unlike
 # app.config.get_settings(), which requires POSTGRES_PASSWORD) — this decision

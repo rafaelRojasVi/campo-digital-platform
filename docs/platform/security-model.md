@@ -137,6 +137,61 @@ persists only its SHA-256 hash — the raw secret itself is never stored. See
 `apps/api/app/session_store.py` (`PlatformSessionStore`) and
 `../adr/ADR-006-restrict-dev-auth-to-development.md`.
 
+## Cross-site request forgery (CSRF)
+
+**FACT (before this change)** — no CSRF protection existed anywhere in this
+repository: cookie-authenticated state-changing routes were guarded by the
+`campo_session` cookie plus RBAC alone.
+
+**DECISION** — one shared, cross-product mechanism lives in
+`apps/api/app/csrf.py`. Every product's mutation routes consume it; none
+gets its own.
+
+Mechanism: a **session-bound, HMAC-signed synchronizer token**.
+`GET /auth/csrf` mints `<nonce>.<signature>`, where `nonce` is a fresh
+`secrets.token_urlsafe(32)` and `signature` is
+`HMAC-SHA256(key=SHA-256(session cookie secret), msg=<version>:<nonce>)`.
+Clients echo it in the `X-CSRF-Token` request header on every mutation.
+
+Rationale for this over a plain double-submit cookie:
+
+- the signing key is the caller's own `HttpOnly` session secret, so a token
+  minted for one session never verifies for another — an attacker who can
+  write a cookie on a sibling subdomain still cannot forge one;
+- verification needs no new table, column, or configured server secret,
+  because the key is re-derived per request from the cookie already present;
+- the token is delivered only in a JSON response body, never in a cookie and
+  never compiled into a frontend bundle. This API configures no CORS
+  middleware, so a cross-origin page cannot read that response, and a
+  cross-origin form/image/script cannot set a custom request header.
+
+Properties:
+
+- **fail-closed** — a missing, malformed, mismatched, or wrong-session token
+  is `403`. There is no pass-through path, including for safe HTTP methods:
+  the dependency is attached explicitly to mutation routes.
+- `Origin`/`Referer` validation is an **independent second layer**. A
+  declared origin must be the request's own host, an entry in
+  `CSRF_TRUSTED_ORIGINS`, or — only under `APP_ENV=development`/`test` — a
+  loopback development origin. A request declaring no origin at all (a
+  non-browser client, which cannot be CSRF'd) is still subject to the
+  mandatory token check.
+- a request with no session cookie is answered `401`, not `403`: there is no
+  cookie-authenticated action for an attacker to ride.
+- `CSRF_TRUSTED_ORIGINS` must be configured wherever the frontend reaches
+  the API through a proxy/rewrite that forwards the browser `Origin` but
+  rewrites `Host` — the hosted `/api/*` rewrite does exactly this.
+
+Session cookies stay `HttpOnly` and `SameSite=Lax`. `SameSite=Lax` reduces
+but does not eliminate CSRF risk for state-changing `POST` routes, which is
+precisely why the token check above is mandatory rather than belt-and-braces.
+
+**OPEN QUESTION** — the session cookie is not yet issued with the `Secure`
+attribute (`apps/api/app/routers/dev_auth.py` sets `httponly`/`samesite`
+only). That is correct for plain-HTTP local development and wrong for any
+hosted deployment; making `Secure` conditional on `APP_ENV` belongs to the
+slice that ships the real (non-dev) login flow, not to this one.
+
 ## Open decisions
 
 - production identity provider;
