@@ -43,7 +43,7 @@ services:
     plan: free
     region: virginia
     repo: https://github.com/rafaelRojasVi/campo-digital-platform.git
-    branch: feat/hosted-composition-v1
+    branch: main
     # preDeployCommand is a paid-plan-only feature, so migrations run as the
     # last build step instead — once per deploy, not on every process
     # restart/wake. alembic upgrade head (including 0001's `CREATE EXTENSION
@@ -107,7 +107,7 @@ services:
     type: web
     runtime: static
     repo: https://github.com/rafaelRojasVi/campo-digital-platform.git
-    branch: feat/hosted-composition-v1
+    branch: main
     buildCommand: cd apps/portal && npm ci && npm run build
     staticPublishPath: apps/portal/dist
     routes:
@@ -126,14 +126,17 @@ services:
         value: staging
       - key: VITE_LIDAR_HOSTED_URL
         value: https://campo-digital-lidar-staging.onrender.com
+      - key: VITE_FORESTAL_HOSTED_URL
+        value: https://campo-digital-forestal-staging.onrender.com
+      - key: VITE_TRANSELEC_HOSTED_URL
+        value: https://campo-digital-transelec-staging.onrender.com
 
   # Static build of the LiDAR product dashboard (products/lidar/dashboard).
-  # Talks to the SAME already-deployed campo-digital-api-staging service via
-  # the identical same-origin /api/* rewrite pattern used by the portal above
-  # — apps/api/app/routers/lidar.py has no DB dependency and already
-  # resolves to an empty [] with no CAMPO_LIDAR_OUTPUT_ROOT set (see
-  # docs/adr/ADR-007-hosted-product-composition-v1.md), so this adds a
-  # second free static site and zero new backend surface, zero new data.
+  # Demo-only: this app runs in VITE_CAMPO_DEMO=true mode (see
+  # docs/adr/ADR-008-hosted-demo-data-v1.md) and never calls the real API at
+  # all. The /api/* rewrite in routes below is now dead weight for the demo
+  # build but harmless to leave in place — it becomes load-bearing again the
+  # day this flag flips off for real Entra-authenticated hosting.
   #
   # Same NOTE as campo-digital-portal-staging above: verify this service's
   # actual onrender.com URL after first deploy and update both this file's
@@ -145,13 +148,49 @@ services:
     type: web
     runtime: static
     repo: https://github.com/rafaelRojasVi/campo-digital-platform.git
-    branch: feat/hosted-composition-v1
+    branch: main
     buildCommand: cd products/lidar/dashboard && npm ci && npm run build
     staticPublishPath: products/lidar/dashboard/dist
     routes:
       - type: rewrite
         source: /api/*
         destination: https://campo-digital-api-staging.onrender.com/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_CAMPO_DEMO
+        value: "true"
+
+  # Static build of the Forestry product dashboard (products/forestry/dashboard).
+  # Demo-only: this app has no live backend at all (see
+  # docs/adr/ADR-008-hosted-demo-data-v1.md) — it serves a bundled synthetic
+  # 6-predio fixture, so there is no /api/* rewrite and no dependency on
+  # campo-digital-api-staging or campo-digital-db-staging.
+  - name: campo-digital-forestal-staging
+    type: web
+    runtime: static
+    repo: https://github.com/rafaelRojasVi/campo-digital-platform.git
+    branch: main
+    buildCommand: cd products/forestry/dashboard && npm ci && npm run build
+    staticPublishPath: products/forestry/dashboard/dist
+    plan: free
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  # Static build of the Transelec product dashboard (products/transelect/dashboard).
+  # Demo-only, same rationale as campo-digital-forestal-staging above.
+  - name: campo-digital-transelec-staging
+    type: web
+    runtime: static
+    repo: https://github.com/rafaelRojasVi/campo-digital-platform.git
+    branch: main
+    buildCommand: cd products/transelect/dashboard && npm ci && npm run build
+    staticPublishPath: products/transelect/dashboard/dist
+    plan: free
+    routes:
       - type: rewrite
         source: /*
         destination: /index.html
