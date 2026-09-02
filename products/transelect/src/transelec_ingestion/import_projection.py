@@ -389,11 +389,13 @@ def _insert_import(
 
 
 def _insert_rows(connection: Connection, *, import_id: int, validated: ValidatedWorkbook) -> None:
+    # The column list is interpolated from a module constant derived from the
+    # source contract — never from caller input or workbook content. Every
+    # value is a bound parameter.
     columns = ("import_id", "source_row_number", *_ROW_COLUMNS)
     placeholders = ", ".join(f":{column}" for column in columns)
     statement = text(
-        f"INSERT INTO platform.transelec_resumen_row ({', '.join(columns)}) "  # noqa: S608 - column names are a module constant, never caller input
-        f"VALUES ({placeholders})"
+        f"INSERT INTO platform.transelec_resumen_row ({', '.join(columns)}) VALUES ({placeholders})"
     )
 
     connection.execute(
