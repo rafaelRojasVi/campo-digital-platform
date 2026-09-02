@@ -22,6 +22,7 @@ from app.execution import ExecutionBackend, InProcessStagingExecutionBackend
 from app.routers.csrf import router as csrf_router
 from app.routers.ingestion import router as ingestion_router
 from app.routers.lidar import router as lidar_router
+from app.routers.transelec import router as transelec_router
 
 _execution_backend: ExecutionBackend | None = None
 
@@ -104,6 +105,7 @@ def readiness(
 
 app.include_router(lidar_router)
 app.include_router(ingestion_router)
+app.include_router(transelec_router)
 
 # Always mounted, in every APP_ENV: any environment that can authenticate a
 # session must also be able to obtain the CSRF token app.csrf.require_csrf
