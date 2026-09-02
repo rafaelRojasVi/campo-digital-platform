@@ -9,14 +9,14 @@ import type {
 } from '../types.ts'
 
 // Synthetic snapshot data for tests: same shapes as the read API, small
-// coordinates inside the real UTM 18S envelope, no client data.
+// local coordinates with no real-world CRS meaning, no client data.
 
 let squareOffset = 0
 
-/** A 100 m × 100 m square MultiPolygon near the observed estate envelope. */
+/** A 100 x 100 unit square MultiPolygon in a synthetic local coordinate space. */
 export function squareGeometry(): GeoFeature['geometry'] {
-  const x = 620_000 + squareOffset * 200
-  const y = 5_490_000
+  const x = 100 + squareOffset * 200
+  const y = 100
   squareOffset += 1
 
   return {
@@ -39,8 +39,8 @@ export function makeFeature(overrides: Partial<SourceFeatureProperties>): GeoFea
   const base: SourceFeatureProperties = {
     feature_ordinal: 1,
     source_objectid: 1,
-    cod_predial: 'HT',
-    nom_predio: 'Hacienda Trinidad',
+    cod_predial: 'FX1',
+    nom_predio: 'Predio Ficticio Uno',
     n_rodal: '10',
     cod_uso: 'Pi06',
     uso_2024: 'PLANTACION',
@@ -78,8 +78,8 @@ export function testFeatures(): GeoFeature[] {
     makeFeature({
       feature_ordinal: 3,
       source_objectid: 103,
-      cod_predial: 'SS',
-      nom_predio: 'San Sebastian',
+      cod_predial: 'FX2',
+      nom_predio: 'Predio Ficticio Dos',
       n_rodal: '',
       uso_2024: 'BOSQUE NATIVO',
       uso_2026: 'BOSQUE NATIVO',
@@ -93,8 +93,8 @@ export function testFeatures(): GeoFeature[] {
     makeFeature({
       feature_ordinal: 4,
       source_objectid: 104,
-      cod_predial: 'PU2',
-      nom_predio: 'Purretrun',
+      cod_predial: 'FX3',
+      nom_predio: 'Predio Ficticio Tres',
       n_rodal: '5',
       uso_2024: 'VEGA',
       uso_2026: 'VEGA',
@@ -119,8 +119,8 @@ export function testFeatures(): GeoFeature[] {
     makeFeature({
       feature_ordinal: 6,
       source_objectid: 106,
-      cod_predial: 'LUM',
-      nom_predio: 'Lumaco',
+      cod_predial: 'FX4',
+      nom_predio: 'Predio Ficticio Cuatro',
       n_rodal: '0',
       uso_2024: 'VEGETACION NATIVA',
       uso_2026: 'VEGETACION NATIVA',
@@ -140,7 +140,7 @@ export function testCollection(): FeatureCollection {
   return {
     type: 'FeatureCollection',
     shapefile_snapshot_id: 1,
-    storage_srid: 32718,
+    storage_srid: 0,
     feature_count: features.length,
     features,
   }
@@ -151,7 +151,7 @@ export function testSnapshot(): ForestrySnapshot {
     shapefile_snapshot_id: 1,
     layer_name: 'Gdb_Test_mv',
     family_fingerprint: 'ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12',
-    storage_srid: 32718,
+    storage_srid: 0,
     feature_count: 6,
     created_at: '2026-08-29T12:00:00Z',
   }
@@ -162,8 +162,8 @@ export function testSummary(): SnapshotSummary {
     shapefile_snapshot_id: 1,
     layer_name: 'Gdb_Test_mv',
     family_fingerprint: 'ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12',
-    storage_srid: 32718,
-    bbox: [620_000, 5_490_000, 621_100, 5_490_100],
+    storage_srid: 0,
+    bbox: [100, 100, 1300, 200],
     feature_count: 6,
     total_geometry_area_source_units: 271_000,
     total_sup_ha: 27.1,
@@ -225,11 +225,11 @@ export function testDetail(featureOrdinal: number): SourceFeatureDetail {
   return {
     ...feature.properties,
     shapefile_snapshot_id: 1,
-    storage_srid: 32718,
+    storage_srid: 0,
     shape_area: feature.properties.geometry_area_source_units,
     geometry_invalid_reason: feature.properties.geometry_is_valid
       ? null
-      : 'Self-intersection[620000 5490000]',
+      : 'Self-intersection[100 100] (synthetic)',
     source_attributes: {
       OBJECTID: feature.properties.source_objectid,
       Nom_Predio: feature.properties.nom_predio,
