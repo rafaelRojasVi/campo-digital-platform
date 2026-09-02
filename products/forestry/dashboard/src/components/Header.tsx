@@ -22,7 +22,7 @@ export function Header({ snapshot, summary }: HeaderProps) {
         </span>
         <div>
           <p className="header__product">Campo Digital · Gestión Predial Forestal</p>
-          <h1 className="header__title">Patrimonio Degenfeld</h1>
+          <h1 className="header__title">Patrimonio forestal</h1>
         </div>
       </div>
 
