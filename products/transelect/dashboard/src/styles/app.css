@@ -1226,6 +1226,14 @@ tbody tr:hover td {
   justify-content: flex-end;
 }
 
+/* The version history table carries ten columns including the restore
+ * action, so it gets the full shell width rather than the narrow form
+ * column the import flow uses. */
+.versions-page {
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
 /* -------------------------------------------------------- version history */
 
 .version-row.active {

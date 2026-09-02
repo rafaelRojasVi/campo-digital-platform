@@ -80,7 +80,7 @@ export function VersionesPage({
 
   if (loading && !history) {
     return (
-      <div className="shell form-page">
+      <div className="shell versions-page">
         <section className="panel section">
           <LoadingBlock label="Cargando el historial de versiones…" lines={3} />
         </section>
@@ -90,7 +90,7 @@ export function VersionesPage({
 
   if (failure) {
     return (
-      <div className="shell form-page">
+      <div className="shell versions-page">
         <StateBlock view={classifyFailure(failure)} />
       </div>
     )
@@ -99,7 +99,7 @@ export function VersionesPage({
   const rows = history ?? []
 
   return (
-    <div className="shell form-page">
+    <div className="shell versions-page">
       <section className="panel section">
         <h2>Versiones publicadas</h2>
         <p className="section-note">

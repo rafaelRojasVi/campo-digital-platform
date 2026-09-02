@@ -45,8 +45,14 @@ function Shell() {
 
   // Active-version provenance: refetched whenever a publish or restore in
   // this session changes which import is active, so the header stamp and the
-  // footer never show a version that is no longer live.
+  // footer never show a version that is no longer live. Gated on a confirmed
+  // session so an unauthenticated visitor produces exactly one 401 (the
+  // session check itself) rather than a burst of them.
   useEffect(() => {
+    if (!me) {
+      setActiveImport(null)
+      return
+    }
     let cancelled = false
     void getActiveImport().then((result) => {
       if (cancelled) return
@@ -55,7 +61,7 @@ function Shell() {
     return () => {
       cancelled = true
     }
-  }, [provenanceVersion])
+  }, [me, provenanceVersion])
 
   const onActiveVersionChanged = useCallback(() => {
     setProvenanceVersion((value) => value + 1)
