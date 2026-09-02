@@ -91,11 +91,14 @@ modules show synthetic data.
 
 ### Infrastructure
 
-`render.yaml` adds two new `plan: free` static sites
+`render.yaml` adds two new free-tier static sites
 (`campo-digital-forestal-staging`, `campo-digital-transelec-staging`)
 alongside the existing `campo-digital-lidar-staging`, and sets
-`VITE_CAMPO_DEMO=true` for the LiDAR staging build. No paid resources are
-added; no existing service's plan changes.
+`VITE_CAMPO_DEMO=true` for the LiDAR staging build. Neither new service
+declares a `plan:` key — Render defaults static sites to free, matching this
+file's existing style for the pre-existing `campo-digital-portal-staging`/
+`campo-digital-lidar-staging` services. No paid resources are added; no
+existing service's plan changes.
 
 ## Rationale
 
@@ -143,8 +146,8 @@ planning grep had missed because it only searched for the exact strings
 already known from `fixtures.ts`: `lib/proj.test.ts` (real UTM
 estate-envelope coordinate pairs, e.g. `617298.09, 5484858.7`) and
 `lib/filters.test.ts` / `lib/mapData.test.ts` (hardcoded real predio names
-`Lumaco`/`LUM`, `San Sebastian`, independent of ever importing
-`fixtures.ts`). All three were deleted from the working tree and never
+`Lumaco`/`LUM`, `San Sebastian`, and `Purretrun`/`PU2`, independent of ever
+importing `fixtures.ts`). All three were deleted from the working tree and never
 committed. A second, independent finding in the same task: `components/
 Header.tsx` hardcoded the real client's name in a UI title ("Patrimonio
 Degenfeld"), rendered unconditionally; this was also caught and replaced
