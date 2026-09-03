@@ -148,4 +148,8 @@ mount_dashboard(
     reserved_root_segments=frozenset(
         {"health", "ready", "runs", "ingesta", "auth", "transelec", "api"}
     ),
+    # Must match ROUTES in products/transelect/dashboard/src/router.tsx —
+    # these are the frontend's own page paths, not backend endpoints, but
+    # they share the "transelec" first segment with the real API prefix.
+    spa_page_paths=frozenset({"transelec", "transelec/importar", "transelec/versiones"}),
 )

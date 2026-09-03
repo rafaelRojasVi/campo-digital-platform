@@ -42,7 +42,12 @@ def _resolve_within(dist_dir: Path, relative_path: str) -> Path | None:
     return candidate
 
 
-def mount_dashboard(app: FastAPI, *, reserved_root_segments: frozenset[str]) -> None:
+def mount_dashboard(
+    app: FastAPI,
+    *,
+    reserved_root_segments: frozenset[str],
+    spa_page_paths: frozenset[str] = frozenset(),
+) -> None:
     """Mount the built React dashboard, if present, as the same-origin UI.
 
     ``reserved_root_segments`` must list the first path segment of every
@@ -51,6 +56,17 @@ def mount_dashboard(app: FastAPI, *, reserved_root_segments: frozenset[str]) -> 
     a path that belongs to another router's namespace and returns its own
     404 instead of silently serving ``index.html`` for it. This function
     must therefore be called last, after every other router is registered.
+
+    ``spa_page_paths`` must list every exact client-side page path the
+    frontend's own router owns (e.g. ``{"transelec", "transelec/importar",
+    "transelec/versiones"}`` — see ``ROUTES`` in the dashboard's
+    ``src/router.tsx``) whose first segment collides with a reserved backend
+    prefix. Without this, a hard navigation or browser refresh on one of
+    those pages would 404 instead of loading the app, because the API and
+    the SPA deliberately share the same first path segment
+    (``/transelec/...``) — the reserved-segment check alone cannot tell
+    "unmatched API call" apart from "the frontend's own page route". These
+    paths are matched before the reserved-segment check, never after.
     """
 
     dist_dir = _dist_dir_from_environment()
@@ -72,6 +88,9 @@ def mount_dashboard(app: FastAPI, *, reserved_root_segments: frozenset[str]) -> 
         """SPA fallback: serve a build file if it exists, else index.html."""
 
         if not full_path:
+            return FileResponse(dist_dir / "index.html")
+
+        if full_path in spa_page_paths:
             return FileResponse(dist_dir / "index.html")
 
         first_segment = full_path.split("/", 1)[0]

@@ -58,15 +58,55 @@ def test_mount_dashboard_falls_back_to_index_html_for_an_spa_route(
     monkeypatch.setenv("CAMPO_TRANSELEC_DASHBOARD_DIST", str(dist_dir))
 
     app = FastAPI()
-    mount_dashboard(app, reserved_root_segments=frozenset({"health", "transelec"}))
+    mount_dashboard(
+        app,
+        reserved_root_segments=frozenset({"health", "widgets"}),
+        spa_page_paths=frozenset({"widgets/detail"}),
+    )
 
-    # /transelec/importar is a client-side route, not a build file — the SPA
-    # fallback must still serve index.html for it (not one of the reserved
-    # backend segments below).
-    response = TestClient(app).get("/transelec-ui/importar")
+    # /widgets/detail is a client-side route, not a build file, and its
+    # first segment is NOT reserved here — the SPA fallback serves index.html
+    # for it either way, independent of spa_page_paths.
+    response = TestClient(app).get("/widgets/detail")
 
     assert response.status_code == 200
     assert "dashboard shell" in response.text
+
+
+def test_mount_dashboard_serves_spa_page_paths_despite_a_reserved_first_segment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Regression test for a real bug found in manual browser QA: the
+    Transelec dashboard's own page routes (/transelec, /transelec/importar,
+    /transelec/versiones — see ROUTES in the dashboard's src/router.tsx)
+    share their first path segment with the real /transelec/* API prefix,
+    which is a reserved backend segment. Before spa_page_paths existed, a
+    hard navigation or browser refresh on any of those pages 404'd instead
+    of loading the app, because the reserved-segment check ran unconditionally.
+    """
+
+    dist_dir = _build_dist(tmp_path)
+    monkeypatch.setenv("CAMPO_TRANSELEC_DASHBOARD_DIST", str(dist_dir))
+
+    app = FastAPI()
+    mount_dashboard(
+        app,
+        reserved_root_segments=frozenset({"transelec"}),
+        spa_page_paths=frozenset({"transelec", "transelec/importar", "transelec/versiones"}),
+    )
+
+    client = TestClient(app)
+
+    for path in ("/transelec", "/transelec/importar", "/transelec/versiones"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert "dashboard shell" in response.text, path
+
+    # An unmatched path under the same reserved segment that is NOT one of
+    # the frontend's known page paths must still 404, not silently serve HTML.
+    still_reserved = client.get("/transelec/does-not-exist")
+    assert still_reserved.status_code == 404
+    assert "dashboard shell" not in still_reserved.text
 
 
 def test_mount_dashboard_serves_a_real_build_asset_verbatim(
