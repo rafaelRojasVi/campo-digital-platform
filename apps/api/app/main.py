@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
 from app.config import get_settings
+from app.dashboard_static import mount_dashboard
 from app.database import (
     DatabaseUnavailableError,
     check_database_connection,
@@ -122,3 +123,29 @@ if APP_ENV == "development":
     from app.routers.dev_auth import router as dev_auth_router
 
     app.include_router(dev_auth_router)
+    app.include_router(dev_auth_router, prefix="/api")
+
+# Second mount under /api for the routers a browser bundle actually calls at
+# that prefix (see products/transelect/dashboard/src/api.ts). Every frontend
+# on this platform is built once against a same-origin `/api/*` convention
+# and reaches this API through an external rewrite that strips that prefix —
+# the Vite dev proxy locally, Render's static-site rewrite in staging (see
+# render.yaml). A container that serves the dashboard from this same process
+# (see mount_dashboard below) has no such external layer in front of it, so
+# it must provide that `/api/*` alias itself. This duplicates ROUTING only:
+# same router objects, same dependencies, same RBAC — no new endpoint, no
+# new behavior, and no Transelec-specific exception to any of that.
+app.include_router(csrf_router, prefix="/api")
+app.include_router(transelec_router, prefix="/api")
+
+# Serves the built Transelec dashboard from this same process when a
+# production build is present (see app.dashboard_static) — a no-op in local
+# dev and in every test/CI environment, where no products/transelect/
+# dashboard/dist directory exists. Must stay last: it registers a catch-all
+# route that would otherwise shadow the routers registered above.
+mount_dashboard(
+    app,
+    reserved_root_segments=frozenset(
+        {"health", "ready", "runs", "ingesta", "auth", "transelec", "api"}
+    ),
+)
