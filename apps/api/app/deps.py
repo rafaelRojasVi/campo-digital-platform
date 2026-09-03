@@ -26,6 +26,7 @@ from app.dev_auth import (
     DevSessionStore,
     assert_dev_auth_allowed,
 )
+from app.entra_auth import EntraOidcClient, MsalEntraOidcClient
 from app.object_store import LocalObjectStore, ObjectStore
 from app.session_store import PlatformSessionStore
 
@@ -34,6 +35,7 @@ SESSION_COOKIE_NAME = "campo_session"
 _session_store = DevSessionStore()
 _platform_session_store = PlatformSessionStore()
 _object_store: LocalObjectStore | None = None
+_entra_oidc_client: EntraOidcClient | None = None
 
 
 def get_session_store() -> DevSessionStore:
@@ -56,6 +58,23 @@ def get_object_store() -> ObjectStore:
         root = Path(os.environ.get("CAMPO_OBJECT_STORE_ROOT", ".local/object-store"))
         _object_store = LocalObjectStore(root)
     return _object_store
+
+
+def get_entra_oidc_client(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> EntraOidcClient:
+    """Return the process-level Entra OIDC client.
+
+    Raises ``app.entra_auth.EntraNotConfiguredError`` (mapped to 503 by
+    ``app.main``) if ``ENTRA_CLIENT_ID``/``ENTRA_CLIENT_SECRET`` are unset —
+    left uncached in that case, so a later request retries construction
+    rather than staying permanently broken from one early failed attempt.
+    """
+
+    global _entra_oidc_client
+    if _entra_oidc_client is None:
+        _entra_oidc_client = MsalEntraOidcClient(settings)
+    return _entra_oidc_client
 
 
 def get_db_connection(

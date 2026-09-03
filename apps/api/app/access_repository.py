@@ -29,26 +29,45 @@ class ProductGrant:
     role: Role
 
 
+@dataclass(frozen=True, slots=True)
+class ProductGrantee:
+    """One user holding a grant for one product, as seen from that product's side."""
+
+    app_user_id: int
+    email: str | None
+    display_name: str
+    role: Role
+
+
 def resolve_or_create_app_user(
     connection: Connection,
     *,
     identity_kind: str,
     identity_key: str,
     display_name: str,
+    email: str | None = None,
 ) -> AppUser:
-    """Resolve an existing user by identity, or create one idempotently."""
+    """Resolve an existing user by identity, or create one idempotently.
+
+    ``email`` is only recorded on creation (real, non-dev identities have
+    one; dev-auth's seeded identities never pass it). It is not updated on
+    an existing row: an operator granting access looks a user up by the
+    email captured at their first sign-in, so silently changing it on a
+    later sign-in would break that lookup.
+    """
 
     parameters = {
         "identity_kind": identity_kind,
         "identity_key": identity_key,
         "display_name": display_name,
+        "email": email,
     }
 
     inserted = connection.execute(
         text(
             """
-            INSERT INTO platform.app_user (identity_kind, identity_key, display_name)
-            VALUES (:identity_kind, :identity_key, :display_name)
+            INSERT INTO platform.app_user (identity_kind, identity_key, display_name, email)
+            VALUES (:identity_kind, :identity_key, :display_name, :email)
             ON CONFLICT (identity_kind, identity_key) DO NOTHING
             RETURNING id, identity_kind, identity_key, display_name, email
             """
@@ -70,6 +89,35 @@ def resolve_or_create_app_user(
             parameters,
         ).one()
     )
+
+    return AppUser(
+        id=row.id,
+        identity_kind=row.identity_kind,
+        identity_key=row.identity_key,
+        display_name=row.display_name,
+        email=row.email,
+    )
+
+
+def get_app_user_by_email(connection: Connection, *, email: str) -> AppUser | None:
+    """Look up a previously-signed-in user by email, or None if unknown.
+
+    Used by product-grant onboarding (``app.routers.access_admin``): an
+    operator grants a product role by email, which only resolves after the
+    grantee has signed in at least once (their ``app_user`` row, and its
+    email, only exist from that point on).
+    """
+
+    row = connection.execute(
+        text(
+            "SELECT id, identity_kind, identity_key, display_name, email "
+            "FROM platform.app_user WHERE email = :email"
+        ),
+        {"email": email},
+    ).one_or_none()
+
+    if row is None:
+        return None
 
     return AppUser(
         id=row.id,
@@ -149,6 +197,37 @@ def list_grants_for_user(
     ).all()
 
     return tuple(ProductGrant(product_key=row.product_key, role=Role(row.role)) for row in rows)
+
+
+def list_grantees_for_product(
+    connection: Connection,
+    *,
+    product_key: str,
+) -> tuple[ProductGrantee, ...]:
+    """Return every user holding a grant for ``product_key``."""
+
+    rows = connection.execute(
+        text(
+            """
+            SELECT u.id AS app_user_id, u.email, u.display_name, g.role
+            FROM platform.product_grant g
+            JOIN platform.app_user u ON u.id = g.app_user_id
+            WHERE g.product_key = :product_key
+            ORDER BY u.display_name
+            """
+        ),
+        {"product_key": product_key},
+    ).all()
+
+    return tuple(
+        ProductGrantee(
+            app_user_id=row.app_user_id,
+            email=row.email,
+            display_name=row.display_name,
+            role=Role(row.role),
+        )
+        for row in rows
+    )
 
 
 _BOOTSTRAP_PRODUCT_KEYS = ("lidar", "forestry", "transelect")

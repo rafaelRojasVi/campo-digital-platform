@@ -19,10 +19,15 @@ from app.database import (
     get_database_engine,
 )
 from app.deps import get_object_store
+from app.entra_auth import EntraNotConfiguredError
 from app.execution import ExecutionBackend, InProcessStagingExecutionBackend
+from app.identity_safety import require_production_identity_configuration
+from app.routers.access_admin import router as access_admin_router
 from app.routers.csrf import router as csrf_router
+from app.routers.entra_auth import router as entra_auth_router
 from app.routers.ingestion import router as ingestion_router
 from app.routers.lidar import router as lidar_router
+from app.routers.session import router as session_router
 from app.routers.transelec import router as transelec_router
 
 _execution_backend: ExecutionBackend | None = None
@@ -56,6 +61,15 @@ APP_ENV = _resolve_app_env()
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start the staging-only in-process execution backend, if applicable."""
 
+    # Gated on APP_ENV alone, not inside require_production_identity_configuration
+    # itself: get_settings() needs full DB credentials to resolve at all, and
+    # every other environment's lifespan must stay startable without them
+    # (see app.main's router-mounting comment above, and
+    # test_lidar_api.py's DB-free TestClient fixture, which this would
+    # otherwise break for every APP_ENV, not just production).
+    if APP_ENV == "production":
+        require_production_identity_configuration(get_settings())
+
     global _execution_backend
     if APP_ENV == "staging":
         _execution_backend = InProcessStagingExecutionBackend(
@@ -75,6 +89,15 @@ app = FastAPI(
     version="0.2.0",
     lifespan=_lifespan,
 )
+
+
+@app.exception_handler(EntraNotConfiguredError)
+async def _entra_not_configured(request: object, exc: EntraNotConfiguredError) -> JSONResponse:
+    """An unconfigured Entra sign-in is an intentionally unavailable state
+    (missing ENTRA_CLIENT_ID/SECRET), not a server error."""
+
+    del request, exc
+    return JSONResponse(status_code=503, content={"detail": "Entra sign-in is not configured."})
 
 
 @app.get("/health")
@@ -113,6 +136,23 @@ app.include_router(transelec_router)
 # demands on every mutation route.
 app.include_router(csrf_router)
 
+# Always mounted, in every APP_ENV: onboarding a signed-in user onto a
+# product is itself access-controlled per route (Action.MANAGE_ACCESS), the
+# same way every other product router is — not conditioned on dev-auth.
+app.include_router(access_admin_router)
+
+# Always mounted, in every APP_ENV: this is the real (non-dev-auth) identity
+# provider and the only way to authenticate at all outside development (see
+# ADR-006). Each route 503s (via the exception handler above) rather than
+# 404ing or crashing when ENTRA_CLIENT_ID/SECRET are unset.
+app.include_router(entra_auth_router)
+
+# Always mounted, in every APP_ENV: inspecting (`/me`) or ending
+# (`/logout`) a session applies uniformly regardless of which identity
+# provider created it, and the frontend already calls both unconditionally
+# — see app.routers.session for the gap this closes.
+app.include_router(session_router)
+
 # Router mounting must not require full DB configuration to resolve (unlike
 # app.config.get_settings(), which requires POSTGRES_PASSWORD) — this decision
 # is made from APP_ENV alone, straight from the process environment, so that
@@ -136,6 +176,9 @@ if APP_ENV == "development":
 # same router objects, same dependencies, same RBAC — no new endpoint, no
 # new behavior, and no Transelec-specific exception to any of that.
 app.include_router(csrf_router, prefix="/api")
+app.include_router(access_admin_router, prefix="/api")
+app.include_router(entra_auth_router, prefix="/api")
+app.include_router(session_router, prefix="/api")
 app.include_router(transelec_router, prefix="/api")
 
 # Serves the built Transelec dashboard from this same process when a
