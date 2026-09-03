@@ -186,17 +186,25 @@ Session cookies stay `HttpOnly` and `SameSite=Lax`. `SameSite=Lax` reduces
 but does not eliminate CSRF risk for state-changing `POST` routes, which is
 precisely why the token check above is mandatory rather than belt-and-braces.
 
-**OPEN QUESTION** — the session cookie is not yet issued with the `Secure`
-attribute (`apps/api/app/routers/dev_auth.py` sets `httponly`/`samesite`
-only). That is correct for plain-HTTP local development and wrong for any
-hosted deployment; making `Secure` conditional on `APP_ENV` belongs to the
-slice that ships the real (non-dev) login flow, not to this one.
+**RESOLVED (ADR-008)** — the real (Entra) login flow's cookies
+(`app.routers.entra_auth`'s session and flow-state cookies) set
+`secure=True` whenever `APP_ENV != "development"`.
+`apps/api/app/routers/dev_auth.py`'s own cookie is unaffected and
+deliberately stays non-`Secure`: it only ever runs over plain-HTTP local
+development, where a `Secure` cookie would never be sent at all.
 
 ## Open decisions
 
-- production identity provider;
+- **production identity provider — decided and implemented**: Microsoft
+  Entra ID (`ADR-008-entra-sign-in-implementation.md`), multitenant +
+  personal-account audience, delegated `User.Read` only. Application-side
+  work is complete; the tenant/app registration itself is still an
+  external gate (`../platform/entra-app-registration-handoff.md`).
 - final user/role model;
-- production network topology;
+- **production network topology / production cloud provider — still
+  open**: `ADR-004-revisit-production-cloud-provider-choice.md` (Proposed:
+  Azure) vs. `ADR-001-managed-production-platform.md` (Proposed: GCP);
+  neither is accepted.
 - signed-object delivery implementation;
 - audit retention;
 - backup retention and recovery objectives.
