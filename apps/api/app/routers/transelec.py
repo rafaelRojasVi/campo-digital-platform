@@ -289,7 +289,7 @@ async def upload_transelec_workbook(
 @router.post(
     "/imports/{ingestion_run_id}/validate-and-project",
     response_model=ValidateAndProjectResponse,
-    dependencies=[Depends(require_csrf), Depends(require_transelec_grant(Action.PUBLISH))],
+    dependencies=[Depends(require_csrf), Depends(require_transelec_grant(Action.PROCESS))],
 )
 def validate_and_project_import(
     ingestion_run_id: int,
