@@ -4,13 +4,20 @@
  */
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppHeader } from './AppHeader'
 import { NoticeBanner } from './NoticeBanner'
 import { ProvenanceFooter } from './ProvenanceFooter'
 import { QUICK_ACTIONS, QuickActions } from './QuickActions'
 import { ROUTES, RouterProvider } from '../router'
 import { makeActiveImport } from '../test/factories'
+
+vi.mock('../api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api')>()
+  return { ...actual, logout: vi.fn() }
+})
+
+const api = await import('../api')
 
 const me = {
   identity_key: 'dev-admin',
@@ -75,6 +82,88 @@ describe('AppHeader (TR-FUNC-041/046)', () => {
       'aria-current',
       'page',
     )
+  })
+})
+
+describe('AppHeader sign-out control', () => {
+  beforeEach(() => {
+    vi.mocked(api.logout).mockReset()
+  })
+
+  it('is absent when the header has no session to end', () => {
+    renderWithRouter(
+      <AppHeader me={null} activeImport={null} currentPath={ROUTES.dashboard} canPublish={false} />,
+    )
+    expect(screen.queryByRole('button', { name: /sesión|usuario/i })).not.toBeInTheDocument()
+  })
+
+  it('says «Cambiar usuario» locally, where switching identities is the point', () => {
+    renderWithRouter(
+      <AppHeader
+        me={me}
+        activeImport={null}
+        currentPath={ROUTES.dashboard}
+        canPublish
+        demoMode
+        onSignedOut={() => {}}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Cambiar usuario' })).toBeInTheDocument()
+  })
+
+  it('says «Cerrar sesión» anywhere else', () => {
+    renderWithRouter(
+      <AppHeader
+        me={me}
+        activeImport={null}
+        currentPath={ROUTES.dashboard}
+        canPublish
+        onSignedOut={() => {}}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeInTheDocument()
+  })
+
+  it('notifies the caller only after the server has actually ended the session', async () => {
+    vi.mocked(api.logout).mockResolvedValue({ ok: true, data: undefined })
+    const onSignedOut = vi.fn()
+    renderWithRouter(
+      <AppHeader
+        me={me}
+        activeImport={null}
+        currentPath={ROUTES.dashboard}
+        canPublish
+        demoMode
+        onSignedOut={onSignedOut}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar usuario' }))
+
+    expect(api.logout).toHaveBeenCalledTimes(1)
+    expect(onSignedOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not pretend the session ended when the request failed', async () => {
+    vi.mocked(api.logout).mockResolvedValue({ ok: false, status: 500, error: 'boom' })
+    const onSignedOut = vi.fn()
+    renderWithRouter(
+      <AppHeader
+        me={me}
+        activeImport={null}
+        currentPath={ROUTES.dashboard}
+        canPublish
+        demoMode
+        onSignedOut={onSignedOut}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar usuario' }))
+
+    expect(onSignedOut).not.toHaveBeenCalled()
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo cerrar la sesión.')
+    // The API's raw detail is never shown in the header chrome.
+    expect(screen.queryByText('boom')).not.toBeInTheDocument()
   })
 })
 

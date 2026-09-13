@@ -459,6 +459,104 @@ export function canPublish(me: Me | null): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Sign-in / sign-out
+//
+// No new authentication mechanism lives here. These are thin typed wrappers
+// over the endpoints the platform already exposes, with exactly the
+// semantics apps/portal/src/lib/platformApi.ts already established:
+//
+//  - POST /auth/dev-login   mounted ONLY under APP_ENV=development
+//                           (apps/api/app/main.py), and its handler re-checks
+//                           via app.dev_auth.assert_dev_auth_allowed. Outside
+//                           development the route does not exist at all, so
+//                           this call 404s — it cannot be talked into working.
+//  - POST /auth/logout      mounted everywhere; ends whichever kind of
+//                           session the caller has (app/routers/session.py).
+//  - GET  /auth/entra/login mounted everywhere; the only way to authenticate
+//                           outside development (ADR-006).
+//
+// Nothing here writes a token, secret or identity to localStorage,
+// sessionStorage or a readable cookie: the session stays in the HttpOnly
+// `campo_session` cookie the API sets, and the CSRF token stays in this
+// module's memory, exactly as documented at the top of this file.
+// ---------------------------------------------------------------------------
+
+/**
+ * The seeded local identities `devLogin` will accept.
+ *
+ * Deliberately a TYPE, not a runtime constant: TypeScript erases it, so
+ * these two strings exist nowhere in a compiled bundle. The values live in
+ * `components/DemoSignIn.tsx`, the one module a `vite build` drops entirely
+ * (see the note there), which is what keeps `dev-admin` and `dev-viewer` out
+ * of every deployed artifact rather than merely unused within one.
+ *
+ * A subset of app.dev_auth.SEEDED_DEV_IDENTITIES: `dev-operator` holds no
+ * Transelec grant (its default seed is forestry only), so offering it here
+ * would hand a demo viewer a 403 wall rather than a product.
+ */
+export type DemoIdentityKey = 'dev-admin' | 'dev-viewer'
+
+/** Top-level navigation target for Microsoft Entra ID sign-in. */
+export const ENTRA_LOGIN_PATH = '/api/auth/entra/login'
+
+/**
+ * Start a local development session for one seeded identity.
+ *
+ * The CSRF token is dropped on both sides of the call: the token is keyed by
+ * the session secret (app/csrf.py), so one minted before this call cannot
+ * verify after it, and a token minted for a previous session must not leak
+ * into the new one.
+ */
+export async function devLogin(identityKey: DemoIdentityKey): Promise<ApiResult<Me>> {
+  forgetCsrfToken()
+  const result = await request<Me>('/api/auth/dev-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identity_key: identityKey }),
+  })
+  forgetCsrfToken()
+  return result
+}
+
+/** End the current session (server-side and cookie), whatever created it. */
+export async function logout(): Promise<ApiResult<void>> {
+  const result = await request<void>('/api/auth/logout', { method: 'POST' })
+  forgetCsrfToken()
+  return result
+}
+
+/**
+ * Ask whether Microsoft Entra sign-in is actually configured, without
+ * following the redirect to Microsoft.
+ *
+ * `GET /auth/entra/login` answers either a 302 towards Microsoft (configured)
+ * or a 503 (`ENTRA_CLIENT_ID`/`ENTRA_CLIENT_SECRET` or the token encryption
+ * key unset — see app/main.py's EntraNotConfiguredError handler and
+ * app/routers/entra_auth.py's _require_encryption_key). `redirect: 'manual'`
+ * is what makes both readable from script: the redirect is surfaced as an
+ * opaque response instead of being followed cross-origin to Microsoft, where
+ * the absence of CORS would turn every outcome into an indistinguishable
+ * network error.
+ *
+ * The probe's own 302 mints a PKCE flow this app then abandons; the
+ * subsequent top-level navigation mints a fresh one and overwrites the
+ * short-lived `entra_login_flow` cookie, so no half-finished flow is left
+ * usable. This never authenticates anyone by itself.
+ */
+export async function checkEntraSignIn(): Promise<ApiResult<void>> {
+  try {
+    const response = await fetch(ENTRA_LOGIN_PATH, {
+      credentials: 'include',
+      redirect: 'manual',
+    })
+    if (response.type === 'opaqueredirect' || response.ok) return { ok: true, data: undefined }
+    return { ok: false, status: response.status, error: await readError(response) }
+  } catch {
+    return { ok: false, status: 0, error: NETWORK_ERROR }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
 

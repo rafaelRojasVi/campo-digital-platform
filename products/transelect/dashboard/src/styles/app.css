@@ -1029,6 +1029,93 @@ tbody tr:hover td {
   text-align: center;
 }
 
+/* ------------------------------------------------------------- sign-in */
+
+/*
+ * Same panel surface, palette and rhythm as every other block in this
+ * product — the sign-in screen is the first thing a stakeholder sees, so it
+ * has to read as the same application rather than an auth interstitial.
+ */
+.login-card {
+  max-width: 560px;
+  margin: 48px auto;
+  padding: 30px;
+  border-top: 4px solid var(--lime);
+}
+
+.login-eyebrow {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.login-card h2 {
+  margin: 0 0 10px;
+  color: var(--navy2);
+  font-size: 19px;
+  line-height: 1.35;
+}
+
+.login-lead {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.login-failure-detail {
+  margin: 0 0 8px;
+  font-weight: 400;
+}
+
+.login-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-action button {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+.login-action-note {
+  margin: 7px 2px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.login-foot {
+  margin: 22px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* Sign-out / switch-user control, on the header's dark gradient. */
+.session-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.session-control-error {
+  max-width: 220px;
+  color: #ffdede;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: right;
+}
+
 .state-block h2 {
   margin: 0 0 8px;
   font-size: 17px;

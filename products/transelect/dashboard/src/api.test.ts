@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   EMPTY_FILTERS,
+  ENTRA_LOGIN_PATH,
   NETWORK_ERROR,
   canPublish,
+  checkEntraSignIn,
+  devLogin,
   exportCsvUrl,
   filterParams,
   filtersActive,
   getSummary,
+  logout,
   observedServerNow,
   publishImport,
   resetApiClientState,
@@ -221,5 +225,112 @@ describe('transport', () => {
     const body = fetchMock.mock.calls[1][1].body as FormData
     expect(body.get('product_key')).toBeNull()
     expect((body.get('file') as File).name).toBe('resumen.xlsx')
+  })
+})
+
+describe('sign-in and sign-out', () => {
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    resetApiClientState()
+    fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('posts the seeded identity key as JSON, with the session cookie', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({}, { status: 401 })) // no session yet -> no token
+      .mockResolvedValueOnce(jsonResponse({ identity_key: 'dev-admin' }))
+
+    const result = await devLogin('dev-admin')
+
+    expect(result).toEqual({ ok: true, data: { identity_key: 'dev-admin' } })
+    const [path, init] = fetchMock.mock.calls[1]
+    expect(path).toBe('/api/auth/dev-login')
+    expect(init.method).toBe('POST')
+    expect(init.credentials).toBe('include')
+    expect(JSON.parse(init.body as string)).toEqual({ identity_key: 'dev-admin' })
+  })
+
+  it('drops the cached CSRF token across a login, since it is keyed by the session', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ csrf_token: 'token-viewer', header_name: 'X-CSRF-Token' }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'published' }))
+      .mockResolvedValueOnce(jsonResponse({}, { status: 401 }))
+      .mockResolvedValueOnce(jsonResponse({ identity_key: 'dev-admin' }))
+      .mockResolvedValueOnce(jsonResponse({ csrf_token: 'token-admin', header_name: 'X-CSRF-Token' }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'published' }))
+
+    await publishImport(1)
+    await devLogin('dev-admin')
+    await publishImport(2)
+
+    expect(fetchMock.mock.calls[4][0]).toBe('/api/auth/csrf')
+    expect(fetchMock.mock.calls[5][1].headers['X-CSRF-Token']).toBe('token-admin')
+  })
+
+  it('signs out through the same CSRF-protected transport as every other mutation', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ csrf_token: 'token-1', header_name: 'X-CSRF-Token' }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+
+    const result = await logout()
+
+    expect(result).toEqual({ ok: true, data: undefined })
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/auth/csrf')
+    const [path, init] = fetchMock.mock.calls[1]
+    expect(path).toBe('/api/auth/logout')
+    expect(init.method).toBe('POST')
+    expect(init.credentials).toBe('include')
+    expect(init.headers['X-CSRF-Token']).toBe('token-1')
+  })
+
+  it('drops the token after signing out, so it cannot ride a later session', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ csrf_token: 'token-1', header_name: 'X-CSRF-Token' }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(jsonResponse({ csrf_token: 'token-2', header_name: 'X-CSRF-Token' }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'published' }))
+
+    await logout()
+    await publishImport(3)
+
+    expect(fetchMock.mock.calls[2][0]).toBe('/api/auth/csrf')
+    expect(fetchMock.mock.calls[3][1].headers['X-CSRF-Token']).toBe('token-2')
+  })
+
+  it('reads the Entra redirect without following it cross-origin', async () => {
+    fetchMock.mockResolvedValueOnce({ type: 'opaqueredirect', ok: false, status: 0 })
+
+    await expect(checkEntraSignIn()).resolves.toEqual({ ok: true, data: undefined })
+    const [path, init] = fetchMock.mock.calls[0]
+    expect(path).toBe(ENTRA_LOGIN_PATH)
+    expect(init.redirect).toBe('manual')
+    expect(init.credentials).toBe('include')
+  })
+
+  it('surfaces an unconfigured Entra tenant as the 503 the API actually returns', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ detail: 'Entra sign-in is not configured.' }, { status: 503 }),
+    )
+
+    await expect(checkEntraSignIn()).resolves.toEqual({
+      ok: false,
+      status: 503,
+      error: 'Entra sign-in is not configured.',
+    })
+  })
+
+  it('never claims Entra is available when the platform is unreachable', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await expect(checkEntraSignIn()).resolves.toEqual({
+      ok: false,
+      status: 0,
+      error: NETWORK_ERROR,
+    })
   })
 })

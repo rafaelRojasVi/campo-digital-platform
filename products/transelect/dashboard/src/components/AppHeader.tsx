@@ -14,8 +14,9 @@
  * `GET /transelec/imports/active` — real provenance, never a live clock and
  * never a literal.
  */
+import { useCallback, useState } from 'react'
 import type { Me, TranselecActiveImport } from '../api'
-import { transelecRole } from '../api'
+import { logout, transelecRole } from '../api'
 import { formatDateTime } from '../format'
 import { Link, ROUTES } from '../router'
 
@@ -25,16 +26,76 @@ const ROLE_LABELS: Record<string, string> = {
   viewer: 'Lectura',
 }
 
+/**
+ * Ends the current session from the header.
+ *
+ * `POST /auth/logout` goes through the shared API client, so it carries the
+ * session-bound CSRF token `GET /auth/csrf` issues, exactly like every other
+ * state-changing call in this app — there is no second transport here. The
+ * caller is told only after the server has actually cleared the session, so
+ * a failed sign-out never leaves the UI claiming the user is signed out.
+ */
+function SessionControl({
+  label,
+  onSignedOut,
+}: {
+  label: string
+  onSignedOut: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  const endSession = useCallback(async () => {
+    setBusy(true)
+    setFailed(false)
+
+    const result = await logout()
+    if (result.ok) {
+      onSignedOut()
+      return
+    }
+
+    setFailed(true)
+    setBusy(false)
+  }, [onSignedOut])
+
+  return (
+    <div className="session-control no-print">
+      <button type="button" className="btn alt" disabled={busy} onClick={() => void endSession()}>
+        {busy ? 'Cerrando sesión…' : label}
+      </button>
+      {failed && (
+        <span className="session-control-error" role="alert">
+          No se pudo cerrar la sesión. Intente nuevamente.
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function AppHeader({
   me,
   activeImport,
   currentPath,
   canPublish,
+  demoMode = false,
+  onSignedOut,
 }: {
   me: Me | null
   activeImport: TranselecActiveImport | null
   currentPath: string
   canPublish: boolean
+  /**
+   * Local development, where switching between seeded identities is the
+   * point — it only changes the control's wording, never who may do what.
+   */
+  demoMode?: boolean
+  /**
+   * Optional: the header also renders in states that have no session to end
+   * (and in component tests that exercise the brand and navigation alone),
+   * so the control appears only when a caller can actually handle the result.
+   */
+  onSignedOut?: () => void
 }) {
   const role = transelecRole(me)
 
@@ -84,6 +145,12 @@ export function AppHeader({
           )}
           <br />
           Desarrollado por Campo Digital
+          {me && onSignedOut && (
+            <SessionControl
+              label={demoMode ? 'Cambiar usuario' : 'Cerrar sesión'}
+              onSignedOut={onSignedOut}
+            />
+          )}
         </div>
       </div>
 
