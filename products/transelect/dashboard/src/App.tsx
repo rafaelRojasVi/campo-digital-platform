@@ -11,15 +11,23 @@ import { AppHeader } from './components/AppHeader'
 import { LoginCard } from './components/LoginCard'
 import { LoadingBlock, StateBlock } from './components/StateViews'
 import { classifyFailure, type ApiFailure } from './lib/apiState'
-import { DashboardPage } from './pages/DashboardPage'
-import { ImportarPage } from './pages/ImportarPage'
-import { VersionesPage } from './pages/VersionesPage'
-import { ROUTES, RouterProvider, resolveRoute, useRouter } from './router'
+import { useFilters } from './lib/useFilters'
+import { CalidadPage } from './pages/CalidadPage'
+import { DatosPage } from './pages/DatosPage'
+import { ExploradorPage } from './pages/ExploradorPage'
+import { PendientesPage } from './pages/PendientesPage'
+import { ResumenPage } from './pages/ResumenPage'
+import { ROUTES, RouterProvider, isAdminRoute, resolveRoute, useRouter } from './router'
 import { demoSignInAvailable } from './runtime/environment'
 
 function Shell() {
   const { pathname } = useRouter()
   const route = resolveRoute(pathname)
+
+  // One filter state for the whole application, read from and written to the
+  // URL. Held here rather than per page so moving between sections carries
+  // the current scope instead of silently resetting it.
+  const filterController = useFilters()
 
   const [me, setMe] = useState<Me | null>(null)
   const [sessionFailure, setSessionFailure] = useState<ApiFailure | null>(null)
@@ -83,10 +91,10 @@ function Shell() {
   }, [refreshSession])
 
   // Active-version provenance: refetched whenever a publish or restore in
-  // this session changes which import is active, so the header stamp and the
-  // footer never show a version that is no longer live. Gated on a confirmed
-  // session so an unauthenticated visitor produces exactly one 401 (the
-  // session check itself) rather than a burst of them.
+  // this session changes which import is active, so the shell's version chip
+  // and the Datos provenance never show a version that is no longer live.
+  // Gated on a confirmed session so an unauthenticated visitor produces
+  // exactly one 401 (the session check itself) rather than a burst of them.
   useEffect(() => {
     if (!me) {
       setActiveImport(null)
@@ -111,10 +119,8 @@ function Shell() {
   const body = () => {
     if (sessionLoading) {
       return (
-        <div className="shell">
-          <section className="panel section">
-            <LoadingBlock label="Verificando la sesión…" lines={2} />
-          </section>
+        <div className="page">
+          <LoadingBlock label="Verificando la sesión…" lines={2} />
         </div>
       )
     }
@@ -124,24 +130,20 @@ function Shell() {
     // for instance) is still a real failure and keeps its own block, so a
     // backend outage is never mistaken for "please sign in".
     if (sessionFailure?.status === 401) {
-      return (
-        <div className="shell">
-          <LoginCard demoAvailable={demoSignInAvailable()} onSignedIn={refreshSession} />
-        </div>
-      )
+      return <LoginCard demoAvailable={demoSignInAvailable()} onSignedIn={refreshSession} />
     }
 
     if (sessionFailure) {
       return (
-        <div className="shell">
+        <div className="page">
           <StateBlock view={classifyFailure(sessionFailure)} />
         </div>
       )
     }
 
-    if ((route === ROUTES.importar || route === ROUTES.versiones) && !publisher) {
+    if (isAdminRoute(route) && !publisher) {
       return (
-        <div className="shell">
+        <div className="page">
           <StateBlock
             view={{
               kind: 'forbidden',
@@ -154,24 +156,44 @@ function Shell() {
       )
     }
 
-    if (route === ROUTES.importar) {
-      return <ImportarPage onActiveVersionChanged={onActiveVersionChanged} />
+    switch (route) {
+      case ROUTES.explorador:
+        return (
+          <ExploradorPage
+            filterController={filterController}
+            activeImportId={activeImport?.import_id ?? null}
+          />
+        )
+      case ROUTES.pendientes:
+        return <PendientesPage filterController={filterController} />
+      case ROUTES.calidad:
+        return <CalidadPage filterController={filterController} />
+      case ROUTES.datos:
+      case ROUTES.importar:
+      case ROUTES.versiones:
+        return (
+          <DatosPage
+            route={route}
+            activeImport={activeImport}
+            onActiveVersionChanged={onActiveVersionChanged}
+          />
+        )
+      default:
+        return (
+          <ResumenPage
+            activeImport={activeImport}
+            canPublish={publisher}
+            filterController={filterController}
+          />
+        )
     }
-
-    if (route === ROUTES.versiones) {
-      return (
-        <VersionesPage
-          activeImport={activeImport}
-          onActiveVersionChanged={onActiveVersionChanged}
-        />
-      )
-    }
-
-    return <DashboardPage activeImport={activeImport} canPublish={publisher} />
   }
 
   return (
     <>
+      <a className="skip-link" href="#contenido">
+        Saltar al contenido
+      </a>
       <AppHeader
         me={me}
         activeImport={activeImport}
@@ -180,7 +202,7 @@ function Shell() {
         demoMode={demoSignInAvailable()}
         onSignedOut={onSignedOut}
       />
-      {body()}
+      <main id="contenido">{body()}</main>
     </>
   )
 }

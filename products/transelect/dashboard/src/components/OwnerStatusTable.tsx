@@ -17,11 +17,11 @@ export function OwnerStatusTable({ ownerStatus }: { ownerStatus: TranselecOwnerS
   const table = buildOwnerStatusTable(ownerStatus)
 
   return (
-    <section className="panel section" aria-labelledby="owner-title" data-testid="owner-status">
+    <div data-testid="owner-status">
       <h2 id="owner-title">
         Estado por tipo de propietario <span className="basis-tag">{table.basis}</span>
       </h2>
-      <p className="section-note">
+      <p className="hint" style={{ margin: 'var(--s-3) 0 var(--s-4)' }}>
         Conteo de predios únicos ({formatInteger(ownerStatus.total_predio_count)} en el alcance
         seleccionado). «Rechazados» se identifica desde el estado vigente, aunque el estado
         resumido figure como «En trámite» — por eso esta tabla puede clasificar un predio de
@@ -79,6 +79,6 @@ export function OwnerStatusTable({ ownerStatus }: { ownerStatus: TranselecOwnerS
           </tbody>
         </table>
       </div>
-    </section>
+    </div>
   )
 }

@@ -1,29 +1,32 @@
 /**
- * TR-FUNC-024-031 — the eight "Preguntas frecuentes" quick-action cards.
+ * TR-FUNC-024-031 — the eight "Preguntas frecuentes", redistributed.
  *
- * Every card keeps the source's own `type` key and label. Three of them
- * (`lookup`, `surface`, `company`) demonstrably under-deliver on their own
- * question in Javier's dashboards — a lookup that only focuses the search
- * box, a "superficie" card that only scrolls, a "cada empresa" card that
- * only focuses a dropdown. The matrix's disposition for all three is
- * "implement (as designed)": reproduce the current behavior and *tell*
- * Javier what it does and does not do, rather than silently inventing a
- * comparison view or a lookup UI nobody asked for. The sub-labels below say
- * so plainly instead of promising more than the card delivers.
+ * The shipped interface answered all eight with eight identical cards in the
+ * middle of the dashboard, three of which demonstrably under-delivered on
+ * their own question: a lookup that only focused a search box, a "superficie"
+ * card that only scrolled, a "cada empresa" card that only opened a dropdown.
+ * The parity matrix's disposition for all three is "implement (as designed)":
+ * reproduce the current behaviour and say plainly what it does, rather than
+ * silently inventing a comparison view nobody asked for.
  *
- * `pending` (024) is the same code path as the pending zone's "Ver sólo PMF
- * pendientes" button (032) — one function, several entry points.
+ * Reproducing the behaviour is not the same as reproducing the card grid. The
+ * four questions that are genuinely *filter presets* live here, on the
+ * Explorador, next to the filters they set. The other four were never really
+ * shortcuts at all and now have real homes:
+ *
+ *   024 ¿Qué falta presentar a CONAF?  Resumen attention card → Pendientes
+ *   025 ¿A qué PMF corresponde un N.º de ingreso?
+ *                                      the Explorador's own search field
+ *   027 ¿Cuál es la superficie de corta?
+ *                                      the Resumen's scale strip
+ *   031 ¿Qué ingresos superaron 90 días?
+ *                                      the Pendientes toggle
+ *
+ * Every preset below still starts from a clean filter state, exactly as the
+ * source's `quick()` did by calling `resetFilters()` before each branch.
  */
 
-export type QuickActionType =
-  | 'pending'
-  | 'lookup'
-  | 'easement'
-  | 'surface'
-  | 'rejected'
-  | 'legal'
-  | 'company'
-  | 'overdue'
+export type QuickActionType = 'easement' | 'rejected' | 'legal' | 'company'
 
 interface QuickActionCard {
   type: QuickActionType
@@ -31,41 +34,13 @@ interface QuickActionCard {
   sub: string
 }
 
-/**
- * Card copy.
- *
- * `pending` uses v0's wording, not Actualizable's. Actualizable relabelled
- * the same card "¿Qué figura pendiente?" with the sub-label "Usa
- * exclusivamente Estado resumido: Pendiente o Tachado" — but the rule this
- * application actually applies is the ratified `pending_priority_legacy`
- * (blank N.º de ingreso, or a raw `Estado` containing "rechaz"), which is
- * v0's. Shipping Actualizable's wording over v0's rule would describe the
- * numbers incorrectly.
- */
+export const EASEMENT_VALUE = 'Servidumbre firmada'
+
 export const QUICK_ACTIONS: QuickActionCard[] = [
-  {
-    type: 'pending',
-    title: '¿Qué falta presentar a CONAF?',
-    sub: 'Sin N.º de ingreso o estado vigente con rechazo.',
-  },
-  {
-    type: 'lookup',
-    title: '¿A qué PMF corresponde un N.º de ingreso?',
-    sub: 'Deja el cursor en la búsqueda general: escriba el número para ver su PMF, rol y predio.',
-  },
   {
     type: 'easement',
     title: '¿Cuáles tienen servidumbre?',
     sub: 'Filtra «Servidumbre firmada».',
-  },
-  {
-    // The source's `quick()` calls `resetFilters()` before every branch,
-    // `surface` included, so this card does clear the filters on its way to
-    // the KPI row — it just does nothing else once it gets there. Saying it
-    // leaves the filters alone would describe the opposite of what happens.
-    type: 'surface',
-    title: '¿Cuál es la superficie de corta?',
-    sub: 'Limpia los filtros y lleva al indicador de superficie; no calcula un desglose nuevo.',
   },
   {
     type: 'rejected',
@@ -82,31 +57,31 @@ export const QUICK_ACTIONS: QuickActionCard[] = [
     title: '¿Cómo avanza cada empresa?',
     sub: 'Abre el filtro Empresa; no existe todavía una tabla comparativa por empresa.',
   },
-  {
-    type: 'overdue',
-    title: '¿Qué ingresos superaron 90 días?',
-    sub: 'Lista los ingresos no aprobados cuya fecha «90 días» ya pasó.',
-  },
 ]
 
 export function QuickActions({ onQuick }: { onQuick: (type: QuickActionType) => void }) {
   return (
-    <section className="panel section no-print" aria-labelledby="faq-title">
-      <h2 id="faq-title">Preguntas frecuentes</h2>
-      <div className="questions">
+    <section className="questions no-print" aria-labelledby="faq-title">
+      <h2 id="faq-title" className="eyebrow" style={{ marginBottom: 'var(--s-3)' }}>
+        Consultas frecuentes
+      </h2>
+      <div className="btns">
         {QUICK_ACTIONS.map((card) => (
           <button
             type="button"
-            className="q"
+            className="btn alt small"
             key={card.type}
             data-quick={card.type}
+            title={card.sub}
             onClick={() => onQuick(card.type)}
           >
-            <b>{card.title}</b>
-            <span>{card.sub}</span>
+            {card.title}
           </button>
         ))}
       </div>
+      <p className="hint" style={{ marginTop: 'var(--s-3)' }}>
+        {QUICK_ACTIONS.map((card) => card.sub).join(' ')}
+      </p>
     </section>
   )
 }

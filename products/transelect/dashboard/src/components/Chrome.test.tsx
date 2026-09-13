@@ -1,13 +1,17 @@
 /**
- * Chrome-level components: header/brand (041), notice banner (042),
- * provenance footer (043/046) and the quick-action cards (024-031).
+ * Chrome-level components: the application shell (TR-FUNC-041/046), the
+ * Consulta documental notice (TR-FUNC-042) and the filter presets that
+ * survive from the eight quick-action cards (TR-FUNC-026/028/029/030).
+ *
+ * The provenance block (TR-FUNC-043) moved to the Datos section's versions
+ * pane, where it sits beside the history that produced it; it is covered in
+ * `src/pages/VersionesPage.test.tsx`.
  */
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppHeader } from './AppHeader'
 import { NoticeBanner } from './NoticeBanner'
-import { ProvenanceFooter } from './ProvenanceFooter'
 import { QUICK_ACTIONS, QuickActions } from './QuickActions'
 import { ROUTES, RouterProvider } from '../router'
 import { makeActiveImport } from '../test/factories'
@@ -26,17 +30,25 @@ const me = {
 }
 
 function renderWithRouter(node: React.ReactNode) {
-  return render(<RouterProvider initialPath={ROUTES.dashboard}>{node}</RouterProvider>)
+  return render(<RouterProvider initialPath={ROUTES.resumen}>{node}</RouterProvider>)
+}
+
+function nav() {
+  return within(screen.getByRole('navigation', { name: 'Secciones de Transelec' }))
 }
 
 describe('AppHeader (TR-FUNC-041/046)', () => {
-  it('renders both brand identities as text, with no image element at all', () => {
+  it('renders the identity as text, with no image element at all', () => {
     const { container } = renderWithRouter(
-      <AppHeader me={me} activeImport={makeActiveImport()} currentPath={ROUTES.dashboard} canPublish />,
+      <AppHeader
+        me={me}
+        activeImport={makeActiveImport()}
+        currentPath={ROUTES.resumen}
+        canPublish
+      />,
     )
-    expect(screen.getByText('Campo Digital')).toBeInTheDocument()
-    expect(screen.getByText('Transelec')).toBeInTheDocument()
-    expect(screen.getByText('Transmisora del Pacífico – Transelec')).toBeInTheDocument()
+    expect(screen.getByText(/Campo Digital/)).toBeInTheDocument()
+    expect(screen.getByText(/Transelec/)).toBeInTheDocument()
     // TR-OPEN-06: no logo payload is reused, so there is no <img> to carry one.
     expect(container.querySelector('img')).toBeNull()
   })
@@ -46,7 +58,7 @@ describe('AppHeader (TR-FUNC-041/046)', () => {
       <AppHeader
         me={me}
         activeImport={makeActiveImport({ import_id: 42 })}
-        currentPath={ROUTES.dashboard}
+        currentPath={ROUTES.resumen}
         canPublish
       />,
     )
@@ -56,32 +68,54 @@ describe('AppHeader (TR-FUNC-041/046)', () => {
 
   it('says so plainly when nothing is published', () => {
     renderWithRouter(
-      <AppHeader me={me} activeImport={null} currentPath={ROUTES.dashboard} canPublish />,
+      <AppHeader me={me} activeImport={null} currentPath={ROUTES.resumen} canPublish />,
     )
     expect(screen.getByText('Sin versión publicada')).toBeInTheDocument()
   })
 
-  it('hides the operator-only routes from a viewer', () => {
-    const { rerender } = renderWithRouter(
+  it('offers the four reading sections to everyone', () => {
+    renderWithRouter(
       <AppHeader
         me={me}
         activeImport={null}
-        currentPath={ROUTES.dashboard}
+        currentPath={ROUTES.resumen}
         canPublish={false}
       />,
     )
-    expect(screen.queryByRole('link', { name: 'Importar planilla' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Versiones' })).not.toBeInTheDocument()
+    for (const label of ['Resumen', 'Explorador', 'Pendientes', 'Calidad']) {
+      expect(nav().getByRole('link', { name: label })).toBeInTheDocument()
+    }
+  })
 
-    rerender(
-      <RouterProvider initialPath={ROUTES.dashboard}>
-        <AppHeader me={me} activeImport={null} currentPath={ROUTES.importar} canPublish />
-      </RouterProvider>,
+  it('hides the whole administration section from a viewer', () => {
+    renderWithRouter(
+      <AppHeader
+        me={me}
+        activeImport={null}
+        currentPath={ROUTES.resumen}
+        canPublish={false}
+      />,
     )
-    expect(screen.getByRole('link', { name: 'Importar planilla' })).toHaveAttribute(
+    expect(nav().queryByRole('link', { name: 'Datos' })).not.toBeInTheDocument()
+  })
+
+  it('marks the current section, including from the two legacy administration routes', () => {
+    const { rerender } = renderWithRouter(
+      <AppHeader me={me} activeImport={null} currentPath={ROUTES.explorador} canPublish />,
+    )
+    expect(nav().getByRole('link', { name: 'Explorador' })).toHaveAttribute(
       'aria-current',
       'page',
     )
+
+    for (const legacy of [ROUTES.importar, ROUTES.versiones]) {
+      rerender(
+        <RouterProvider initialPath={ROUTES.resumen}>
+          <AppHeader me={me} activeImport={null} currentPath={legacy} canPublish />
+        </RouterProvider>,
+      )
+      expect(nav().getByRole('link', { name: 'Datos' })).toHaveAttribute('aria-current', 'page')
+    }
   })
 })
 
@@ -92,7 +126,7 @@ describe('AppHeader sign-out control', () => {
 
   it('is absent when the header has no session to end', () => {
     renderWithRouter(
-      <AppHeader me={null} activeImport={null} currentPath={ROUTES.dashboard} canPublish={false} />,
+      <AppHeader me={null} activeImport={null} currentPath={ROUTES.resumen} canPublish={false} />,
     )
     expect(screen.queryByRole('button', { name: /sesión|usuario/i })).not.toBeInTheDocument()
   })
@@ -102,7 +136,7 @@ describe('AppHeader sign-out control', () => {
       <AppHeader
         me={me}
         activeImport={null}
-        currentPath={ROUTES.dashboard}
+        currentPath={ROUTES.resumen}
         canPublish
         demoMode
         onSignedOut={() => {}}
@@ -116,7 +150,7 @@ describe('AppHeader sign-out control', () => {
       <AppHeader
         me={me}
         activeImport={null}
-        currentPath={ROUTES.dashboard}
+        currentPath={ROUTES.resumen}
         canPublish
         onSignedOut={() => {}}
       />,
@@ -131,7 +165,7 @@ describe('AppHeader sign-out control', () => {
       <AppHeader
         me={me}
         activeImport={null}
-        currentPath={ROUTES.dashboard}
+        currentPath={ROUTES.resumen}
         canPublish
         demoMode
         onSignedOut={onSignedOut}
@@ -151,7 +185,7 @@ describe('AppHeader sign-out control', () => {
       <AppHeader
         me={me}
         activeImport={null}
-        currentPath={ROUTES.dashboard}
+        currentPath={ROUTES.resumen}
         canPublish
         demoMode
         onSignedOut={onSignedOut}
@@ -177,84 +211,40 @@ describe('NoticeBanner (TR-FUNC-042)', () => {
   })
 })
 
-describe('ProvenanceFooter (TR-FUNC-043/046)', () => {
-  it('cites the active version’s real provenance instead of a static filename string', () => {
-    render(<ProvenanceFooter activeImport={makeActiveImport()} />)
-    const footer = screen.getByTestId('provenance-footer')
-
-    expect(footer).toHaveTextContent('#12')
-    expect(footer).toHaveTextContent('resumen.xlsx')
-    expect(footer).toHaveTextContent('82ba5eaed0b1')
-    expect(footer).toHaveTextContent('transelec-resumen-v1')
-    expect(footer).toHaveTextContent('Dev Admin')
-    expect(footer).toHaveTextContent('7 filas')
-  })
-
-  it('marks a restore explicitly in the provenance line', () => {
-    render(<ProvenanceFooter activeImport={makeActiveImport({ published_event_type: 'restore' })} />)
-    expect(screen.getByText(/restauración de una versión anterior/)).toBeInTheDocument()
-  })
-
-  it('keeps the source’s ingestion-scope statements', () => {
-    render(<ProvenanceFooter activeImport={makeActiveImport()} />)
-    expect(screen.getByText(/hoja «Resumen»/)).toBeInTheDocument()
-    expect(screen.getByText(/nunca modifica la planilla de origen/)).toBeInTheDocument()
-  })
-
-  it('discloses that the brand marks are provisional (TR-OPEN-06)', () => {
-    render(<ProvenanceFooter activeImport={null} />)
-    expect(screen.getByText(/los logotipos originales no se reutilizan/)).toBeInTheDocument()
-  })
-
-  it('says there is no provenance to cite when nothing is published', () => {
-    render(<ProvenanceFooter activeImport={null} />)
-    expect(screen.getByText(/todavía no hay procedencia que citar/)).toBeInTheDocument()
-  })
-})
-
-describe('QuickActions (TR-FUNC-024-031)', () => {
-  it('renders all eight source cards, keyed by their original type', () => {
+describe('QuickActions — the surviving filter presets (TR-FUNC-026/028/029/030)', () => {
+  it('renders the four presets, keyed by their original type', () => {
     render(<QuickActions onQuick={() => {}} />)
-    expect(QUICK_ACTIONS).toHaveLength(8)
+    expect(QUICK_ACTIONS).toHaveLength(4)
     for (const card of QUICK_ACTIONS) {
       expect(screen.getByText(card.title)).toBeInTheDocument()
     }
   })
 
-  it('dispatches the card’s own type to the handler', async () => {
+  it('dispatches the preset’s own type to the handler', async () => {
     const onQuick = vi.fn()
     render(<QuickActions onQuick={onQuick} />)
 
     await userEvent.click(screen.getByText('¿Qué expedientes tienen rechazo?'))
     expect(onQuick).toHaveBeenLastCalledWith('rejected')
 
-    await userEvent.click(screen.getByText('¿Qué ingresos superaron 90 días?'))
-    expect(onQuick).toHaveBeenLastCalledWith('overdue')
+    await userEvent.click(screen.getByText('¿Dónde está el principal cuello de botella?'))
+    expect(onQuick).toHaveBeenLastCalledWith('legal')
   })
 
-  it('describes what the three under-delivering cards actually do', () => {
+  it('still says what the company preset actually does, and does not', () => {
     render(<QuickActions onQuick={() => {}} />)
-    expect(screen.getByText(/no existe todavía una tabla comparativa por empresa/)).toBeInTheDocument()
     expect(
-      screen.getByText(/Limpia los filtros y lleva al indicador de superficie/),
+      screen.getByText(/no existe todavía una tabla comparativa por empresa/),
     ).toBeInTheDocument()
-    expect(screen.getByText(/Deja el cursor en la búsqueda general/)).toBeInTheDocument()
-  })
-
-  it('does not claim the surface card leaves the filters alone — it resets them', () => {
-    render(<QuickActions onQuick={() => {}} />)
-    expect(screen.queryByText(/no cambia los filtros/)).not.toBeInTheDocument()
   })
 
   it('describes the two blunt substring searches as such', () => {
     render(<QuickActions onQuick={() => {}} />)
-    expect(screen.getByText(/Busca «rechaz» en todos los campos, no sólo en Estado/)).toBeInTheDocument()
-    expect(screen.getByText(/Busca «legal» en todos los campos, no sólo en Estado/)).toBeInTheDocument()
-  })
-
-  it('labels the pending card with the rule this application actually applies', () => {
-    render(<QuickActions onQuick={() => {}} />)
-    expect(screen.getByText('¿Qué falta presentar a CONAF?')).toBeInTheDocument()
-    expect(screen.getByText('Sin N.º de ingreso o estado vigente con rechazo.')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Busca «rechaz» en todos los campos, no sólo en Estado/),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Busca «legal» en todos los campos, no sólo en Estado/),
+    ).toBeInTheDocument()
   })
 })

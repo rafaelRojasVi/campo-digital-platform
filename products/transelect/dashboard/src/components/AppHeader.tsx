@@ -1,24 +1,26 @@
 /**
- * TR-FUNC-041 (encabezado / marca) and TR-FUNC-046 (vigencia de los datos).
+ * The persistent application shell (TR-FUNC-041 marca, TR-FUNC-046 vigencia).
  *
- * Brand marks are generic placeholders. The source HTML files embed both
- * logos as inline base64; those payloads are deliberately not reused here —
- * TR-OPEN-06 (logo/brand asset sourcing authorization) is still open, and
- * reusing the image bytes without Javier / Campo Digital's explicit
- * authorization is out of bounds for this rebuild.
+ * The shipped header spent 200 px of the first desktop screen — and 34 % of a
+ * phone viewport — on a brand block, a client block, a subtitle, a four-line
+ * stamp and a nav row, before a single number. This is one 56 px bar: who we
+ * are, where you are, what you are looking at, and who you are signed in as.
+ * The client's full name and the programme description move into the Resumen's
+ * own context strip, where they belong to a page rather than to every page.
  *
- * The date stamp is the fix TR-FUNC-046 asks for: v0 recomputed
- * `new Date()` at every page load (so a frozen snapshot always claimed to be
- * "today"), and Actualizable hardcoded "Base: 14 agosto 2026". This header
- * shows the *active version's own publish timestamp*, read from
- * `GET /transelec/imports/active` — real provenance, never a live clock and
- * never a literal.
+ * Brand marks stay generic. The source HTML files embed both logos as inline
+ * base64; those payloads are deliberately not reused, because TR-OPEN-06
+ * (logo/brand asset sourcing authorization) is still open.
+ *
+ * The version stamp is still TR-FUNC-046's fix: it is the *active version's
+ * own publish timestamp*, read from `GET /transelec/imports/active`, never a
+ * live clock and never a literal.
  */
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Me, TranselecActiveImport } from '../api'
 import { logout, transelecRole } from '../api'
 import { formatDateTime } from '../format'
-import { Link, ROUTES } from '../router'
+import { Link, ROUTES, type Route } from '../router'
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
@@ -26,22 +28,38 @@ const ROLE_LABELS: Record<string, string> = {
   viewer: 'Lectura',
 }
 
+interface NavItem {
+  to: Route
+  label: string
+  /** Operator/administrator only; the server re-enforces the same boundary. */
+  privileged?: boolean
+  /** Other routes that should light this item up as the current section. */
+  also?: readonly Route[]
+}
+
+const NAV: readonly NavItem[] = [
+  { to: ROUTES.resumen, label: 'Resumen' },
+  { to: ROUTES.explorador, label: 'Explorador' },
+  { to: ROUTES.pendientes, label: 'Pendientes' },
+  { to: ROUTES.calidad, label: 'Calidad' },
+  {
+    to: ROUTES.datos,
+    label: 'Datos',
+    privileged: true,
+    also: [ROUTES.importar, ROUTES.versiones],
+  },
+]
+
 /**
- * Ends the current session from the header.
+ * Ends the current session from the shell.
  *
  * `POST /auth/logout` goes through the shared API client, so it carries the
  * session-bound CSRF token `GET /auth/csrf` issues, exactly like every other
- * state-changing call in this app — there is no second transport here. The
- * caller is told only after the server has actually cleared the session, so
- * a failed sign-out never leaves the UI claiming the user is signed out.
+ * state-changing call in this app. The caller is told only after the server
+ * has actually cleared the session, so a failed sign-out never leaves the UI
+ * claiming the user is signed out.
  */
-function SessionControl({
-  label,
-  onSignedOut,
-}: {
-  label: string
-  onSignedOut: () => void
-}) {
+function SessionControl({ label, onSignedOut }: { label: string; onSignedOut: () => void }) {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
 
@@ -61,7 +79,12 @@ function SessionControl({
 
   return (
     <div className="session-control no-print">
-      <button type="button" className="btn alt" disabled={busy} onClick={() => void endSession()}>
+      <button
+        type="button"
+        className="btn alt small"
+        disabled={busy}
+        onClick={() => void endSession()}
+      >
         {busy ? 'Cerrando sesión…' : label}
       </button>
       {failed && (
@@ -91,60 +114,84 @@ export function AppHeader({
    */
   demoMode?: boolean
   /**
-   * Optional: the header also renders in states that have no session to end
+   * Optional: the shell also renders in states that have no session to end
    * (and in component tests that exercise the brand and navigation alone),
    * so the control appears only when a caller can actually handle the result.
    */
   onSignedOut?: () => void
 }) {
   const role = transelecRole(me)
+  const [navOpen, setNavOpen] = useState(false)
+
+  // The mobile nav is a disclosure, so arriving at a new section must close
+  // it — otherwise the reader lands behind the menu they just used.
+  useEffect(() => setNavOpen(false), [currentPath])
+
+  const items = NAV.filter((item) => !item.privileged || canPublish)
 
   return (
-    <header className="topbar">
-      <div className="brand">
-        <div className="brand-identity">
-          <div className="brand-mark" aria-hidden="true">
+    <header className="topbar no-print">
+      <div className="topbar-inner">
+        <Link to={ROUTES.resumen} className="wordmark">
+          <span className="wordmark-glyph" aria-hidden="true">
             <span />
             <span />
             <span />
-          </div>
-          <div>
-            <span className="brand-owner">Campo Digital</span>
-            <div className="client-block">
-              <div className="client-line">
-                <span className="client-tag">Cliente</span>
-                <span className="client-name">Transelec</span>
-              </div>
-              <h1>Transmisora del Pacífico – Transelec</h1>
-              <p>
-                Seguimiento de Planes de Manejo Forestal · ingresos CONAF · superficies y situación
-                predial
-              </p>
-            </div>
-          </div>
-        </div>
+          </span>
+          <span className="wordmark-text">
+            Campo Digital <span>· Transelec</span>
+          </span>
+        </Link>
 
-        <div className="stamp">
+        <button
+          type="button"
+          className="topnav-toggle"
+          aria-expanded={navOpen}
+          aria-controls="secciones"
+          onClick={() => setNavOpen((value) => !value)}
+        >
+          Secciones
+        </button>
+
+        <nav
+          id="secciones"
+          className={`topnav${navOpen ? ' open' : ''}`}
+          aria-label="Secciones de Transelec"
+        >
+          {items.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              current={currentPath === item.to || item.also?.includes(currentPath as Route)}
+              onNavigate={() => setNavOpen(false)}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="shell-side">
           {activeImport ? (
-            <>
-              <strong>Versión activa #{activeImport.import_id}</strong>
-              <br />
-              Publicada {formatDateTime(activeImport.published_at)}
-            </>
+            <span
+              className="version-chip"
+              title={`Publicada ${formatDateTime(activeImport.published_at)}`}
+            >
+              <b>Versión activa #{activeImport.import_id}</b>
+              <span>Publicada {formatDateTime(activeImport.published_at)}</span>
+            </span>
           ) : (
-            <strong>Sin versión publicada</strong>
+            <span className="version-chip none">
+              <b>Sin versión publicada</b>
+            </span>
           )}
-          <br />
-          {me ? (
-            <>
-              {me.display_name}
-              {role ? ` · ${ROLE_LABELS[role] ?? role}` : ''}
-            </>
-          ) : (
-            'Sesión no iniciada'
+
+          {me && (
+            <span className="identity" data-testid="shell-identity">
+              <span className="identity-name">{me.display_name}</span>
+              {role && <span className="identity-role">{ROLE_LABELS[role] ?? role}</span>}
+            </span>
           )}
-          <br />
-          Desarrollado por Campo Digital
+
           {me && onSignedOut && (
             <SessionControl
               label={demoMode ? 'Cambiar usuario' : 'Cerrar sesión'}
@@ -153,22 +200,6 @@ export function AppHeader({
           )}
         </div>
       </div>
-
-      <nav className="topnav no-print" aria-label="Secciones de Transelec">
-        <Link to={ROUTES.dashboard} current={currentPath === ROUTES.dashboard}>
-          Panel
-        </Link>
-        {canPublish && (
-          <>
-            <Link to={ROUTES.importar} current={currentPath === ROUTES.importar}>
-              Importar planilla
-            </Link>
-            <Link to={ROUTES.versiones} current={currentPath === ROUTES.versiones}>
-              Versiones
-            </Link>
-          </>
-        )}
-      </nav>
     </header>
   )
 }

@@ -1,15 +1,22 @@
 /**
- * TR-FUNC-017-023 — the filter panel.
+ * TR-FUNC-017-022 — the filter controls.
  *
- * Free-text search (017) is OR'd across all 30 contract fields server-side;
- * the five multi-selects (018-022) are AND'd with each other and OR'd
- * within themselves. Every read endpoint takes the same filter contract, so
- * the KPI row, both donuts, the status hero, the owner-status table, the
- * pending zone, the report and the detail table can never disagree about
- * what "the current view" means.
+ * The semantics are unchanged: free-text search (017) is OR'd across all 30
+ * contract fields server-side; the five multi-selects (018-022) are AND'd
+ * with each other and OR'd within themselves; every read endpoint takes the
+ * same filter contract.
  *
- * `Limpiar` (023) is the same `resetFilters()` code path as the pending
- * zone's `Volver al total` button — one function, two UI entry points.
+ * What changed is where they live. The shipped panel was a permanently
+ * expanded left rail on the dashboard, about 640 px tall against a 4 210 px
+ * page, so five multiselects were always on screen whether or not anyone was
+ * filtering, and 85 % of that column was empty grey. Here the five fields sit
+ * behind a disclosure on the Explorador, and whatever is actually active is
+ * always visible as removable chips — so the panel can be closed without the
+ * reader losing track of what is narrowing the view.
+ *
+ * `Limpiar` is still one code path with several entry points: the toolbar
+ * button, each chip's remove control, and the Pendientes section's own reset
+ * all write the same empty filter state to the URL.
  */
 import type { RefObject } from 'react'
 import type { TranselecFilterState } from '../api'
@@ -35,107 +42,58 @@ export function FilterPanel({
   filters,
   options,
   optionsLoading,
-  searchPlaceholder,
-  searchRef,
   empresaRef,
   empresaOpenSignal,
   onChange,
-  onReset,
-  onExportCsv,
-  onPrint,
-  disabled,
 }: {
   filters: TranselecFilterState
   options: FilterOptions
   optionsLoading: boolean
-  searchPlaceholder: string
-  searchRef?: RefObject<HTMLInputElement | null>
   empresaRef?: RefObject<HTMLButtonElement | null>
   empresaOpenSignal?: number
-  onChange: (next: TranselecFilterState) => void
-  onReset: () => void
-  onExportCsv: () => void
-  onPrint: () => void
-  disabled?: boolean
+  onChange: (field: keyof TranselecFilterState, value: string[]) => void
 }) {
-  const set = <K extends keyof TranselecFilterState>(key: K, value: TranselecFilterState[K]) =>
-    onChange({ ...filters, [key]: value })
-
   return (
-    <aside className="panel filters no-print" aria-label="Filtros">
-      <h2>Filtros</h2>
-
-      <div className="field">
-        <label htmlFor="filter-search">Búsqueda general</label>
-        <input
-          id="filter-search"
-          type="search"
-          ref={searchRef}
-          placeholder={searchPlaceholder}
-          value={filters.q}
-          onChange={(event) => set('q', event.target.value)}
+    <>
+      <div className="filters no-print" aria-label="Filtros">
+        <MultiSelectField
+          label="Estado resumido"
+          options={options.estado_resumido}
+          selected={filters.estado_resumido}
+          onChange={(next) => onChange('estado_resumido', next)}
         />
-        <p className="hint">
-          Busca el término en cualquiera de los 30 campos de la planilla, sin distinguir
-          mayúsculas.
-        </p>
+        <MultiSelectField
+          label="Empresa"
+          options={options.empresa}
+          selected={filters.empresa}
+          onChange={(next) => onChange('empresa', next)}
+          triggerRef={empresaRef}
+          openSignal={empresaOpenSignal}
+        />
+        <MultiSelectField
+          label="PAS"
+          options={options.pas}
+          selected={filters.pas}
+          onChange={(next) => onChange('pas', next)}
+        />
+        <MultiSelectField
+          label="Sector"
+          options={options.sector}
+          selected={filters.sector}
+          onChange={(next) => onChange('sector', next)}
+        />
+        <MultiSelectField
+          label="Tipo de propietario"
+          options={options.tipo_propietario}
+          selected={filters.tipo_propietario}
+          onChange={(next) => onChange('tipo_propietario', next)}
+        />
       </div>
-
-      <MultiSelectField
-        label="Estado resumido"
-        options={options.estado_resumido}
-        selected={filters.estado_resumido}
-        onChange={(next) => set('estado_resumido', next)}
-      />
-      <MultiSelectField
-        label="Empresa"
-        options={options.empresa}
-        selected={filters.empresa}
-        onChange={(next) => set('empresa', next)}
-        triggerRef={empresaRef}
-        openSignal={empresaOpenSignal}
-      />
-      <MultiSelectField
-        label="PAS"
-        options={options.pas}
-        selected={filters.pas}
-        onChange={(next) => set('pas', next)}
-      />
-      <MultiSelectField
-        label="Sector"
-        options={options.sector}
-        selected={filters.sector}
-        onChange={(next) => set('sector', next)}
-      />
-      <MultiSelectField
-        label="Tipo de propietario"
-        options={options.tipo_propietario}
-        selected={filters.tipo_propietario}
-        onChange={(next) => set('tipo_propietario', next)}
-      />
-
       {optionsLoading && (
-        <p className="hint" role="status">
+        <p className="hint no-print" role="status">
           Cargando las opciones de filtro de la versión activa…
         </p>
       )}
-
-      <div className="btns">
-        <button type="button" className="btn alt" onClick={onReset}>
-          Limpiar
-        </button>
-        <button type="button" className="btn teal" onClick={onExportCsv} disabled={disabled}>
-          Exportar CSV
-        </button>
-        <button type="button" className="btn" onClick={onPrint}>
-          Imprimir / PDF
-        </button>
-      </div>
-
-      <p className="hint">
-        Las métricas se recalculan con los filtros. La superficie se suma por área de corta;
-        predios, roles y PMF se cuentan sin duplicados.
-      </p>
-    </aside>
+    </>
   )
 }

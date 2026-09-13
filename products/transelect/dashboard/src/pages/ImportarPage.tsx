@@ -1,20 +1,26 @@
 /**
- * `/transelec/importar` — the replacement for TR-FUNC-040.
+ * The Datos section's import pane — the replacement for TR-FUNC-040.
  *
  * The source dashboard's "Actualizar base Excel" button read the workbook in
  * the browser with a hand-rolled ZIP/XLSX reader, applied zero schema
  * validation, silently collapsed the two `Carpeta` columns, and kept the
  * result in tab memory only: reloading the page reverted it, and sharing an
  * update meant re-sending the whole HTML file by hand. None of that is
- * reproduced. This page drives the real three-step pipeline instead:
+ * reproduced. This drives the real three-step pipeline instead:
  *
  *   1. upload            POST /transelec/uploads          (bounded, hashed, stored)
  *   2. validate/project  POST .../validate-and-project    (hard contract gate)
  *   3. publish           POST .../publish                 (explicit, audited, atomic)
  *
- * Validating never publishes. A validated import sits there until an
- * operator deliberately publishes it, which is why step 3 is a separate,
- * confirmed action rather than an automatic consequence of step 2.
+ * Validating never publishes. A validated import sits there until an operator
+ * deliberately publishes it, which is why step 3 is a separate, confirmed
+ * action rather than an automatic consequence of step 2.
+ *
+ * What changed visually: the three steps were three static bordered boxes
+ * with no progression and no legible current step. They are now a real
+ * stepper — a numbered rail whose markers change state as the pipeline runs —
+ * and the file input is a drop zone that accepts a dragged workbook. The
+ * pipeline, its ordering and its guarantees are untouched.
  */
 import { useCallback, useRef, useState } from 'react'
 import {
@@ -26,11 +32,12 @@ import {
   uploadWorkbook,
   validateAndProject,
 } from '../api'
-import { AlertBanner } from '../components/StateViews'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { classifyFailure, type FailureView } from '../lib/apiState'
+import { AlertBanner } from '../components/StateViews'
 import { formatBytes, formatDateTime, formatInteger, formatNumber, shortHash } from '../format'
+import { classifyFailure, type FailureView } from '../lib/apiState'
 import { Link, ROUTES } from '../router'
+import { SectionHeader } from '../ui/Primitives'
 
 type Stage = 'upload' | 'validate' | 'publish'
 
@@ -43,6 +50,8 @@ const RUN_LOOKUP_FAILED: FailureView = {
     'La carga se almacenó, pero no fue posible identificar su proceso de ingesta para validarla. Vuelva a intentarlo; si persiste, contacte a soporte.',
 }
 
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
 export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChanged: () => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [upload, setUpload] = useState<UploadResult | null>(null)
@@ -51,6 +60,7 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
   const [busy, setBusy] = useState<Stage | null>(null)
   const [failure, setFailure] = useState<{ stage: Stage; view: FailureView } | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const reset = () => {
@@ -137,53 +147,93 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
   const canPublishNow =
     validation !== null && !validation.is_active && validation.status !== 'already_current'
 
+  /** A dropped file is the same input as a chosen one; nothing else changes. */
+  const acceptDrop = (dropped: File | undefined) => {
+    setDragging(false)
+    if (!dropped) return
+    setFile(dropped)
+    setFailure(null)
+  }
+
   return (
-    <div className="shell form-page">
-      <section className="panel section">
-        <h2>Importar planilla</h2>
-        <p className="section-note">
+    <div className="stack">
+      <section>
+        <SectionHeader
+          title="Importar planilla"
+          meta="La versión que ve el panel sólo cambia cuando usted publica."
+        />
+        <p className="prose" style={{ marginBottom: 'var(--s-6)' }}>
           Cargue la planilla maestra (<code>.xlsx</code>). La plataforma valida el contrato de
-          origen antes de proyectar cualquier fila, y la versión que ve el panel sólo cambia
-          cuando usted publica explícitamente. Una validación correcta no publica nada por sí
+          origen antes de proyectar cualquier fila, y una validación correcta no publica nada por sí
           sola.
         </p>
 
-        <ol className="steps">
+        <ol className="stepper">
           <li data-state={stepState('upload')} data-step="upload">
-            <b>1 · Cargar archivo</b>
-            La planilla se almacena con su huella SHA-256; una carga idéntica se reconoce como la
-            misma versión.
+            <div className="step-body">
+              <b>Cargar archivo</b>
+              <span>
+                La planilla se almacena con su huella SHA-256; una carga idéntica se reconoce como
+                la misma versión.
+              </span>
+            </div>
           </li>
           <li data-state={stepState('validate')} data-step="validate">
-            <b>2 · Validar y proyectar</b>
-            Se verifica el contrato de origen (columnas A:AD, hoja «Resumen») y se proyectan las
-            filas. Si algo falla, no queda ninguna importación a medias.
+            <div className="step-body">
+              <b>Validar y proyectar</b>
+              <span>
+                Se verifica el contrato de origen (columnas A:AD, hoja «Resumen») y se proyectan las
+                filas. Si algo falla, no queda ninguna importación a medias.
+              </span>
+            </div>
           </li>
           <li data-state={stepState('publish')} data-step="publish">
-            <b>3 · Publicar</b>
-            Activa la versión importada para todo el panel y queda registrada en la auditoría.
+            <div className="step-body">
+              <b>Publicar</b>
+              <span>
+                Activa la versión importada para todo el panel y queda registrada en la auditoría.
+              </span>
+            </div>
           </li>
         </ol>
 
         {!activation && (
-          <div className="dropzone no-print">
-            <p>Formato admitido: .xlsx. Tamaño máximo: 2 GiB.</p>
+          <div
+            className={`dropzone no-print${dragging ? ' dragging' : ''}`}
+            onDragOver={(event) => {
+              event.preventDefault()
+              setDragging(true)
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault()
+              acceptDrop(event.dataTransfer.files?.[0])
+            }}
+          >
+            <p>
+              Arrastre la planilla aquí o elija un archivo. Formato admitido: .xlsx. Tamaño máximo:
+              2&nbsp;GiB.
+            </p>
             <input
               ref={fileInputRef}
               id="workbook-file"
               type="file"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              accept={`.xlsx,${XLSX_MIME}`}
               aria-label="Planilla maestra (.xlsx)"
               onChange={(event) => {
-                const selected = event.target.files?.[0] ?? null
-                setFile(selected)
+                setFile(event.target.files?.[0] ?? null)
                 setFailure(null)
               }}
             />
-            <div className="btns" style={{ marginTop: 14, justifyContent: 'center' }}>
+            {file && (
+              <p>
+                Seleccionado: <b>{file.name}</b> · {formatBytes(file.size)}
+              </p>
+            )}
+            <div className="btns">
               <button
                 type="button"
-                className="btn teal"
+                className="btn"
                 disabled={!file || busy !== null}
                 onClick={() => file && void runUploadAndValidate(file)}
                 data-testid="upload-submit"
@@ -202,7 +252,12 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
         )}
 
         {busy !== null && (
-          <p className="loading-row" role="status" style={{ marginTop: 14 }} data-testid="import-busy">
+          <p
+            className="loading-row"
+            role="status"
+            style={{ marginTop: 'var(--s-4)' }}
+            data-testid="import-busy"
+          >
             {busy === 'upload' && 'Cargando la planilla en la plataforma…'}
             {busy === 'validate' && 'Validando el contrato de origen y proyectando las filas…'}
             {busy === 'publish' && 'Publicando la versión…'}
@@ -211,7 +266,7 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
       </section>
 
       {failure && (
-        <section className="panel section" data-testid="import-failure">
+        <section className="stack-tight" data-testid="import-failure">
           <AlertBanner
             tone={failure.view.kind === 'invalid_upload' ? 'warn' : 'error'}
             title={failure.view.title}
@@ -220,8 +275,8 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
           </AlertBanner>
           {failure.stage !== 'upload' && (
             <p className="hint">
-              La versión publicada actualmente no ha cambiado. Puede corregir la planilla y volver
-              a cargarla sin riesgo para los datos en uso.
+              La versión publicada actualmente no ha cambiado. Puede corregir la planilla y volver a
+              cargarla sin riesgo para los datos en uso.
             </p>
           )}
           <div className="btns">
@@ -233,7 +288,7 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
       )}
 
       {upload && !failure && (
-        <section className="panel section" data-testid="upload-evidence">
+        <section className="stack-tight" data-testid="upload-evidence">
           <h2>Archivo recibido</h2>
           <div className="summary-grid">
             <div>
@@ -261,7 +316,7 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
       )}
 
       {validation && !activation && (
-        <section className="panel section" data-testid="validation-result">
+        <section className="stack-tight" data-testid="validation-result">
           {validation.status === 'validated' && (
             <AlertBanner tone="ok" title="Planilla validada">
               La planilla cumple el contrato de origen y sus filas quedaron proyectadas como la
@@ -304,10 +359,10 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
             validada {formatDateTime(validation.validated_at)}
           </p>
 
-          <div className="btns no-print" style={{ marginTop: 12 }}>
+          <div className="btns no-print">
             <button
               type="button"
-              className="btn teal"
+              className="btn"
               disabled={!canPublishNow || busy !== null}
               onClick={() => setConfirming(true)}
               data-testid="publish-open"
@@ -322,17 +377,17 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
       )}
 
       {activation && (
-        <section className="panel section" data-testid="publish-result">
+        <section className="stack-tight" data-testid="publish-result">
           <AlertBanner tone="ok" title="Versión publicada">
-            La importación #{activation.import_id} es ahora la versión activa del panel
-            ({formatDateTime(activation.occurred_at)}).
+            La importación #{activation.import_id} es ahora la versión activa del panel (
+            {formatDateTime(activation.occurred_at)}).
             {activation.previous_import_id !== null
               ? ` Reemplaza a la versión #${activation.previous_import_id}, que sigue disponible para restaurar.`
               : ' Es la primera versión publicada.'}
           </AlertBanner>
           <div className="btns">
-            <Link to={ROUTES.dashboard} className="btn">
-              Ver el panel
+            <Link to={ROUTES.resumen} className="btn">
+              Ver el resumen
             </Link>
             <Link to={ROUTES.versiones} className="btn alt">
               Ver el historial de versiones

@@ -1,10 +1,10 @@
 /**
- * TR-FUNC-012 — "Predios de reforestación" chips.
+ * TR-FUNC-012 — "Predios de reforestación".
  *
  * `Predio Ref` is one of the fields v0 left completely unused and
  * Actualizable revived. The API returns the distinct, non-blank, sorted
- * values for the current filter state; this component renders the first ten
- * and collapses the rest into the source's own overflow chip.
+ * values for the current filter state; this renders the first ten and
+ * collapses the rest into the source's own overflow chip.
  */
 import { formatInteger } from '../format'
 
@@ -15,14 +15,12 @@ export function ReforestationChips({ predios }: { predios: string[] }) {
   const hasOverflow = predios.length > VISIBLE_CHIPS
 
   return (
-    <section className="panel refsummary" aria-labelledby="ref-title" data-testid="reforestation">
-      <div className="refhead">
-        <h2 id="ref-title">Predios de reforestación</h2>
-        <div className="refcount">
-          <b data-testid="reforestation-count">{formatInteger(predios.length)}</b>
-          {predios.length === 1 ? 'predio único' : 'predios únicos'}
-        </div>
-      </div>
+    <div data-testid="reforestation">
+      <p className="hint" style={{ marginBottom: 'var(--s-4)' }}>
+        <b data-testid="reforestation-count">{formatInteger(predios.length)}</b>{' '}
+        {predios.length === 1 ? 'predio único' : 'predios únicos'} con valor en «Predio Ref» para
+        el alcance seleccionado.
+      </p>
       <div className="refchips">
         {shown.map((name) => (
           <span className="refchip" key={name}>
@@ -40,6 +38,6 @@ export function ReforestationChips({ predios }: { predios: string[] }) {
           </span>
         )}
       </div>
-    </section>
+    </div>
   )
 }

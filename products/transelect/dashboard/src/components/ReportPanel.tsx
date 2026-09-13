@@ -57,18 +57,18 @@ export function ReportPanel({ report }: { report: TranselecReport }) {
   }
 
   return (
-    <section className="panel section" aria-labelledby="report-title" data-testid="report-panel">
+    <div data-testid="report-panel">
       <h2 id="report-title">Reporte ejecutivo breve</h2>
-      <pre className="report" data-testid="report-text">
+      <pre className="report" data-testid="report-text" style={{ marginTop: 'var(--s-4)' }}>
         {report.text}
       </pre>
-      <p className="section-note">
+      <p className="hint" style={{ marginTop: 'var(--s-4)' }}>
         Corte de información tomado de la versión activa ({formatDateTime(report.generated_at)}),
         no de la fecha de consulta. Reglas aplicadas:{' '}
         <span className="basis-tag">{report.basis_estado_resumido}</span> y{' '}
         <span className="basis-tag">{report.basis_pending_priority}</span>.
       </p>
-      <div className="btns no-print" style={{ marginTop: 10 }}>
+      <div className="btns no-print" style={{ marginTop: 'var(--s-4)' }}>
         <button type="button" className="btn alt" onClick={copyReport} data-testid="copy-report">
           Copiar reporte
         </button>
@@ -86,6 +86,6 @@ export function ReportPanel({ report }: { report: TranselecReport }) {
           {copyState.message}
         </p>
       )}
-    </section>
+    </div>
   )
 }

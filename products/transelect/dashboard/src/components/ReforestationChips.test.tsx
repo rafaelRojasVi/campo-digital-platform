@@ -8,12 +8,12 @@ describe('ReforestationChips (TR-FUNC-012)', () => {
     expect(screen.getByTestId('reforestation-count')).toHaveTextContent('2')
     expect(screen.getByText('Fundo Uno')).toBeInTheDocument()
     expect(screen.getByText('Fundo Dos')).toBeInTheDocument()
-    expect(screen.getByText('predios únicos')).toBeInTheDocument()
+    expect(screen.getByTestId('reforestation')).toHaveTextContent('2 predios únicos')
   })
 
   it('uses the singular noun for a single predio', () => {
     render(<ReforestationChips predios={['Fundo Uno']} />)
-    expect(screen.getByText('predio único')).toBeInTheDocument()
+    expect(screen.getByTestId('reforestation')).toHaveTextContent('1 predio único')
   })
 
   it('collapses the tail into an overflow chip past ten values', () => {

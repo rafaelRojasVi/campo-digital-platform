@@ -1,3 +1,13 @@
+/**
+ * The five multi-select filter fields (TR-FUNC-018-022).
+ *
+ * Free-text search (017), Limpiar (023), CSV export (037) and print (038)
+ * moved out of this component in the UX rearchitecture: search is now the
+ * Explorador's primary control and the three actions live in that page's
+ * toolbar, beside the dataset they act on. Their behaviour is covered in
+ * `src/pages/ExploradorPage.test.tsx`, which exercises them where they now
+ * are; the filter semantics asserted below are unchanged.
+ */
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -16,27 +26,15 @@ const base = {
   filters: EMPTY_FILTERS,
   options,
   optionsLoading: false,
-  searchPlaceholder: 'PMF, rol, ingreso, predio…',
   onChange: () => {},
-  onReset: () => {},
-  onExportCsv: () => {},
-  onPrint: () => {},
 }
 
-describe('FilterPanel (TR-FUNC-017-023)', () => {
-  it('renders the source’s six filter controls', () => {
+describe('FilterPanel (TR-FUNC-018-022)', () => {
+  it('renders the five multi-select controls', () => {
     render(<FilterPanel {...base} />)
-    expect(screen.getByLabelText('Búsqueda general')).toBeInTheDocument()
     for (const label of ['Estado resumido', 'Empresa', 'PAS', 'Sector', 'Tipo de propietario']) {
       expect(screen.getByRole('button', { name: new RegExp(label) })).toBeInTheDocument()
     }
-  })
-
-  it('reports free-text search changes to the caller (TR-FUNC-017)', async () => {
-    const onChange = vi.fn()
-    render(<FilterPanel {...base} onChange={onChange} />)
-    await userEvent.type(screen.getByLabelText('Búsqueda general'), 'r')
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY_FILTERS, q: 'r' })
   })
 
   it('ORs selections within one multi-select (TR-FUNC-018)', async () => {
@@ -45,7 +43,7 @@ describe('FilterPanel (TR-FUNC-017-023)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Estado resumido/ }))
     await userEvent.click(screen.getByLabelText('Aprobado'))
-    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY_FILTERS, estado_resumido: ['Aprobado'] })
+    expect(onChange).toHaveBeenLastCalledWith('estado_resumido', ['Aprobado'])
 
     rerender(
       <FilterPanel
@@ -55,10 +53,7 @@ describe('FilterPanel (TR-FUNC-017-023)', () => {
       />,
     )
     await userEvent.click(screen.getByLabelText('Tachado'))
-    expect(onChange).toHaveBeenLastCalledWith({
-      ...EMPTY_FILTERS,
-      estado_resumido: ['Aprobado', 'Tachado'],
-    })
+    expect(onChange).toHaveBeenLastCalledWith('estado_resumido', ['Aprobado', 'Tachado'])
   })
 
   it('keeps different fields independent so the API can AND them (TR-FUNC-019-022)', async () => {
@@ -73,48 +68,13 @@ describe('FilterPanel (TR-FUNC-017-023)', () => {
     await userEvent.click(screen.getByRole('button', { name: /Sector/ }))
     await userEvent.click(screen.getByLabelText('Norte'))
 
-    expect(onChange).toHaveBeenLastCalledWith({
-      ...EMPTY_FILTERS,
-      estado_resumido: ['Aprobado'],
-      sector: ['Norte'],
-    })
-  })
-
-  it('exposes Limpiar, Exportar CSV and Imprimir (TR-FUNC-023/037/038)', async () => {
-    const onReset = vi.fn()
-    const onExportCsv = vi.fn()
-    const onPrint = vi.fn()
-    render(<FilterPanel {...base} onReset={onReset} onExportCsv={onExportCsv} onPrint={onPrint} />)
-
-    await userEvent.click(screen.getByRole('button', { name: 'Limpiar' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Exportar CSV' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Imprimir / PDF' }))
-
-    expect(onReset).toHaveBeenCalledTimes(1)
-    expect(onExportCsv).toHaveBeenCalledTimes(1)
-    expect(onPrint).toHaveBeenCalledTimes(1)
-  })
-
-  it('shows the swapped placeholder the lookup quick action installs (TR-FUNC-025)', () => {
-    render(
-      <FilterPanel
-        {...base}
-        searchPlaceholder="Escriba el N.º de ingreso para ver su PMF, rol y predio"
-      />,
-    )
-    expect(
-      screen.getByPlaceholderText('Escriba el N.º de ingreso para ver su PMF, rol y predio'),
-    ).toBeInTheDocument()
+    // Only the field that was touched is reported; the caller merges it into
+    // the shared filter state, so one field can never clear another.
+    expect(onChange).toHaveBeenLastCalledWith('sector', ['Norte'])
   })
 
   it('disables a field with no options and says while the lists are still loading', () => {
-    render(
-      <FilterPanel
-        {...base}
-        options={{ ...options, pas: [] }}
-        optionsLoading
-      />,
-    )
+    render(<FilterPanel {...base} options={{ ...options, pas: [] }} optionsLoading />)
     expect(screen.getByRole('button', { name: /PAS/ })).toBeDisabled()
     expect(screen.getByText(/Cargando las opciones de filtro/)).toBeInTheDocument()
   })

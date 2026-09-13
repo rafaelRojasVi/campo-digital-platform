@@ -1,5 +1,5 @@
 /**
- * `/transelec/versiones` — version history and restore.
+ * The Datos section's versions pane — version history and restore.
  *
  * `GET /transelec/imports` returns one row per activation event
  * (`transelec_publish_event`), not one per import: an import activated twice
@@ -12,6 +12,14 @@
  * can never have been committed in the first place. The confirmation dialog
  * states exactly which import is about to become active again before the
  * mutation fires.
+ *
+ * The shipped version rendered this as a ten-column table whose `Acción` cell
+ * for the current row was a disabled button reading "Versión activa", with
+ * the active version's own summary repeated in a second card underneath. It
+ * is a timeline now: the active version is the anchored first entry carrying
+ * its full provenance inline, and each prior activation is an entry with its
+ * actor, its event type and its restore action. Same rows, same events, same
+ * endpoint — read as a history with a present, rather than as a report.
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -22,9 +30,10 @@ import {
 } from '../api'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
-import { formatDateTime, formatInteger, formatNumber, shortHash } from '../format'
+import { formatBytes, formatDateTime, formatInteger, formatNumber, shortHash } from '../format'
 import { classifyFailure, type ApiFailure, type FailureView } from '../lib/apiState'
 import { Link, ROUTES } from '../router'
+import { SectionHeader } from '../ui/Primitives'
 
 export function VersionesPage({
   activeImport,
@@ -79,34 +88,25 @@ export function VersionesPage({
   }, [onActiveVersionChanged, target])
 
   if (loading && !history) {
-    return (
-      <div className="shell versions-page">
-        <section className="panel section">
-          <LoadingBlock label="Cargando el historial de versiones…" lines={3} />
-        </section>
-      </div>
-    )
+    return <LoadingBlock label="Cargando el historial de versiones…" lines={4} />
   }
 
   if (failure) {
-    return (
-      <div className="shell versions-page">
-        <StateBlock view={classifyFailure(failure)} />
-      </div>
-    )
+    return <StateBlock view={classifyFailure(failure)} />
   }
 
   const rows = history ?? []
 
   return (
-    <div className="shell versions-page">
-      <section className="panel section">
-        <h2>Versiones publicadas</h2>
-        <p className="section-note">
-          Cada fila es una activación registrada: una publicación o una restauración, con quién la
-          hizo y cuándo. Una misma importación puede aparecer más de una vez si volvió a
-          activarse. Restaurar no vuelve a validar la planilla — una importación inválida nunca
-          llega a existir.
+    <div className="stack">
+      <section>
+        <SectionHeader
+          title="Versiones publicadas"
+          meta="Cada entrada es una activación registrada, con quién la hizo y cuándo."
+        />
+        <p className="prose" style={{ marginBottom: 'var(--s-6)' }}>
+          Una misma importación puede aparecer más de una vez si volvió a activarse. Restaurar no
+          vuelve a validar la planilla: una importación inválida nunca llega a existir.
         </p>
 
         {restored !== null && (
@@ -124,100 +124,129 @@ export function VersionesPage({
             <Link to={ROUTES.importar}>Importe una planilla</Link> para comenzar.
           </div>
         ) : (
-          <div className="tablewrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Evento</th>
-                  <th scope="col">Importación</th>
-                  <th scope="col">Fecha</th>
-                  <th scope="col">Responsable</th>
-                  <th scope="col">Archivo</th>
-                  <th scope="col">Huella</th>
-                  <th scope="col">Filas</th>
-                  <th scope="col">PMF</th>
-                  <th scope="col">Superficie</th>
-                  <th scope="col">Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr
-                    key={row.publish_event_id}
-                    className={`version-row${row.is_active ? ' active' : ''}`}
-                    data-testid={`version-${row.publish_event_id}`}
-                  >
-                    <td>
+          <ol className="timeline" style={{ marginTop: 'var(--s-5)' }}>
+            {rows.map((row) => (
+              <li
+                className={`timeline-entry version-row${row.is_active ? ' active' : ''}`}
+                key={row.publish_event_id}
+                data-testid={`version-${row.publish_event_id}`}
+              >
+                <span className="timeline-dot" aria-hidden="true">
+                  <i />
+                </span>
+                <div className="timeline-card">
+                  <div className="timeline-head">
+                    <span className="timeline-title">
+                      Importación #{row.import_id}
                       <span
                         className={`version-badge${row.event_type === 'restore' ? ' restore' : ''}`}
                       >
                         {row.event_type === 'restore' ? 'Restauración' : 'Publicación'}
                       </span>
-                    </td>
-                    <td>
-                      #{row.import_id}
-                      {row.is_active && <strong> · activa</strong>}
-                    </td>
-                    <td>{formatDateTime(row.occurred_at)}</td>
-                    <td>{row.actor_display_name ?? `Usuario ${row.actor_app_user_id}`}</td>
-                    <td>{row.filename ?? 'Sin nombre registrado'}</td>
-                    <td>
+                      {row.is_active && <span className="version-badge active">Activa</span>}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn alt small no-print"
+                      disabled={row.is_active || restoring}
+                      onClick={() => {
+                        setRestoreError(null)
+                        setRestored(null)
+                        setTarget(row)
+                      }}
+                      data-testid={`restore-${row.import_id}`}
+                    >
+                      {row.is_active ? 'Versión activa' : 'Restaurar'}
+                    </button>
+                  </div>
+
+                  <div className="timeline-meta">
+                    <span>{formatDateTime(row.occurred_at)}</span>
+                    <span>{row.actor_display_name ?? `Usuario ${row.actor_app_user_id}`}</span>
+                    <span>{row.filename ?? 'Sin nombre registrado'}</span>
+                    <span>
                       <code>{shortHash(row.sha256)}…</code>
-                    </td>
-                    <td className="numeric">{formatInteger(row.business_rows)}</td>
-                    <td className="numeric">{formatInteger(row.distinct_pmf)}</td>
-                    <td className="numeric">{formatNumber(row.surface_total)} ha</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn alt"
-                        disabled={row.is_active || restoring}
-                        onClick={() => {
-                          setRestoreError(null)
-                          setRestored(null)
-                          setTarget(row)
-                        }}
-                        data-testid={`restore-${row.import_id}`}
-                      >
-                        {row.is_active ? 'Versión activa' : 'Restaurar'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </span>
+                  </div>
+                  <div className="timeline-meta">
+                    <span>{formatInteger(row.business_rows)} filas</span>
+                    <span>{formatInteger(row.distinct_pmf)} PMF</span>
+                    <span>
+                      {formatInteger(row.distinct_provisional_predio_ids)} identificadores prediales
+                    </span>
+                    <span>{formatNumber(row.surface_total)} ha</span>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
         )}
       </section>
 
+      {/*
+        TR-FUNC-043/046 — the provenance the dashboard footer used to carry.
+        It belongs beside the history that produced it, not at the bottom of a
+        page of operational numbers, and it is still the active version's real
+        provenance rather than a static filename string.
+      */}
       {activeImport && (
-        <section className="panel section">
-          <h2>Versión activa</h2>
-          <div className="summary-grid">
-            <div>
-              <b>#{activeImport.import_id}</b>
-              importación activa
-            </div>
-            <div>
-              <b>{formatInteger(activeImport.business_rows)}</b>
-              filas proyectadas
-            </div>
-            <div>
-              <b>{formatInteger(activeImport.distinct_pmf)}</b>
-              PMF distintos
-            </div>
-            <div>
-              <b>{formatNumber(activeImport.surface_total)}</b>
-              ha de superficie de corta
-            </div>
-          </div>
+        <section className="ruled" data-testid="provenance-footer">
+          <SectionHeader title="Procedencia de la versión activa" />
+          <dl className="defs">
+            <dt>Versión</dt>
+            <dd>
+              #{activeImport.import_id} · publicada {formatDateTime(activeImport.published_at)}
+              {activeImport.published_by_display_name
+                ? ` por ${activeImport.published_by_display_name}`
+                : ''}
+              {activeImport.published_event_type === 'restore'
+                ? ' (restauración de una versión anterior)'
+                : ''}
+            </dd>
+            <dt>Archivo</dt>
+            <dd>
+              {activeImport.filename ?? 'Sin nombre registrado'} ·{' '}
+              {formatBytes(activeImport.byte_size)}
+            </dd>
+            <dt>Huella</dt>
+            <dd>
+              <code>{shortHash(activeImport.sha256)}…</code>
+            </dd>
+            <dt>Contrato</dt>
+            <dd>
+              {activeImport.schema_contract_version} · {activeImport.parser_version}
+            </dd>
+            <dt>Validada</dt>
+            <dd>{formatDateTime(activeImport.validated_at)}</dd>
+            <dt>Contenido</dt>
+            <dd>
+              {formatInteger(activeImport.business_rows)} filas ·{' '}
+              {formatInteger(activeImport.distinct_pmf)} PMF ·{' '}
+              {formatInteger(activeImport.distinct_provisional_predio_ids)} identificadores
+              prediales · {formatNumber(activeImport.surface_total)} ha
+            </dd>
+          </dl>
+          <p className="hint" style={{ marginTop: 'var(--s-5)' }}>
+            Fuente: hoja «Resumen» de la planilla maestra publicada. Las hojas históricas no se
+            suman para evitar duplicidad y la hoja «Pendientes» no se cruza automáticamente. Esta
+            aplicación lee la proyección publicada en la base de datos y nunca modifica la planilla
+            de origen.
+          </p>
           <p className="hint">
-            Publicada {formatDateTime(activeImport.published_at)}
-            {activeImport.published_by_display_name
-              ? ` por ${activeImport.published_by_display_name}`
-              : ''}
-            {activeImport.published_event_type === 'restore' ? ' (restauración)' : ''} · contrato{' '}
-            {activeImport.schema_contract_version} · parser {activeImport.parser_version}
+            Las marcas de Campo Digital y Transelec se muestran como identificación textual
+            provisional: los logotipos originales no se reutilizan mientras no exista autorización
+            expresa sobre esos archivos.
+          </p>
+        </section>
+      )}
+
+      {!activeImport && (
+        <section className="ruled" data-testid="provenance-footer">
+          <p className="hint">Sin versión publicada: todavía no hay procedencia que citar.</p>
+          <p className="hint">
+            Las marcas de Campo Digital y Transelec se muestran como identificación textual
+            provisional: los logotipos originales no se reutilizan mientras no exista autorización
+            expresa sobre esos archivos.
           </p>
         </section>
       )}
@@ -238,8 +267,8 @@ export function VersionesPage({
             lugar de la versión vigente.
           </p>
           <p>
-            La restauración queda registrada con su nombre y la fecha, y puede deshacerse
-            volviendo a publicar cualquier otra versión de esta lista.
+            La restauración queda registrada con su nombre y la fecha, y puede deshacerse volviendo
+            a publicar cualquier otra versión de esta lista.
           </p>
         </ConfirmDialog>
       )}

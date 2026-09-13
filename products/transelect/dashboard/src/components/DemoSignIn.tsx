@@ -46,7 +46,7 @@ const DEMO_OPTIONS: readonly DemoOption[] = [
     identityKey: 'dev-viewer',
     label: 'Ver como Javier — solo lectura',
     note: 'Dev Viewer · rol Lectura sobre Transelec: consulta el panel completo, sin importar ni cambiar la versión publicada.',
-    className: 'btn teal',
+    className: 'btn alt',
   },
 ]
 

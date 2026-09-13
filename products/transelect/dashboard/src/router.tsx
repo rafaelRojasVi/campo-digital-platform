@@ -2,23 +2,53 @@
  * Minimal history-based router.
  *
  * Same shape as apps/portal/src/router/Router.tsx — this platform's frontends
- * deliberately do not carry a routing library for three static routes.
+ * deliberately do not carry a routing library for a handful of static routes.
+ *
+ * What changed in the UX rearchitecture: the router now owns the *search*
+ * string as well as the pathname. The dashboard's filter state lives in the
+ * URL (see lib/filterUrl.ts), so a filtered view is linkable, survives a
+ * reload, and is carried between the four reading sections from one source of
+ * truth rather than from four copies of component state.
+ *
+ * `/transelec/importar` and `/transelec/versiones` are kept as live routes
+ * that resolve into the Datos section's two panes, so every link, bookmark
+ * and test navigation that predates the rearchitecture still lands correctly.
  */
 import type { ReactNode } from 'react'
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
 export const ROUTES = {
-  dashboard: '/transelec',
+  resumen: '/transelec',
+  explorador: '/transelec/explorador',
+  pendientes: '/transelec/pendientes',
+  calidad: '/transelec/calidad',
+  datos: '/transelec/datos',
   importar: '/transelec/importar',
   versiones: '/transelec/versiones',
 } as const
 
+export type Route = (typeof ROUTES)[keyof typeof ROUTES]
+
+/** The routes only an operator or administrator may open. */
+export const ADMIN_ROUTES: readonly Route[] = [
+  ROUTES.datos,
+  ROUTES.importar,
+  ROUTES.versiones,
+]
+
 interface RouterContextValue {
   pathname: string
-  navigate: (path: string) => void
+  search: string
+  navigate: (path: string, options?: { replace?: boolean }) => void
 }
 
 const RouterContext = createContext<RouterContextValue | undefined>(undefined)
+
+function splitLocation(value: string): { pathname: string; search: string } {
+  const index = value.indexOf('?')
+  if (index === -1) return { pathname: value, search: '' }
+  return { pathname: value.slice(0, index), search: value.slice(index) }
+}
 
 export function RouterProvider({
   children,
@@ -27,24 +57,43 @@ export function RouterProvider({
   children: ReactNode
   initialPath?: string
 }) {
-  const [pathname, setPathname] = useState(() => initialPath ?? window.location.pathname)
+  const [location, setLocation] = useState(() =>
+    initialPath !== undefined
+      ? splitLocation(initialPath)
+      : { pathname: window.location.pathname, search: window.location.search },
+  )
 
   useEffect(() => {
-    const onPopState = () => setPathname(window.location.pathname)
+    const onPopState = () =>
+      setLocation({ pathname: window.location.pathname, search: window.location.search })
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
+  const navigate = useCallback((path: string, options?: { replace?: boolean }) => {
+    const next = splitLocation(path)
+    const current = `${window.location.pathname}${window.location.search}`
+
+    if (path !== current) {
+      // A filter change is a replace, not a push: typing six characters into
+      // the search box must not bury the previous page under six history
+      // entries the reader has to press Back through.
+      if (options?.replace) window.history.replaceState({}, '', path)
+      else window.history.pushState({}, '', path)
+    }
+
+    setLocation((previous) =>
+      previous.pathname === next.pathname && previous.search === next.search ? previous : next,
+    )
+
+    // Only a real section change returns to the top. A filter change leaves
+    // the reader where they were looking.
+    if (!options?.replace) window.scrollTo({ top: 0 })
+  }, [])
+
   const value = useMemo<RouterContextValue>(
-    () => ({
-      pathname,
-      navigate: (path: string) => {
-        if (path !== window.location.pathname) window.history.pushState({}, '', path)
-        setPathname(path)
-        window.scrollTo({ top: 0 })
-      },
-    }),
-    [pathname],
+    () => ({ pathname: location.pathname, search: location.search, navigate }),
+    [location.pathname, location.search, navigate],
   )
 
   return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>
@@ -61,11 +110,13 @@ export function Link({
   children,
   className,
   current,
+  onNavigate,
 }: {
   to: string
   children: ReactNode
   className?: string
   current?: boolean
+  onNavigate?: () => void
 }) {
   const { navigate } = useRouter()
   return (
@@ -74,9 +125,12 @@ export function Link({
       className={className}
       aria-current={current ? 'page' : undefined}
       onClick={(event) => {
+        // Cmd/Ctrl/Shift click and middle click keep their native meaning:
+        // these are real anchors with real hrefs, not div handlers.
         if (event.metaKey || event.ctrlKey || event.shiftKey) return
         event.preventDefault()
         navigate(to)
+        onNavigate?.()
       }}
     >
       {children}
@@ -84,10 +138,16 @@ export function Link({
   )
 }
 
-/** Normalize a pathname (trailing slash tolerant) to one of the three routes. */
-export function resolveRoute(pathname: string): (typeof ROUTES)[keyof typeof ROUTES] {
+/** Normalize a pathname (trailing slash tolerant) to one of the routes. */
+export function resolveRoute(pathname: string): Route {
   const normalized = pathname.replace(/\/+$/, '') || '/'
-  if (normalized === ROUTES.importar) return ROUTES.importar
-  if (normalized === ROUTES.versiones) return ROUTES.versiones
-  return ROUTES.dashboard
+  for (const route of Object.values(ROUTES)) {
+    if (normalized === route) return route
+  }
+  return ROUTES.resumen
+}
+
+/** True when this route belongs to the operator-only Datos section. */
+export function isAdminRoute(route: Route): boolean {
+  return ADMIN_ROUTES.includes(route)
 }

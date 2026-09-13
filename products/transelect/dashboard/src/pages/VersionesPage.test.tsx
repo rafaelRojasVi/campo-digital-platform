@@ -159,18 +159,41 @@ describe('VersionesPage', () => {
     await waitFor(() => expect(screen.getByText('Sin autorización')).toBeInTheDocument())
   })
 
+  /**
+   * TR-FUNC-043/046. The provenance block moved here from the dashboard
+   * footer in the UX rearchitecture: it belongs beside the history that
+   * produced it. The content it must carry is unchanged, and is still the
+   * active version's real provenance rather than a static filename string.
+   */
   it('summarises the active version’s own provenance', async () => {
     vi.mocked(listImportHistory).mockResolvedValue({ ok: true, data: history })
     renderPage(vi.fn(), makeActiveImport({ import_id: 14, business_rows: 9 }))
 
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Versión activa' })).toBeInTheDocument(),
-    )
-    const summary = screen
-      .getByRole('heading', { name: 'Versión activa' })
-      .closest('section') as HTMLElement
+    const summary = await screen.findByTestId('provenance-footer')
     expect(summary).toHaveTextContent('#14')
     expect(summary).toHaveTextContent('9')
     expect(summary).toHaveTextContent('transelec-resumen-v1')
+    expect(summary).toHaveTextContent('82ba5eaed0b1')
+    expect(summary).toHaveTextContent('Dev Admin')
+    expect(summary).toHaveTextContent('nunca modifica la planilla de origen')
+  })
+
+  it('marks a restore explicitly in the provenance line', async () => {
+    vi.mocked(listImportHistory).mockResolvedValue({ ok: true, data: history })
+    renderPage(vi.fn(), makeActiveImport({ published_event_type: 'restore' }))
+
+    expect(await screen.findByTestId('provenance-footer')).toHaveTextContent(
+      'restauración de una versión anterior',
+    )
+  })
+
+  it('says there is no provenance to cite when nothing is published', async () => {
+    vi.mocked(listImportHistory).mockResolvedValue({ ok: true, data: history })
+    renderPage(vi.fn(), null)
+
+    const summary = await screen.findByTestId('provenance-footer')
+    expect(summary).toHaveTextContent('todavía no hay procedencia que citar')
+    // TR-OPEN-06 stays disclosed even with nothing published.
+    expect(summary).toHaveTextContent('los logotipos originales no se reutilizan')
   })
 })
