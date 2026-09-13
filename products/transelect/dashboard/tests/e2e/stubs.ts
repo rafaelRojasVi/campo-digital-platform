@@ -49,6 +49,11 @@ export function isFiltered(url: URL): boolean {
   return false
 }
 
+/** The unfiltered summary body, exported so a test can vary one field. */
+export function summaryFixture(shape: SummaryShape = UNFILTERED) {
+  return summaryBody(shape)
+}
+
 function summaryBody(shape: SummaryShape) {
   return {
     import_id: 7,
@@ -166,10 +171,35 @@ export async function stubPlatform(page: Page, options: StubOptions = {}): Promi
     json(route, { csrf_token: 'nonce.signature', header_name: 'X-CSRF-Token' }),
   )
 
-  if (options.extra) await options.extra(page)
-
   const fail = options.readStatus
   const failBody = { detail: options.readDetail ?? 'No hay una versión publicada de Transelec.' }
+
+  // One synthetic activation event, so the Datos section's versions pane has
+  // a history to render. Registered BEFORE `options.extra`: Playwright matches
+  // the most recently added route first, so a test that supplies its own
+  // `/imports` handler must still win over this default.
+  await page.route('**/api/transelec/imports', (route) => {
+    if (fail) return json(route, failBody, fail)
+    return json(route, [
+      {
+        publish_event_id: 11,
+        import_id: 7,
+        event_type: 'publish',
+        occurred_at: '2026-09-02T21:00:00+00:00',
+        actor_app_user_id: 3,
+        actor_display_name: 'Dev Admin',
+        filename: 'planilla-sintetica.xlsx',
+        sha256: '82ba5eaed0b1a110b5966b301ca4a0bcbd3588ad5b8db7ba50d911b320af1851',
+        business_rows: 24,
+        distinct_pmf: 12,
+        distinct_provisional_predio_ids: 20,
+        surface_total: 48.75,
+        is_active: true,
+      },
+    ])
+  })
+
+  if (options.extra) await options.extra(page)
 
   await page.route('**/api/transelec/summary*', (route) => {
     if (fail) return json(route, failBody, fail)

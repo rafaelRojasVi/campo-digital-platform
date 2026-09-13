@@ -1,6 +1,11 @@
 /**
  * TR-FUNC-040 (redesigned) and the version/restore surface.
  *
+ * The import pane now drives a three-step stepper rather than three static
+ * boxes, and the versions pane a timeline rather than a ten-column table.
+ * Neither changed the pipeline, its ordering or its guarantees, so every
+ * assertion below is the one this suite has always made.
+ *
  * The controller's ruling is that TR-FUNC-040's acceptance criteria are met
  * by Task 3's backend tests plus this file's UI-state coverage: upload,
  * validating, validation-failed, duplicate-upload, validated-but-unpublished,
@@ -119,6 +124,10 @@ test('upload → validate → publish, with an explicit confirmation before the 
 
   await expect(page.getByTestId('validation-result')).toBeVisible()
   await expect(page.getByText('Planilla validada')).toBeVisible()
+  // The stepper reflects where the pipeline actually got to.
+  await expect(page.locator('[data-step="upload"]')).toHaveAttribute('data-state', 'done')
+  await expect(page.locator('[data-step="validate"]')).toHaveAttribute('data-state', 'done')
+  await expect(page.locator('[data-step="publish"]')).toHaveAttribute('data-state', 'idle')
   await expect(page.getByText(/Todavía no está publicada/)).toBeVisible()
   await expect(page.getByTestId('upload-evidence')).toContainText('82ba5eaed0b1')
 
@@ -160,6 +169,9 @@ test('a contract violation shows the generic invalid-upload state and no technic
   const failure = page.getByTestId('import-failure')
   await expect(failure).toBeVisible()
   await expect(failure).toContainText('Planilla no válida')
+  // The step that failed says so, and the one after it never started.
+  await expect(page.locator('[data-step="validate"]')).toHaveAttribute('data-state', 'failed')
+  await expect(page.locator('[data-step="publish"]')).toHaveAttribute('data-state', 'idle')
   await expect(failure).toContainText('no cumple el contrato de origen esperado')
   await expect(failure).toContainText('La versión publicada actualmente no ha cambiado')
   await expect(page.getByTestId('validation-result')).toBeHidden()
@@ -331,6 +343,10 @@ test('version history lists activations and restore asks for an explicit confirm
   await expect(page.getByTestId('version-9')).toHaveClass(/active/)
   await expect(page.getByTestId('version-4').getByText('Restauración')).toBeVisible()
   await expect(page.getByTestId('restore-7')).toBeDisabled()
+  // The active entry is distinguishable from the previous one without
+  // reading the disabled button: it is the only one badged as active.
+  await expect(page.getByTestId('version-9').locator('.version-badge.active')).toBeVisible()
+  await expect(page.getByTestId('version-4').locator('.version-badge.active')).toHaveCount(0)
 
   // Cancelling fires nothing.
   await page.getByTestId('restore-3').click()

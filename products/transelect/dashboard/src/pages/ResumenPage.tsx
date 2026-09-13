@@ -184,6 +184,7 @@ export function ResumenPage({
                   to={item.href}
                   className="attention-card"
                   data-attention={item.id}
+                  data-tone={item.tone}
                 >
                   <span className="attention-value" data-testid={`kpi-${item.id}`}>
                     {formatInteger(item.value)}
@@ -218,10 +219,11 @@ export function ResumenPage({
               id="estado-predio-title"
               title="Estado resumido por predio"
               basis={data.summary.basis_estado_resumido}
-              meta={`${formatInteger(data.summary.predio_count)} predios únicos`}
+              meta={`${formatInteger(
+                data.summary.predio_count,
+              )} predios únicos del alcance seleccionado · un denominador distinto del de los PMF`}
             />
             <CompositionBar
-              title="Predios únicos del alcance seleccionado"
               noun="predios aprobados"
               testId="status-hero"
               segments={estadoResumidoSegments(data.summary)}

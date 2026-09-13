@@ -65,23 +65,27 @@ export function QuickActions({ onQuick }: { onQuick: (type: QuickActionType) => 
       <h2 id="faq-title" className="eyebrow" style={{ marginBottom: 'var(--s-3)' }}>
         Consultas frecuentes
       </h2>
-      <div className="btns">
+      {/*
+        Each preset states what it does directly underneath itself. The
+        shipped grid put eight of these in identical cards and left three of
+        them promising more than they delivered; the copy here is the parity
+        matrix's own wording, kept honest and kept next to its control.
+      */}
+      <div className="presets">
         {QUICK_ACTIONS.map((card) => (
-          <button
-            type="button"
-            className="btn alt small"
-            key={card.type}
-            data-quick={card.type}
-            title={card.sub}
-            onClick={() => onQuick(card.type)}
-          >
-            {card.title}
-          </button>
+          <div className="preset" key={card.type}>
+            <button
+              type="button"
+              className="btn alt small"
+              data-quick={card.type}
+              onClick={() => onQuick(card.type)}
+            >
+              {card.title}
+            </button>
+            <span>{card.sub}</span>
+          </div>
         ))}
       </div>
-      <p className="hint" style={{ marginTop: 'var(--s-3)' }}>
-        {QUICK_ACTIONS.map((card) => card.sub).join(' ')}
-      </p>
     </section>
   )
 }

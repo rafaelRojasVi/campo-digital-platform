@@ -392,6 +392,27 @@
   margin-right: var(--s-1);
 }
 
+/* -------------------------------------------------------- filter presets */
+
+.presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--s-4) var(--s-5);
+}
+
+.preset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+
+.preset span {
+  color: var(--ink-3);
+  font-size: var(--t-micro);
+  line-height: 1.5;
+}
+
 /* ---------------------------------------------------------- table zone */
 
 .table-toolbar {
@@ -409,16 +430,20 @@
   gap: var(--s-3);
 }
 
+.result-count > span {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  color: var(--ink-3);
+  font-size: var(--t-small);
+}
+
 .result-count b {
+  color: var(--ink);
   font-size: var(--t-title);
   font-weight: 660;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
-}
-
-.result-count span {
-  color: var(--ink-3);
-  font-size: var(--t-small);
 }
 
 .rows-table tbody tr {
@@ -552,13 +577,21 @@
 /* ================================================================ Datos */
 
 .datos-tabs {
-  display: flex;
+  display: inline-flex;
   gap: var(--s-1);
   padding: var(--s-1);
   border: 1px solid var(--line);
   border-radius: var(--r-control);
   background: var(--sunken);
-  align-self: flex-start;
+}
+
+/*
+ * The import and versions panes are read as a single column of instructions,
+ * not as a dashboard. Capping the measure keeps the sequence legible instead
+ * of leaving the stepper stranded on the left of an empty 1440px page.
+ */
+.datos-pane {
+  max-width: 880px;
 }
 
 .datos-tabs a {
@@ -585,6 +618,7 @@
 }
 
 .dropzone {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -610,8 +644,49 @@
   font-size: var(--t-small);
 }
 
+/*
+ * The input itself is hidden from sight but not from assistive technology or
+ * from automation: it keeps its `aria-label`, so it is still reachable by
+ * name, and the styled label below is what a pointer user presses.
+ */
 .dropzone input[type='file'] {
-  max-width: 100%;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.dropzone-pick {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 var(--s-5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-small);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  transition:
+    border-color var(--d-fast) var(--ease),
+    background-color var(--d-fast) var(--ease);
+}
+
+.dropzone-pick:hover,
+.dropzone input[type='file']:focus-visible + .dropzone-pick {
+  border-color: var(--forest);
+  background: var(--forest-tint);
+}
+
+.dropzone-file {
+  color: var(--ink);
+  font-size: var(--t-small);
 }
 
 .summary-grid {

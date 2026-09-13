@@ -384,10 +384,15 @@ select:hover {
   border-color: var(--ink-3);
 }
 
+/*
+ * The global `:focus-visible` outline is deliberately NOT removed here. The
+ * tinted ring and the accent border are an addition to it, not a replacement:
+ * a field that traded a 2px high-contrast outline for a 3px low-contrast
+ * tint would be a regression for anyone navigating by keyboard.
+ */
 input[type='search']:focus,
 select:focus {
   border-color: var(--forest);
-  outline: none;
   box-shadow: 0 0 0 3px var(--forest-tint);
 }
 
@@ -446,10 +451,18 @@ th {
   white-space: nowrap;
 }
 
+/*
+ * Cells stay on one line and the wrapper scrolls. A dense operational table
+ * is read by scanning down a column; letting a rol like `152-5` break across
+ * two lines destroys that, and costs more vertical space than the horizontal
+ * scroll it saves. Print overrides this and lets every cell wrap, because
+ * paper has no scroll container.
+ */
 td {
   padding: var(--s-3) var(--s-4);
   border-bottom: 1px solid var(--line);
-  vertical-align: top;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
 tbody tr:last-child td {

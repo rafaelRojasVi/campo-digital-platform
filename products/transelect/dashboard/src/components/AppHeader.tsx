@@ -20,7 +20,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Me, TranselecActiveImport } from '../api'
 import { logout, transelecRole } from '../api'
 import { formatDateTime } from '../format'
-import { Link, ROUTES, type Route } from '../router'
+import { Link, ROUTES, useRouter, type Route } from '../router'
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
@@ -35,13 +35,22 @@ interface NavItem {
   privileged?: boolean
   /** Other routes that should light this item up as the current section. */
   also?: readonly Route[]
+  /**
+   * Whether this section reads the shared filter state.
+   *
+   * The four reading sections carry the current filters across a section
+   * change, so moving from a filtered Explorador to the Resumen keeps the
+   * scope the reader chose instead of silently resetting it. Datos has no
+   * filterable view, so it is deliberately not carried there.
+   */
+  filtered?: boolean
 }
 
 const NAV: readonly NavItem[] = [
-  { to: ROUTES.resumen, label: 'Resumen' },
-  { to: ROUTES.explorador, label: 'Explorador' },
-  { to: ROUTES.pendientes, label: 'Pendientes' },
-  { to: ROUTES.calidad, label: 'Calidad' },
+  { to: ROUTES.resumen, label: 'Resumen', filtered: true },
+  { to: ROUTES.explorador, label: 'Explorador', filtered: true },
+  { to: ROUTES.pendientes, label: 'Pendientes', filtered: true },
+  { to: ROUTES.calidad, label: 'Calidad', filtered: true },
   {
     to: ROUTES.datos,
     label: 'Datos',
@@ -122,6 +131,7 @@ export function AppHeader({
 }) {
   const role = transelecRole(me)
   const [navOpen, setNavOpen] = useState(false)
+  const { search } = useRouter()
 
   // The mobile nav is a disclosure, so arriving at a new section must close
   // it — otherwise the reader lands behind the menu they just used.
@@ -161,7 +171,7 @@ export function AppHeader({
           {items.map((item) => (
             <Link
               key={item.to}
-              to={item.to}
+              to={item.filtered ? `${item.to}${search}` : item.to}
               current={currentPath === item.to || item.also?.includes(currentPath as Route)}
               onNavigate={() => setNavOpen(false)}
             >

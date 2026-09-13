@@ -280,8 +280,9 @@ export function ExploradorPage({
             <h2 id="rows-title" className="eyebrow">
               Detalle filtrado
             </h2>
-            <b data-testid="rows-total-value">{formatInteger(rowsMeta.total)}</b>
-            <span data-testid="rows-total">({formatInteger(rowsMeta.total)} áreas de corta)</span>
+            <span data-testid="rows-total">
+              <b>{formatInteger(rowsMeta.total)}</b> áreas de corta
+            </span>
           </div>
           <div className="btns no-print">
             <button type="button" className="btn alt" onClick={downloadCsv} disabled={!data}>

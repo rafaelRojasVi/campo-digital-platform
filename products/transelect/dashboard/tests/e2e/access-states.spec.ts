@@ -16,13 +16,18 @@ test('unauthenticated: every route asks the reader to sign in, and no data is fe
   await stubPlatform(page, { meStatus: 401 })
   await page.goto('/transelec')
 
-  await expect(page.locator('[data-state-kind="unauthenticated"]')).toBeVisible()
-  await expect(page.getByText('Sesión requerida')).toBeVisible()
+  // A 401 is the signed-out state, not an error to report: it gets the
+  // sign-in screen. (The assertion here used to expect the generic
+  // "Sesión requerida" block; that block stopped being reachable when
+  // sign-in moved into the dashboard itself, and this spec had not caught
+  // up. `src/App.test.tsx` has asserted the sign-in screen all along.)
+  await expect(page.getByTestId('login-card')).toBeVisible()
+  await expect(page.getByText('Inicie sesión para continuar')).toBeVisible()
   await expect(page.getByTestId('kpi-row')).toBeHidden()
   expect(transelecCalls).toEqual([])
 })
 
-test('a viewer sees the dashboard but not the operator routes', async ({ page }) => {
+test('a viewer sees the dashboard but not the administration section', async ({ page }) => {
   await stubPlatform(page, {
     me: {
       identity_key: 'dev-viewer',
@@ -33,15 +38,18 @@ test('a viewer sees the dashboard but not the operator routes', async ({ page })
 
   await page.goto('/transelec')
   await expect(page.getByTestId('kpi-row')).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Importar planilla' })).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Versiones' })).toHaveCount(0)
+  // The whole section, not merely its two old routes.
+  await expect(
+    page.getByRole('navigation', { name: 'Secciones de Transelec' }).getByRole('link', {
+      name: 'Datos',
+    }),
+  ).toHaveCount(0)
 
-  await page.goto('/transelec/importar')
-  await expect(page.locator('[data-state-kind="forbidden"]')).toBeVisible()
-  await expect(page.getByText('Sin autorización')).toBeVisible()
-
-  await page.goto('/transelec/versiones')
-  await expect(page.locator('[data-state-kind="forbidden"]')).toBeVisible()
+  for (const path of ['/transelec/datos', '/transelec/importar', '/transelec/versiones']) {
+    await page.goto(path)
+    await expect(page.locator('[data-state-kind="forbidden"]')).toBeVisible()
+    await expect(page.getByText('Sin autorización')).toBeVisible()
+  }
 })
 
 test('a session without the Transelec grant sees the unauthorized state on the dashboard', async ({
@@ -121,5 +129,7 @@ test('loading: a slow response shows a busy state before any numbers appear', as
 
   await page.goto('/transelec')
   await expect(page.getByText('Cargando el alcance seleccionado…')).toBeVisible()
+  // A skeleton shaped like the content it becomes, not a bare spinner.
+  await expect(page.locator('.skeleton').first()).toBeVisible()
   await expect(page.getByTestId('kpi-row')).toBeVisible({ timeout: 15_000 })
 })

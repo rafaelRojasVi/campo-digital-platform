@@ -46,12 +46,27 @@ export function CompositionBar({
   noun,
   segments,
   testId,
+  lead: showLead = true,
 }: {
-  title: string
+  /**
+   * Omitted when the enclosing section heading already names this bar —
+   * repeating it directly above the track is the same duplication this
+   * component exists to remove.
+   */
+  title?: string
   /** The unit being counted, for the accessible description and the readout. */
   noun: string
   segments: CompositionSegment[]
   testId?: string
+  /**
+   * Whether the first segment is the one the bar is *about*.
+   *
+   * True for an approval bar, where "108 of 159 approved" is the headline.
+   * False for a bar whose segments are peers — the three pending stages, for
+   * instance, where singling the first one out would invent an emphasis the
+   * data does not carry. The legend then does all the work.
+   */
+  lead?: boolean
 }) {
   const present = segments.filter((segment) => segment.value > 0)
   const total = segments.reduce((sum, segment) => sum + segment.value, 0)
@@ -65,16 +80,18 @@ export function CompositionBar({
   return (
     <div className="composition" data-testid={testId}>
       <div className="composition-head">
-        <span className="composition-title">{title}</span>
+        {title && <span className="composition-title">{title}</span>}
         <span className="composition-total" data-testid={testId && `${testId}-total`}>
-          {formatInteger(lead.value)} de {formatInteger(total)} {noun}
+          {showLead
+            ? `${formatInteger(lead.value)} de ${formatInteger(total)} ${noun}`
+            : `${formatInteger(total)} ${noun}`}
         </span>
       </div>
 
       <div
         className="composition-track"
         role="img"
-        aria-label={`${title}: ${description || `sin ${noun}`}. Total ${formatInteger(total)}.`}
+        aria-label={`${title ? `${title}: ` : ''}${description || `sin ${noun}`}. Total ${formatInteger(total)}.`}
       >
         {present.map((segment) => {
           const percentage = total ? (segment.value / total) * 100 : 0
@@ -105,9 +122,11 @@ export function CompositionBar({
               </b>
             </span>
           ))}
-          <span className="muted">
-            {formatNumber(leadPercentage)}% {lead.label.toLocaleLowerCase('es-CL')}
-          </span>
+          {showLead && (
+            <span className="muted">
+              {formatNumber(leadPercentage)}% {lead.label.toLocaleLowerCase('es-CL')}
+            </span>
+          )}
         </div>
       )}
     </div>

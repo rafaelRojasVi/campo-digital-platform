@@ -156,7 +156,7 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
   }
 
   return (
-    <div className="stack">
+    <div className="stack datos-pane">
       <section>
         <SectionHeader
           title="Importar planilla"
@@ -225,8 +225,11 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
                 setFailure(null)
               }}
             />
+            <label className="dropzone-pick" htmlFor="workbook-file">
+              Elegir archivo
+            </label>
             {file && (
-              <p>
+              <p className="dropzone-file">
                 Seleccionado: <b>{file.name}</b> · {formatBytes(file.size)}
               </p>
             )}

@@ -168,8 +168,9 @@ export function PendientesPage({
             />
             <CompositionBar
               title="Etapa inferida del texto de «Estado»"
-              noun="PMF"
+              noun="PMF pendientes"
               testId="pending-stage"
+              lead={false}
               segments={stageSegments(data)}
             />
           </div>

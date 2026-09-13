@@ -150,7 +150,14 @@ export function Disclosure({
   children: ReactNode
 }) {
   return (
-    <div className={`disclosure-panel${open ? ' open' : ''}`} id={id} hidden={!open}>
+    <div
+      className={`disclosure-panel${open ? ' open' : ''}`}
+      id={id}
+      // `inert` rather than `hidden`: the panel must stay in the layout to
+      // animate, but nothing inside a closed one may be tabbed to, clicked,
+      // or read out.
+      inert={!open}
+    >
       <div className="disclosure-inner">{children}</div>
     </div>
   )

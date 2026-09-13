@@ -782,18 +782,32 @@
 
 /* ========================================================== disclosure */
 
+ /*
+  * A closed panel must be genuinely closed: zero height is not enough,
+  * because its controls would still be focusable, announced, and "visible"
+  * to anything that measures a bounding box. `visibility: hidden` settles
+  * all three — and is delayed by the collapse duration so the panel is still
+  * painted while it animates shut, then hidden the instant it is done.
+  */
 .disclosure-panel {
   display: grid;
   grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
   transition:
     grid-template-rows var(--d-base) var(--ease),
-    opacity var(--d-base) var(--ease);
-  opacity: 0;
+    opacity var(--d-base) var(--ease),
+    visibility 0s linear var(--d-base);
 }
 
 .disclosure-panel.open {
   grid-template-rows: 1fr;
   opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows var(--d-base) var(--ease),
+    opacity var(--d-base) var(--ease),
+    visibility 0s;
 }
 
 .disclosure-inner {
@@ -1015,12 +1029,23 @@
 
 .timeline-meta {
   display: flex;
-  gap: var(--s-4);
+  gap: var(--s-5);
   flex-wrap: wrap;
   margin-top: var(--s-3);
   color: var(--ink-3);
   font-size: var(--t-small);
   font-variant-numeric: tabular-nums;
+}
+
+/* A hairline rather than a dot between metadata items: it survives wrapping
+ * without leaving an orphaned separator at the end of a line. */
+.timeline-meta > span + span {
+  padding-left: var(--s-5);
+  border-left: 1px solid var(--line-strong);
+}
+
+.timeline-entry.active .timeline-meta > span + span {
+  border-left-color: #bcd9c9;
 }
 
 /* ============================================================ pagination */
@@ -1041,6 +1066,9 @@
   display: flex;
   align-items: center;
   gap: var(--s-3);
+  /* Wraps on a phone rather than pushing the page into a horizontal scroll:
+   * the table has its own scroll container, the page must never have one. */
+  flex-wrap: wrap;
 }
 
 .pagination-controls label {
@@ -1199,7 +1227,7 @@
 
   .topnav {
     position: absolute;
-    top: var(--shell-h);
+    top: 100%;
     right: 0;
     left: 0;
     z-index: 41;
@@ -1236,13 +1264,40 @@
     padding: var(--s-5) var(--s-4) var(--s-8);
   }
 
+  /*
+   * A phone cannot hold the wordmark, the nav trigger, the version stamp and
+   * the session control on one 390px line. The bar wraps into two rows
+   * instead of truncating the version stamp, which is the one thing in the
+   * shell a reader must be able to trust. Two rows is ~90px — still a third
+   * of the 290px the shipped header spent before a single number.
+   */
   .topbar-inner {
+    height: auto;
     gap: var(--s-3);
-    padding: 0 var(--s-4);
+    flex-wrap: wrap;
+    padding: var(--s-3) var(--s-4);
+  }
+
+  .shell-side {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
   }
 
   .wordmark-text {
     font-size: var(--t-micro);
+  }
+
+  /* The separators exist to divide a single line. Stacked, they become
+   * orphaned slashes on lines of their own. */
+  .context-strip {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-2);
+  }
+
+  .context-strip .sep {
+    display: none;
   }
 
   .figure.lead .figure-value {

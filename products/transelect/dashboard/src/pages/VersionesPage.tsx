@@ -98,7 +98,7 @@ export function VersionesPage({
   const rows = history ?? []
 
   return (
-    <div className="stack">
+    <div className="stack datos-pane">
       <section>
         <SectionHeader
           title="Versiones publicadas"
