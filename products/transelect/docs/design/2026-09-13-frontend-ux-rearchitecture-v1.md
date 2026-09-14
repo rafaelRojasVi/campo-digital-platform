@@ -388,3 +388,83 @@ shaped like the content that replaces them.
 Backend, API contracts, schema, migrations, auth, RBAC, status rules, aggregation,
 field meanings, parsing, publication semantics, CSV content. Real Transelec logos
 are not used; identity stays typographic pending TR-OPEN-06.
+
+---
+
+## 12. RESULT — what was built, and what it measures
+
+Implemented on `feat/transelec-ux-rearchitecture-v1` from
+`a4aaa5b63b8fe60fce117978914ee392cc07dad7`.
+
+### Measured outcome
+
+Same machine, same browser, same published version, same real data.
+
+| Measurement | Before | After |
+|---|---|---|
+| `/transelec` document height at 1440×900 | 4 210 px | 1 439 px |
+| `/transelec` document height at 390×844 | 7 977 px | 2 828 px |
+| Sibling sections on the landing route | 11 + footer | 5 |
+| Blocks using the identical card shell | 7 | 0 |
+| Shell height before any content (desktop) | 200 px | 56 px |
+| Shell height before any content (phone) | ~290 px (34 % of viewport) | ~90 px |
+| Scroll distance to the row table | ~2 800 px | 0 (own section, above the fold) |
+| Horizontal page overflow at 390 px | none | none |
+| Filter state survives reload / is linkable | no | yes |
+| Single row's full contract fields visible | nowhere | detail drawer |
+
+### Defects the work found and fixed
+
+Four were found by writing the navigation tests, not by reading the code:
+
+1. Section links dropped the filter state, silently resetting the reader's
+   scope on every section change.
+2. A closed filter disclosure was only zero-height: its controls stayed
+   focusable, clickable and announced to assistive technology.
+3. Search and select inputs replaced the focus outline with a 3 px low-contrast
+   tint ring — a regression for keyboard navigation. The outline is restored
+   and the ring is now additive.
+4. Pagination controls forced a horizontal page scroll at 390 px.
+
+One pre-existing broken assertion was corrected rather than carried forward:
+`tests/e2e/access-states.spec.ts` expected the generic `Sesión requerida`
+block on a 401, which stopped being reachable when `a4aaa5b` moved sign-in
+into the dashboard itself. `src/App.test.tsx` had asserted the sign-in screen
+all along; the two now agree.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `make check` | 629 passed, 7 skipped (pdal CLI absent, pre-existing), doc links OK |
+| `npm run lint` | clean (warnings only, same classes as before) |
+| `npm run build` | clean, 271 kB JS / 39 kB CSS |
+| `npx vitest run` | 163 passed, 21 files, production-bundle guard included |
+| `npm run test:e2e` | 90 passed |
+| Browser QA | 1440×900, 1280×800, 768×1024, 390×844; no horizontal overflow on any section at any size; no console errors |
+
+`make migration-check` and `make persistence-check` are BLOCKED, not run.
+`compose.yaml` binds `postgres-test` to `127.0.0.1:5433:5432`, and
+`heavy-ops-pilot-v1-db-test-1` (`postgis/postgis:16-3.4`) already holds
+`0.0.0.0:5433` and `[::]:5433`. This repository's own
+`campo-digital-postgres-test-1` is in state `Created`, never started, for that
+reason. The other project's container was not touched. Neither target is part
+of `make check`.
+
+### LIMITATION
+
+Browser QA was performed in Chromium only, which is the single project the
+Playwright config defines. Nothing here was verified in Firefox or WebKit.
+
+### OPEN QUESTION
+
+Whether the Resumen's section order matches how Javier actually works — in
+particular whether the attention row leads with what he needs first, and
+whether the work queue's ordering is useful — is a question for him, not
+something this rebuild can settle from the workbook.
+
+## Related documentation
+
+[Rediseño de la interfaz (español)](../es/2026-09-13-rediseno-interfaz-transelec.md) ·
+[Hallazgos y preguntas para Javier](../es/2026-09-02-hallazgos-y-preguntas-javier.md) ·
+[Transelec product README](../../README.md)

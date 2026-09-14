@@ -37,3 +37,14 @@ Source files remain outside Git.
 
 No PMF-level status aggregation rule or canonical persistence identity has yet
 been inferred.
+
+## Dashboard
+
+The operator-facing dashboard lives in `dashboard/` (React 19, no UI
+framework, no routing library). Its information architecture, design tokens
+and the audit that produced them are recorded in:
+
+- [Frontend UX rearchitecture V1](docs/design/2026-09-13-frontend-ux-rearchitecture-v1.md)
+- [Rediseño de la interfaz (español)](docs/es/2026-09-13-rediseno-interfaz-transelec.md)
+
+Run it locally with `make transelec-dev` from the repository root.
