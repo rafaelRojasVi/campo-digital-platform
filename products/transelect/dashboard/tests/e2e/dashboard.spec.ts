@@ -30,6 +30,16 @@ async function openExplorador(page: Page) {
   await expect(page.getByTestId('rows-body')).toBeVisible()
 }
 
+/**
+ * The filter surface — the five fields and the four presets — lives behind a
+ * disclosure, so a test that drives either has to open it first, exactly as a
+ * reader would.
+ */
+async function openFilters(page: Page) {
+  await page.getByRole('button', { name: /^Filtros/ }).click()
+  await expect(page.getByRole('button', { name: 'Sector', exact: true })).toBeVisible()
+}
+
 async function openPendientes(page: Page) {
   await page.goto('/transelec/pendientes')
   await expect(page.getByTestId('pending-zone')).toBeVisible()
@@ -160,7 +170,7 @@ test('TR-FUNC-014/015: a quality indicator reading zero renders calm, not as a w
 
 test('TR-FUNC-018-022: a multi-select narrows the result set', async ({ page }) => {
   await openExplorador(page)
-  await page.getByRole('button', { name: 'Filtros' }).click()
+  await openFilters(page)
   await page.getByRole('button', { name: 'Sector', exact: true }).click()
   await page.getByLabel('Norte').check()
 
@@ -221,6 +231,7 @@ test('TR-FUNC-025: the Explorador’s search is the N.º de ingreso lookup, and 
 
 test('TR-FUNC-026: the easement preset selects exactly Servidumbre firmada', async ({ page }) => {
   await openExplorador(page)
+  await openFilters(page)
   const request = page.waitForRequest(
     (req) =>
       req.url().includes('/api/transelec/pmfs') &&
@@ -243,6 +254,7 @@ test('TR-FUNC-028/029: the rejected and legal presets run their literal substrin
   page,
 }) => {
   await openExplorador(page)
+  await openFilters(page)
 
   await page.getByText('¿Qué expedientes tienen rechazo?').click()
   await expect(page.getByLabel('Búsqueda general')).toHaveValue('rechaz')
@@ -256,6 +268,7 @@ test('TR-FUNC-030: the company preset opens the Empresa filter and nothing else'
   page,
 }) => {
   await openExplorador(page)
+  await openFilters(page)
   await page.getByText('¿Cómo avanza cada empresa?').click()
 
   await expect(page.getByRole('button', { name: 'Empresa', exact: true })).toHaveAttribute(

@@ -139,6 +139,12 @@ export function AppHeader({
 
   const items = NAV.filter((item) => !item.privileged || canPublish)
 
+  // Signed out, there is nothing to navigate to and no version to stamp: the
+  // whole application is one screen, the sign-in screen. Showing a section
+  // bar and a "Sin versión publicada" chip there would offer a reader four
+  // destinations they cannot open and blame the data for a session problem.
+  const signedIn = me !== null
+
   return (
     <header className="topbar no-print">
       <div className="topbar-inner">
@@ -153,35 +159,39 @@ export function AppHeader({
           </span>
         </Link>
 
-        <button
-          type="button"
-          className="topnav-toggle"
-          aria-expanded={navOpen}
-          aria-controls="secciones"
-          onClick={() => setNavOpen((value) => !value)}
-        >
-          Secciones
-        </button>
+        {signedIn && (
+          <button
+            type="button"
+            className="topnav-toggle"
+            aria-expanded={navOpen}
+            aria-controls="secciones"
+            onClick={() => setNavOpen((value) => !value)}
+          >
+            Secciones
+          </button>
+        )}
 
-        <nav
-          id="secciones"
-          className={`topnav${navOpen ? ' open' : ''}`}
-          aria-label="Secciones de Transelec"
-        >
-          {items.map((item) => (
-            <Link
-              key={item.to}
-              to={item.filtered ? `${item.to}${search}` : item.to}
-              current={currentPath === item.to || item.also?.includes(currentPath as Route)}
-              onNavigate={() => setNavOpen(false)}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        {signedIn && (
+          <nav
+            id="secciones"
+            className={`topnav${navOpen ? ' open' : ''}`}
+            aria-label="Secciones de Transelec"
+          >
+            {items.map((item) => (
+              <Link
+                key={item.to}
+                to={item.filtered ? `${item.to}${search}` : item.to}
+                current={currentPath === item.to || item.also?.includes(currentPath as Route)}
+                onNavigate={() => setNavOpen(false)}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        )}
 
         <div className="shell-side">
-          {activeImport ? (
+          {signedIn && activeImport ? (
             <span
               className="version-chip"
               title={`Publicada ${formatDateTime(activeImport.published_at)}`}
@@ -189,7 +199,8 @@ export function AppHeader({
               <b>Versión activa #{activeImport.import_id}</b>
               <span>Publicada {formatDateTime(activeImport.published_at)}</span>
             </span>
-          ) : (
+          ) : null}
+          {signedIn && !activeImport && (
             <span className="version-chip none">
               <b>Sin versión publicada</b>
             </span>

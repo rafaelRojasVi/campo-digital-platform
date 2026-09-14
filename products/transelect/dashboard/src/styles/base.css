@@ -417,11 +417,29 @@ input[type='file'] {
 
 /* --------------------------------------------------------------- tables */
 
+/*
+ * A dense table scrolls inside its own container so the page never does.
+ * The shadow on the right edge is how the reader knows there is more: it
+ * appears only while the content actually overflows, and it retreats as they
+ * reach the end (the classic four-layer scroll-shadow, pure CSS, no script).
+ */
 .tablewrap {
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--r-surface);
-  background: var(--surface);
+  background:
+    linear-gradient(to right, var(--surface) 30%, transparent) left center,
+    linear-gradient(to left, var(--surface) 30%, transparent) right center,
+    radial-gradient(farthest-side at 0 50%, rgb(22 33 29 / 0.14), transparent) left center,
+    radial-gradient(farthest-side at 100% 50%, rgb(22 33 29 / 0.14), transparent) right center;
+  background-repeat: no-repeat;
+  background-size:
+    36px 100%,
+    36px 100%,
+    12px 100%,
+    12px 100%;
+  background-attachment: local, local, scroll, scroll;
+  background-color: var(--surface);
   overscroll-behavior-x: contain;
 }
 

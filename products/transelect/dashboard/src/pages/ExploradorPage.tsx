@@ -244,9 +244,14 @@ export function ExploradorPage({
             empresaOpenSignal={empresaOpenSignal}
             onChange={setField}
           />
+          {/*
+            The presets live inside the filter panel because that is what they
+            are: four filter states somebody asks for often enough to deserve
+            a button. Above the table they were a third block of chrome
+            between the reader and the data.
+          */}
+          <QuickActions onQuick={handleQuick} />
         </Disclosure>
-
-        <QuickActions onQuick={handleQuick} />
 
         {chips.length > 0 && (
           <div className="active-filters no-print" data-testid="active-filters">

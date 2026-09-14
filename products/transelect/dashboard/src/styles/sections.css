@@ -370,15 +370,26 @@
   font-variant-numeric: tabular-nums;
 }
 
-.filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--s-5);
+ /* The disclosure's contents: the five fields, then the presets, inside one
+  * panel so the whole filter surface opens and closes as a unit. */
+.disclosure-inner > .filters,
+.disclosure-inner > .questions {
   margin-top: var(--s-4);
   padding: var(--s-5);
   border: 1px solid var(--line);
   border-radius: var(--r-surface);
   background: var(--surface);
+}
+
+.disclosure-inner > .questions {
+  border-top: 0;
+  margin-top: var(--s-3);
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--s-5);
 }
 
 .active-filters {

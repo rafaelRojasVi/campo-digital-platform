@@ -519,14 +519,21 @@
   background: var(--info-tint);
 }
 
+ /*
+  * A hint, not an alert. It explains how the search field behaves and never
+  * changes, so it wears the page's quietest text treatment rather than its
+  * loudest banner.
+  */
 .notice {
-  padding: var(--s-3) var(--s-4);
-  border-left: 3px solid var(--info-line);
-  border-radius: var(--r-control);
-  background: var(--info-tint);
-  color: var(--ink-2);
+  max-width: var(--measure);
+  color: var(--ink-3);
   font-size: var(--t-small);
   line-height: 1.55;
+}
+
+.notice b {
+  color: var(--ink-2);
+  font-weight: 650;
 }
 
 /* ============================================================ state block */

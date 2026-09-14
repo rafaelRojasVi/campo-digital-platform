@@ -306,3 +306,19 @@ test.describe('the skip link', () => {
     await expect(skip).toHaveAttribute('href', '#contenido')
   })
 })
+
+test.describe('the signed-out shell', () => {
+  test('offers no section navigation and no version stamp', async ({ page }) => {
+    await stubPlatform(page, { meStatus: 401 })
+    await page.goto('/transelec')
+
+    await expect(page.getByTestId('login-card')).toBeVisible()
+    // Four destinations a visitor cannot open, and a "Sin versión publicada"
+    // chip blaming the data for a session problem, are both absent.
+    await expect(
+      page.getByRole('navigation', { name: 'Secciones de Transelec' }),
+    ).toHaveCount(0)
+    await expect(page.getByText('Sin versión publicada')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Secciones' })).toHaveCount(0)
+  })
+})
