@@ -1,14 +1,22 @@
 /**
  * `/transelec` — the operational command centre.
  *
- * The page answers four questions in this order, and the visual weight
- * follows that order rather than the order the source workbook happened to
- * produce numbers in:
+ * The page answers, in this order, the questions the people who use it
+ * actually ask — and the visual weight follows that order:
  *
- *   1. Where does the programme stand?        lead figure + composition bars
- *   2. What needs attention?                  attention row
- *   3. How big is the thing being measured?   scale strip (quiet)
- *   4. What do I do next?                     work queue, then the Explorador
+ *   1. ¿Cuál es el estado de los planes de manejo?   headline, PMF grain
+ *   2. ¿En qué estado de tramitación exactamente?    detailed drill-down
+ *   3. ¿Cómo se reparte entre empresas?              company matrix
+ *   4. ¿Qué necesita atención?                       attention row
+ *   5. ¿Cuántos predios de reforestación son?        reforestación section
+ *   6. ¿Qué hago ahora?                              work queue, Explorador
+ *
+ * Question 1 is Javier's recurring one, asked of Marianne every reporting
+ * cycle and answered by her off the workbook's `Estado resumido` column. It
+ * is therefore the first analytical section and the page's largest figure,
+ * at the grain the question is asked in: plans, not detail rows.
+ *
+ * Questions 5's honest answer is "not exactly" — see `ReforestacionPanel`.
  *
  * Every value comes from `GET /transelec/summary` and `GET /transelec/pending`
  * under the current filter state, which is read from the URL. Nothing here
@@ -27,7 +35,11 @@ import {
   getPending,
   getSummary,
 } from '../api'
+import { CompanyMatrix } from '../components/CompanyMatrix'
+import { EstadoDetalleTable } from '../components/EstadoDetalleTable'
+import { ReforestacionPanel } from '../components/ReforestacionPanel'
 import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
+import { StatusHeadline } from '../components/StatusHeadline'
 import { cell, formatDateTime, formatInteger, formatNumber } from '../format'
 import { activeFilterChips, withoutChip } from '../lib/filterUrl'
 import { PENDING_STAGE_LABELS } from '../lib/pendingStage'
@@ -39,8 +51,8 @@ import {
 } from '../lib/summaryView'
 import { useReads, type FilterController } from '../lib/useFilters'
 import { Link, ROUTES } from '../router'
-import { CompositionBar, leadPercentage } from '../ui/CompositionBar'
-import { Chip, Figure, SectionHeader, StatStrip } from '../ui/Primitives'
+import { CompositionBar } from '../ui/CompositionBar'
+import { Chip, SectionHeader, StatStrip } from '../ui/Primitives'
 
 const QUEUE_LIMIT = 6
 
@@ -134,38 +146,28 @@ export function ResumenPage({
 
       {data && (
         <>
-          <section className="lead-block" aria-labelledby="estado-title">
-            <div className="lead-figure">
-              <Figure
-                lead
-                testId="lead-approval"
-                value={formatNumber(leadPercentage(approvalSegments(data.summary.avance_por_pmf)))}
-                unit="%"
-                label="de los PMF aprobados"
-                note={`${formatInteger(data.summary.avance_por_pmf.aprobado)} de ${formatInteger(
-                  data.summary.pmf_count,
-                )} planes de manejo del alcance seleccionado`}
-              />
-              <span className="basis-tag">{data.summary.basis_estado_resumido}</span>
-            </div>
+          <StatusHeadline summary={data.summary} filters={filters} />
 
-            <div className="compositions">
-              <h2 id="estado-title" className="eyebrow">
-                Avance de aprobación
-              </h2>
-              <CompositionBar
-                title="Por planes de manejo (PMF)"
-                noun="PMF aprobados"
-                testId="composition-pmf"
-                segments={approvalSegments(data.summary.avance_por_pmf)}
-              />
-              <CompositionBar
-                title="Por predios"
-                noun="predios aprobados"
-                testId="composition-predios"
-                segments={approvalSegments(data.summary.avance_por_predio)}
-              />
-            </div>
+          <section className="ruled" aria-labelledby="detalle-title">
+            <SectionHeader
+              id="detalle-title"
+              title="Estado detallado de tramitación"
+              basis={data.summary.basis_estado_resumido}
+              meta={`Desglose del encabezado sobre los mismos ${formatInteger(
+                data.summary.pmf_count,
+              )} PMF · evaluación, rechazos y recursos`}
+            />
+            <EstadoDetalleTable summary={data.summary} />
+          </section>
+
+          <section className="ruled" aria-labelledby="empresa-title">
+            <SectionHeader
+              id="empresa-title"
+              title="Por empresa"
+              basis={data.summary.basis_estado_resumido}
+              meta="Cada PMF pertenece a una sola empresa, por lo que los subtotales suman el total."
+            />
+            <CompanyMatrix summary={data.summary} filters={filters} />
           </section>
 
           <section className="ruled" aria-labelledby="atencion-title" data-testid="attention-row">
@@ -214,6 +216,22 @@ export function ResumenPage({
             <StatStrip items={buildScaleStats(data.summary)} />
           </section>
 
+          <section className="ruled" aria-labelledby="reforestacion-title">
+            <SectionHeader
+              id="reforestacion-title"
+              title="Reforestación"
+              meta="Lo que la planilla puede responder sobre reforestación, y lo que no."
+            />
+            <ReforestacionPanel reforestacion={data.summary.reforestacion} />
+          </section>
+
+          {/*
+            The predio grain, kept and demoted rather than dropped. It answers
+            a different question from the headline — a plan covers several
+            cutting properties, so 159 PMF and 272 predios are two genuine
+            denominators — and it is the grain the shipped interface led with.
+            It stays available, below the question people actually ask.
+          */}
           <section className="ruled" aria-labelledby="estado-predio-title">
             <SectionHeader
               id="estado-predio-title"
@@ -227,6 +245,12 @@ export function ResumenPage({
               noun="predios aprobados"
               testId="status-hero"
               segments={estadoResumidoSegments(data.summary)}
+            />
+            <CompositionBar
+              title="Agrupado como aprobado / en trámite / resto"
+              noun="predios aprobados"
+              testId="composition-predios"
+              segments={approvalSegments(data.summary.avance_por_predio)}
             />
           </section>
 

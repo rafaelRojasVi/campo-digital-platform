@@ -1,10 +1,11 @@
 /**
  * `/transelec/calidad` — source quality and reporting.
  *
- * Four things that all answer "what can I say about this data, and to whom"
+ * Five things that all answer "what can I say about this data, and to whom"
  * were scattered across the shipped dashboard as four interchangeable cards
  * between the daily operational blocks: the quality indicators, the
- * reforestation predios, the owner-status table and the executive report.
+ * conflicting-status evidence, the reforestation references, the
+ * owner-status table and the executive report.
  * Grouped here, they stop competing with the work and start reading as one
  * job: produce and defend evidence.
  *
@@ -23,8 +24,10 @@ import {
   getReport,
   getSummary,
 } from '../api'
+import { ConflictPanel } from '../components/ConflictPanel'
 import { OwnerStatusTable } from '../components/OwnerStatusTable'
 import { QualityPanel } from '../components/QualityPanel'
+import { ReforestacionPanel } from '../components/ReforestacionPanel'
 import { ReforestationChips } from '../components/ReforestationChips'
 import { ReportPanel } from '../components/ReportPanel'
 import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
@@ -108,9 +111,29 @@ export function CalidadPage({ filterController }: { filterController: FilterCont
             <QualityPanel summary={data.summary} />
           </section>
 
+          <section className="ruled" aria-labelledby="conflict-title">
+            <SectionHeader
+              id="conflict-title"
+              title="PMF con más de un «Estado resumido»"
+              meta="La inconsistencia que hace que los estados no cuadren si se suman fila a fila."
+            />
+            <ConflictPanel
+              conflicts={data.summary.calidad_pmf_estado_resumido_conflictivo}
+              basis={data.summary.basis_estado_resumido}
+              filters={filters}
+            />
+          </section>
+
           <section className="ruled" aria-labelledby="ref-title">
-            <SectionHeader id="ref-title" title="Predios de reforestación" />
-            <ReforestationChips predios={data.summary.predios_reforestacion} />
+            <SectionHeader
+              id="ref-title"
+              title="Reforestación"
+              meta="Definición exacta de la métrica y lo que el origen no permite responder."
+            />
+            <ReforestacionPanel reforestacion={data.summary.reforestacion} />
+            <div style={{ marginTop: 'var(--s-6)' }}>
+              <ReforestationChips predios={data.summary.reforestacion.predio_ref_labels} />
+            </div>
           </section>
 
           <section className="ruled" aria-labelledby="owner-title">

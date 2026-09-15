@@ -8,6 +8,8 @@ so nothing here could pass by accident if a code path assumed those numbers.
 
 from __future__ import annotations
 
+from dataclasses import fields
+
 from transelec_ingestion.summary_view import SummaryInputRow, build_summary
 
 
@@ -24,6 +26,8 @@ def _row(
     id_predio_unico: str | None = "id",
     superficie_corta: float | None = 1.0,
     rol: str | None = "R1",
+    empresa: str | None = None,
+    rol_ref: str | None = None,
 ) -> SummaryInputRow:
     return SummaryInputRow(
         source_row_number=source_row_number,
@@ -37,6 +41,8 @@ def _row(
         id_predio_unico=id_predio_unico,
         superficie_corta=superficie_corta,
         rol=rol,
+        empresa=empresa,
+        rol_ref=rol_ref,
     )
 
 
@@ -257,3 +263,448 @@ def test_empty_filtered_view_produces_all_zero_counts_not_an_error() -> None:
     assert summary.predio_count == 0
     assert summary.surface_total == 0.0
     assert summary.predios_reforestacion == []
+
+
+# ---------------------------------------------------------------------------
+# PMF-grain headline — "¿Cuál es el estado de los planes de manejo?"
+#
+# Marianne answers Javier's recurring question off the `Estado resumido`
+# column, and the 29-Jul Power BI summary she produces from it reports
+# 101 + 56 + 3 = 160 against a stated total of 159, because one PMF appears
+# under two summarized states. These tests pin the invariant that makes that
+# impossible here: the headline is PMF-grain, and its buckets sum to the PMF
+# total exactly.
+# ---------------------------------------------------------------------------
+
+
+def test_headline_is_pmf_grain_not_row_grain() -> None:
+    """729 detail rows in the reviewed snapshot describe 159 plans.
+
+    Counting rows would report the workbook's row count as the number of
+    management plans — roughly four and a half times the real figure. The
+    shape is reproduced here in miniature: 5 rows, 2 plans.
+    """
+
+    rows = [
+        _row(source_row_number=1, pmf="MP001", predio_group_key="A", estado_resumido="Aprobado"),
+        _row(source_row_number=2, pmf="MP001", predio_group_key="B", estado_resumido="Aprobado"),
+        _row(source_row_number=3, pmf="MP001", predio_group_key="C", estado_resumido="Aprobado"),
+        _row(source_row_number=4, pmf="MP002", predio_group_key="D", estado_resumido="En tramite"),
+        _row(source_row_number=5, pmf="MP002", predio_group_key="E", estado_resumido="En tramite"),
+    ]
+
+    summary = build_summary(rows)
+
+    assert summary.row_count == 5
+    assert summary.pmf_count == 2
+    assert summary.estado_resumido_pmf.aprobado == 1
+    assert summary.estado_resumido_pmf.en_tramite == 1
+
+
+def test_headline_buckets_sum_exactly_to_the_pmf_total() -> None:
+    """The arithmetic the Power BI summary gets wrong, asserted directly."""
+
+    rows = [
+        _row(source_row_number=1, pmf="MP001", predio_group_key="A", estado_resumido="Aprobado"),
+        _row(source_row_number=2, pmf="MP002", predio_group_key="B", estado_resumido="En tramite"),
+        _row(source_row_number=3, pmf="MP003", predio_group_key="C", estado_resumido="Tachado"),
+        _row(source_row_number=4, pmf="MP004", predio_group_key="D", estado_resumido="Pendiente"),
+        _row(source_row_number=5, pmf="MP005", predio_group_key="E", estado_resumido=None),
+    ]
+
+    summary = build_summary(rows)
+    hero = summary.estado_resumido_pmf
+
+    assert (
+        hero.aprobado + hero.en_tramite + hero.pendiente + hero.tachado + hero.sin_estado
+        == summary.pmf_count
+        == 5
+    )
+
+
+def test_a_pmf_with_two_summarized_states_is_counted_once_not_twice() -> None:
+    """The MP015/MP022 case: conflicting evidence, one headline bucket.
+
+    The reviewed 14-Aug snapshot's conflicting PMF is MP022 (`En tramite`
+    on rows 293-306 and 308-314, `Tachado` on row 307, detailed `Estado`
+    `Rechazado` throughout); the 29-Jul summary's is MP015. Same shape, so
+    the rule is pinned rather than either identifier.
+    """
+
+    rows = [
+        _row(
+            source_row_number=1,
+            pmf="MP015",
+            predio_group_key="A",
+            estado="Rechazado",
+            estado_resumido="En tramite",
+        ),
+        _row(
+            source_row_number=2,
+            pmf="MP015",
+            predio_group_key="B",
+            estado="Rechazado",
+            estado_resumido="Aprobado",
+        ),
+        _row(source_row_number=3, pmf="MP016", predio_group_key="C", estado_resumido="Aprobado"),
+    ]
+
+    summary = build_summary(rows)
+    hero = summary.estado_resumido_pmf
+
+    assert summary.pmf_count == 2
+    # Not 1 approved + 1 in process + 1 approved = 3 across 2 plans.
+    assert (hero.aprobado, hero.en_tramite) == (1, 1)
+    assert hero.aprobado + hero.en_tramite + hero.pendiente + hero.tachado + hero.sin_estado == 2
+
+
+def test_the_conflict_is_reported_rather_than_silently_resolved() -> None:
+    rows = [
+        _row(
+            source_row_number=7,
+            pmf="MP015",
+            predio_group_key="A",
+            estado="Rechazado",
+            estado_resumido="En tramite",
+        ),
+        _row(
+            source_row_number=8,
+            pmf="MP015",
+            predio_group_key="B",
+            estado="Rechazado",
+            estado_resumido="Aprobado",
+        ),
+        _row(source_row_number=9, pmf="MP016", predio_group_key="C", estado_resumido="Aprobado"),
+    ]
+
+    conflicts = build_summary(rows).calidad_pmf_estado_resumido_conflictivo
+
+    assert [conflict.pmf for conflict in conflicts] == ["MP015"]
+    conflict = conflicts[0]
+    assert conflict.valores == ["En tramite", "Aprobado"]
+    assert conflict.canonico == "En tramite"  # first source row wins, the repository's contract
+    assert conflict.estado_detalle == "Rechazado"
+    assert conflict.source_row_number == 7
+
+
+def test_a_consistent_pmf_is_not_reported_as_a_conflict() -> None:
+    rows = [
+        _row(source_row_number=1, pmf="MP001", predio_group_key="A", estado_resumido="Aprobado"),
+        _row(source_row_number=2, pmf="MP001", predio_group_key="B", estado_resumido="Aprobado"),
+    ]
+
+    assert build_summary(rows).calidad_pmf_estado_resumido_conflictivo == []
+
+
+def test_casing_variants_of_one_state_are_not_two_conflicting_states() -> None:
+    """`En Evaluacion` and `En evaluacion` are one state, not two.
+
+    Normalisation reconciles the spelling; the raw value still reaches the
+    caller as the label.
+    """
+
+    rows = [
+        _row(
+            source_row_number=1,
+            pmf="MP001",
+            predio_group_key="A",
+            estado="En Evaluacion",
+            estado_resumido="En tramite",
+        ),
+        _row(
+            source_row_number=2,
+            pmf="MP001",
+            predio_group_key="B",
+            estado="En evaluacion",
+            estado_resumido="En Tramite",
+        ),
+    ]
+
+    summary = build_summary(rows)
+
+    assert summary.calidad_pmf_estado_resumido_conflictivo == []
+    assert [(item.label, item.count) for item in summary.estado_detalle_pmf] == [
+        ("En Evaluacion", 1)
+    ]
+
+
+def test_estado_detalle_breakdown_is_pmf_grain_and_sums_to_the_pmf_total() -> None:
+    rows = [
+        _row(source_row_number=1, pmf="MP001", predio_group_key="A", estado="Aprobado"),
+        _row(source_row_number=2, pmf="MP001", predio_group_key="B", estado="Aprobado"),
+        _row(source_row_number=3, pmf="MP002", predio_group_key="C", estado="Recurso jerarquico"),
+        _row(source_row_number=4, pmf="MP003", predio_group_key="D", estado="Aprobado"),
+    ]
+
+    summary = build_summary(rows)
+
+    assert sum(item.count for item in summary.estado_detalle_pmf) == summary.pmf_count == 3
+    assert [(item.label, item.count) for item in summary.estado_detalle_pmf] == [
+        ("Aprobado", 2),
+        ("Recurso jerarquico", 1),
+    ]
+
+
+def test_a_missing_detailed_state_keeps_its_own_bucket_rather_than_vanishing() -> None:
+    rows = [
+        _row(source_row_number=1, pmf="MP001", predio_group_key="A", estado=None),
+        _row(source_row_number=2, pmf="MP002", predio_group_key="B", estado="Aprobado"),
+    ]
+
+    summary = build_summary(rows)
+
+    assert sum(item.count for item in summary.estado_detalle_pmf) == summary.pmf_count == 2
+    assert any(item.label is None for item in summary.estado_detalle_pmf)
+
+
+def test_company_subtotals_reconcile_to_the_overall_total() -> None:
+    rows = [
+        _row(
+            source_row_number=1,
+            pmf="MP001",
+            predio_group_key="A",
+            empresa="Campo digital",
+            estado_resumido="Aprobado",
+        ),
+        _row(
+            source_row_number=2,
+            pmf="MP002",
+            predio_group_key="B",
+            empresa="Campo digital",
+            estado_resumido="En tramite",
+        ),
+        _row(
+            source_row_number=3,
+            pmf="MP003",
+            predio_group_key="C",
+            empresa="Ecores",
+            estado_resumido="Aprobado",
+        ),
+        _row(
+            source_row_number=4,
+            pmf="MP004",
+            predio_group_key="D",
+            empresa="Ecores",
+            estado_resumido="Tachado",
+        ),
+    ]
+
+    summary = build_summary(rows)
+
+    assert sum(item.pmf_count for item in summary.por_empresa) == summary.pmf_count == 4
+    for attribute in ("aprobado", "en_tramite", "pendiente", "tachado", "sin_estado"):
+        assert sum(
+            getattr(item.estado_resumido, attribute) for item in summary.por_empresa
+        ) == getattr(summary.estado_resumido_pmf, attribute)
+
+
+def test_company_is_attributed_per_pmf_not_per_row() -> None:
+    """A PMF whose rows straddle two companies still lands in exactly one.
+
+    The reviewed snapshot has no such PMF, which is precisely why the
+    invariant needs a test rather than the data's goodwill.
+    """
+
+    rows = [
+        _row(
+            source_row_number=1,
+            pmf="MP001",
+            predio_group_key="A",
+            empresa="Campo digital",
+            estado_resumido="Aprobado",
+        ),
+        _row(
+            source_row_number=2,
+            pmf="MP001",
+            predio_group_key="B",
+            empresa="Ecores",
+            estado_resumido="Aprobado",
+        ),
+    ]
+
+    summary = build_summary(rows)
+
+    assert sum(item.pmf_count for item in summary.por_empresa) == summary.pmf_count == 1
+    assert [(item.empresa, item.pmf_count) for item in summary.por_empresa] == [
+        ("Campo digital", 1)
+    ]
+
+
+def test_a_blank_company_keeps_its_own_bucket_rather_than_being_dropped() -> None:
+    rows = [
+        _row(
+            source_row_number=1,
+            pmf="MP001",
+            predio_group_key="A",
+            empresa=None,
+            estado_resumido="Aprobado",
+        ),
+        _row(
+            source_row_number=2,
+            pmf="MP002",
+            predio_group_key="B",
+            empresa="Ecores",
+            estado_resumido="Aprobado",
+        ),
+    ]
+
+    summary = build_summary(rows)
+
+    assert sum(item.pmf_count for item in summary.por_empresa) == 2
+    assert None in [item.empresa for item in summary.por_empresa]
+
+
+# ---------------------------------------------------------------------------
+# Reforestación — what the source can and cannot answer
+# ---------------------------------------------------------------------------
+
+
+def test_reforestation_count_excludes_the_sin_reforestacion_sentinel() -> None:
+    """`Sin reforestacion` is the absence of a property, not a property."""
+
+    rows = [
+        _row(source_row_number=1, pmf="MP001", predio_group_key="A", predio_ref="Ref001_Rubi"),
+        _row(
+            source_row_number=2, pmf="MP002", predio_group_key="B", predio_ref="Sin reforestacion"
+        ),
+        _row(
+            source_row_number=3, pmf="MP003", predio_group_key="C", predio_ref="Ref005_ Kompatzki"
+        ),
+        _row(source_row_number=4, pmf="MP004", predio_group_key="D", predio_ref=None),
+    ]
+
+    summary = build_summary(rows)
+
+    assert summary.reforestacion.predio_ref_count == 2
+    assert summary.reforestacion.predio_ref_labels == ["Ref001_Rubi", "Ref005_ Kompatzki"]
+    assert summary.reforestacion.sentinel_row_count == 1
+    assert summary.predios_reforestacion == summary.reforestacion.predio_ref_labels
+
+
+def test_reforestation_metric_states_the_field_it_counts() -> None:
+    summary = build_summary(
+        [_row(source_row_number=1, pmf="MP001", predio_group_key="A", predio_ref="Ref001_Rubi")]
+    )
+
+    assert "Predio Ref" in summary.reforestacion.definicion
+    assert "Sin reforestacion" in summary.reforestacion.definicion
+
+
+def test_labels_naming_more_than_one_property_are_flagged_not_counted_as_one() -> None:
+    rows = [
+        _row(
+            source_row_number=1,
+            pmf="MP001",
+            predio_group_key="A",
+            predio_ref="Ref036_ Reyes y Ref037_ Reyes",
+        ),
+        _row(source_row_number=2, pmf="MP002", predio_group_key="B", predio_ref="Rubi + Marin"),
+        _row(source_row_number=3, pmf="MP003", predio_group_key="C", predio_ref="Ref001_Rubi"),
+    ]
+
+    summary = build_summary(rows)
+
+    assert summary.reforestacion.etiquetas_compuestas == [
+        "Ref036_ Reyes y Ref037_ Reyes",
+        "Rubi + Marin",
+    ]
+
+
+def test_no_owner_count_is_derived_from_tipo_de_propietario_or_from_surnames() -> None:
+    """`Tipo de propietario` is tenure, and `Predio Ref` surnames are text.
+
+    Neither identifies an owner, so the owner figure is a literal saying so
+    — never a number, and never zero, which would read as "there are none".
+    """
+
+    rows = [
+        _row(
+            source_row_number=1,
+            pmf="MP001",
+            predio_group_key="A",
+            tipo_propietario="Servidumbre firmada",
+            predio_ref="Ref025_ Contreras",
+        ),
+        _row(
+            source_row_number=2,
+            pmf="MP002",
+            predio_group_key="B",
+            tipo_propietario="Poseedor",
+            predio_ref="Ref026_ Contreras",
+        ),
+        _row(
+            source_row_number=3,
+            pmf="MP003",
+            predio_group_key="C",
+            tipo_propietario="BNUP",
+            predio_ref="Ref_ Hermanos Held",
+        ),
+    ]
+
+    summary = build_summary(rows)
+
+    assert summary.reforestacion.propietarios == "No disponible en el origen"
+
+    # No numeric owner figure exists anywhere in the result — not here, and
+    # not under some other name elsewhere in the summary.
+    numeric_owner_fields = [
+        field.name
+        for field in fields(summary)
+        if ("propietario" in field.name or "owner" in field.name)
+        and isinstance(getattr(summary, field.name), int)
+    ]
+    assert numeric_owner_fields == []
+
+
+def test_empty_filtered_scope_yields_a_populated_shape_not_none() -> None:
+    summary = build_summary([])
+
+    hero = summary.estado_resumido_pmf
+    assert hero.aprobado + hero.en_tramite + hero.pendiente + hero.tachado + hero.sin_estado == 0
+    assert summary.estado_detalle_pmf == []
+    assert summary.por_empresa == []
+    assert summary.calidad_pmf_estado_resumido_conflictivo == []
+    assert summary.reforestacion.predio_ref_count == 0
+    assert summary.reforestacion.propietarios == "No disponible en el origen"
+
+
+def test_sparse_id_pmf_is_not_the_identity_used_for_pmf_grain() -> None:
+    """`ID_PMF` is populated on 159 of 729 rows in the reviewed snapshot.
+
+    Grouping on it would drop every plan whose first row leaves it blank.
+    `SummaryInputRow` does not carry it at all: identity is `PMF`, which the
+    source contract guarantees non-blank on every business row.
+    """
+
+    assert "id_pmf" not in SummaryInputRow.__annotations__
+
+
+def test_status_buckets_carry_the_raw_spellings_that_reproduce_them() -> None:
+    """A status card links to the filter that reproduces its own count.
+
+    The bucket is a normalized state; the Explorador filters on the literal
+    source value, so both spellings of one state have to travel with it.
+    """
+
+    rows = [
+        _row(source_row_number=1, pmf="MP001", predio_group_key="A", estado_resumido="En tramite"),
+        _row(source_row_number=2, pmf="MP002", predio_group_key="B", estado_resumido="En trámite"),
+        _row(source_row_number=3, pmf="MP003", predio_group_key="C", estado_resumido="Aprobado"),
+    ]
+
+    valores = build_summary(rows).estado_resumido_valores
+
+    assert valores["en_tramite"] == ["En tramite", "En trámite"]
+    assert valores["aprobado"] == ["Aprobado"]
+
+
+def test_a_blank_summarized_state_contributes_no_filter_value() -> None:
+    """`sin_estado` cannot be reproduced by an equality filter, so it offers
+    none — rather than a filter that would silently match nothing."""
+
+    rows = [_row(source_row_number=1, pmf="MP001", predio_group_key="A", estado_resumido=None)]
+
+    summary = build_summary(rows)
+
+    assert summary.estado_resumido_pmf.sin_estado == 1
+    assert summary.estado_resumido_valores == {}

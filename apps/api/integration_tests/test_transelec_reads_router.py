@@ -525,6 +525,110 @@ def test_summary_kpis_charts_hero_and_quality_match_the_hand_computed_fixture(
     assert body["calidad_numero_resolucion"] == "No disponible"  # TR-FUNC-016
 
 
+def test_summary_headline_is_pmf_grain_and_its_buckets_sum_to_the_pmf_total(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    """Javier's recurring question, answered at the grain he asks it in.
+
+    The fixture's 7 detail rows describe 6 plans, and MP001 carries two
+    different `Estado resumido` values (`Aprobado` on its first row,
+    `Tachado` on its second) — the same shape as MP015 in the 29-Jul Power
+    BI summary and MP022 in the 14-Aug workbook. The buckets must still sum
+    to 6, not 7.
+    """
+
+    _login(client, "dev-admin")
+    _publish_fixture(client, integration_engine, _rich_fixture_workbook(tmp_path))
+
+    body = client.get("/transelec/summary").json()
+    hero = body["estado_resumido_pmf"]
+
+    assert body["row_count"] == 7
+    assert body["pmf_count"] == 6
+    assert (hero["aprobado"], hero["en_tramite"], hero["pendiente"], hero["tachado"]) == (
+        3,
+        1,
+        1,
+        1,
+    )
+    assert sum(hero.values()) == body["pmf_count"]
+
+    detalle = body["estado_detalle_pmf"]
+    assert sum(item["count"] for item in detalle) == body["pmf_count"]
+
+
+def test_summary_reports_the_conflicting_pmf_rather_than_double_counting_it(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    _login(client, "dev-admin")
+    _publish_fixture(client, integration_engine, _rich_fixture_workbook(tmp_path))
+
+    body = client.get("/transelec/summary").json()
+    conflicts = body["calidad_pmf_estado_resumido_conflictivo"]
+
+    assert [conflict["pmf"] for conflict in conflicts] == ["MP001"]
+    assert conflicts[0]["valores"] == ["Aprobado", "Tachado"]
+    assert conflicts[0]["canonico"] == "Aprobado"
+    assert conflicts[0]["estado_detalle"] == "En evaluacion"
+
+
+def test_summary_company_subtotals_reconcile_to_the_overall_pmf_total(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    _login(client, "dev-admin")
+    _publish_fixture(client, integration_engine, _rich_fixture_workbook(tmp_path))
+
+    body = client.get("/transelec/summary").json()
+    por_empresa = body["por_empresa"]
+
+    assert {item["empresa"]: item["pmf_count"] for item in por_empresa} == {
+        "Forestal Sur": 4,
+        "Forestal Norte": 2,
+    }
+    assert sum(item["pmf_count"] for item in por_empresa) == body["pmf_count"]
+    for state in ("aprobado", "en_tramite", "pendiente", "tachado", "sin_estado"):
+        assert (
+            sum(item["estado_resumido"][state] for item in por_empresa)
+            == (body["estado_resumido_pmf"][state])
+        )
+
+
+def test_summary_reforestation_states_its_definition_and_offers_no_owner_count(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    _login(client, "dev-admin")
+    _publish_fixture(client, integration_engine, _rich_fixture_workbook(tmp_path))
+
+    reforestacion = client.get("/transelec/summary").json()["reforestacion"]
+
+    assert reforestacion["predio_ref_count"] == 2
+    assert reforestacion["predio_ref_labels"] == ["Fundo Dos", "Fundo Uno"]
+    assert "Predio Ref" in reforestacion["definicion"]
+    assert reforestacion["propietarios"] == "No disponible en el origen"
+
+
+def test_summary_headline_is_computed_over_the_whole_filtered_population(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    """Not over a page: the buckets still sum to the filtered PMF total.
+
+    `/summary` reads every matching row for the filter state, while
+    `/pmfs` pages. A headline built from a page would disagree with the
+    total the same response reports.
+    """
+
+    _login(client, "dev-admin")
+    _publish_fixture(client, integration_engine, _rich_fixture_workbook(tmp_path))
+
+    params = {"sector": "Sector Norte"}
+    body = client.get("/transelec/summary", params=params).json()
+    first_page = client.get("/transelec/pmfs", params={**params, "limit": 1}).json()
+
+    assert len(first_page["items"]) == 1
+    assert first_page["total_count"] == body["row_count"] > 1
+    assert sum(body["estado_resumido_pmf"].values()) == body["pmf_count"]
+
+
 def test_pending_section_matches_the_hand_computed_fixture(
     client: TestClient, integration_engine: Engine, tmp_path: Path
 ) -> None:

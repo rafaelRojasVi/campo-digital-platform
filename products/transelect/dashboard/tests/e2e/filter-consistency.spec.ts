@@ -47,7 +47,8 @@ test('one filter change moves every section, and every endpoint sees the same st
   // Unfiltered baseline, hand-computed in stubs.ts.
   await expect(page.getByTestId('kpi-pmf')).toHaveText('12')
   await expect(page.getByTestId('kpi-predios')).toHaveText('20')
-  await expect(page.getByTestId('composition-pmf-total')).toHaveText('6 de 12 PMF aprobados')
+  await expect(page.getByTestId('kpi-pmf-total')).toHaveText('12')
+  await expect(page.getByTestId('status-aprobado')).toHaveText('6')
   await expect(page.getByTestId('composition-predios-total')).toHaveText(
     '10 de 20 predios aprobados',
   )
@@ -61,8 +62,8 @@ test('one filter change moves every section, and every endpoint sees the same st
   await expect(page.getByTestId('kpi-predios')).toHaveText('5')
   await expect(page.getByTestId('kpi-roles')).toHaveText('4')
   await expect(page.getByTestId('kpi-superficie')).toHaveText('12,25 ha')
-  await expect(page.getByTestId('composition-pmf-total')).toHaveText('3 de 4 PMF aprobados')
-  await expect(page.getByTestId('composition-pmf')).toContainText('75% aprobado')
+  await expect(page.getByTestId('kpi-pmf-total')).toHaveText('4')
+  await expect(page.getByTestId('status-aprobado')).toHaveText('3')
   await expect(page.getByTestId('composition-predios-total')).toHaveText('3 de 5 predios aprobados')
   await expect(page.getByTestId('status-hero-aprobado')).toHaveText('3')
   await expect(page.getByTestId('status-hero-en-tramite')).toHaveText('1')
@@ -111,7 +112,7 @@ test('clearing the filter returns every section to the unfiltered view together'
   await expect(page.getByTestId('rows-total')).toContainText('60 áreas de corta')
   await page.goto('/transelec')
   await expect(page.getByTestId('kpi-pmf')).toHaveText('12')
-  await expect(page.getByTestId('composition-pmf-total')).toHaveText('6 de 12 PMF aprobados')
+  await expect(page.getByTestId('kpi-pmf-total')).toHaveText('12')
   await expect(page.getByTestId('status-hero-aprobado')).toHaveText('10')
 })
 

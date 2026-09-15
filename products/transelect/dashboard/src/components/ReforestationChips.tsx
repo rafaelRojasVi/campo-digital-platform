@@ -18,8 +18,8 @@ export function ReforestationChips({ predios }: { predios: string[] }) {
     <div data-testid="reforestation">
       <p className="hint" style={{ marginBottom: 'var(--s-4)' }}>
         <b data-testid="reforestation-count">{formatInteger(predios.length)}</b>{' '}
-        {predios.length === 1 ? 'predio único' : 'predios únicos'} con valor en «Predio Ref» para
-        el alcance seleccionado.
+        {predios.length === 1 ? 'etiqueta distinta' : 'etiquetas distintas'} de «Predio Ref» en el
+        alcance seleccionado.
       </p>
       <div className="refchips">
         {shown.map((name) => (

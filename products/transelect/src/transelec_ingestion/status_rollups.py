@@ -34,6 +34,8 @@ three are named, and all three stay independently swappable behind the
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
@@ -62,6 +64,78 @@ class RolledRow:
     estado_resumido: str | None
     numero_ingreso: str | None
     tipo_propietario: str | None = None
+
+
+_WHITESPACE = re.compile(r"\s+")
+
+
+def normalized_label(value: str | None) -> str | None:
+    """A casing/accent/whitespace-insensitive comparison key, or ``None``.
+
+    The reviewed 14-Aug snapshot spells the same detailed ``Estado`` more
+    than one way — ``En Evaluacion`` (129 rows) beside ``En evaluacion`` (2),
+    ``Recurso reposicion`` (9) beside ``Recurso Reposicion`` (1) — which
+    splits one business state into two rows of any breakdown built by naive
+    string equality. Folding case, combining accents and runs of whitespace
+    collapses the 13 raw spellings in that snapshot to 11 states.
+
+    This is a *comparison* key only. Nothing in this module ever writes it
+    back over a source value: every caller keeps the raw spelling it first
+    encountered as the label it displays, so the fold can merge two rows
+    without erasing what the workbook actually said.
+    """
+
+    if value is None:
+        return None
+    decomposed = unicodedata.normalize("NFKD", value.strip().casefold())
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    collapsed = _WHITESPACE.sub(" ", stripped).strip()
+    return collapsed or None
+
+
+def distinct_estado_resumido(
+    rows: Iterable[RolledRow], *, key: GroupKey = "pmf"
+) -> dict[str, tuple[str | None, ...]]:
+    """Every distinct ``Estado resumido`` each key carries, in source order.
+
+    Distinctness is decided on ``normalized_label``; the tuple holds the raw
+    spellings, first-encountered first. A key whose rows all agree yields a
+    1-tuple, so a caller can treat "length > 1" as the conflict predicate
+    without a second pass.
+    """
+
+    seen: dict[str, dict[str | None, str | None]] = {}
+    for row in sorted(rows, key=lambda row: row.source_row_number):
+        group_value = getattr(row, key)
+        bucket = seen.setdefault(group_value, {})
+        bucket.setdefault(normalized_label(row.estado_resumido), row.estado_resumido)
+    return {group_value: tuple(bucket.values()) for group_value, bucket in seen.items()}
+
+
+def estado_resumido_conflicts(
+    rows: Iterable[RolledRow], *, key: GroupKey = "pmf"
+) -> dict[str, tuple[str | None, ...]]:
+    """Only the keys carrying more than one distinct ``Estado resumido``.
+
+    This is the evidence behind the headline's central invariant. A PMF
+    belongs to exactly one headline bucket — decided by ``first_row_wins``,
+    the contract this module has always used — but the rows a discarded
+    value came from are real, and a reader who adds the source workbook's
+    per-row values by hand will get a different, larger total. Javier's
+    29-Jul Power BI summary does exactly that: its 101 + 56 + 3 buckets sum
+    to 160 against a stated 159 PMF total, because one PMF is counted in two
+    buckets.
+
+    We do not reproduce that arithmetic, and we do not hide the row that
+    causes it. The conflict is returned here, surfaced in the quality
+    section, and left for the stakeholder to rule on.
+    """
+
+    return {
+        group_value: values
+        for group_value, values in distinct_estado_resumido(rows, key=key).items()
+        if len(values) > 1
+    }
 
 
 def first_row_wins(rows: Iterable[RolledRow], *, key: GroupKey) -> dict[str, RolledRow]:

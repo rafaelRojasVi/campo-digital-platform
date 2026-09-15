@@ -40,10 +40,52 @@ export function makeSummary(overrides: Partial<TranselecSummary> = {}): Transele
       tachado: 1,
       sin_estado: 0,
     },
+    estado_resumido_pmf: {
+      aprobado: 3,
+      en_tramite: 1,
+      pendiente: 1,
+      tachado: 1,
+      sin_estado: 0,
+    },
+    estado_detalle_pmf: [
+      { label: 'Aprobado', normalized: 'aprobado', count: 3 },
+      { label: 'En Evaluacion', normalized: 'en evaluacion', count: 2 },
+      { label: 'Rechazado', normalized: 'rechazado', count: 1 },
+    ],
+    estado_resumido_valores: {
+      aprobado: ['Aprobado'],
+      en_tramite: ['En tramite'],
+      pendiente: ['Pendiente'],
+      tachado: ['Tachado'],
+    },
+    por_empresa: [
+      {
+        empresa: 'Forestal Sur',
+        pmf_count: 4,
+        estado_resumido: { aprobado: 2, en_tramite: 1, pendiente: 1, tachado: 0, sin_estado: 0 },
+      },
+      {
+        empresa: 'Forestal Norte',
+        pmf_count: 2,
+        estado_resumido: { aprobado: 1, en_tramite: 0, pendiente: 0, tachado: 1, sin_estado: 0 },
+      },
+    ],
+    reforestacion: {
+      definicion:
+        'Valores distintos y no vacíos de «Predio Ref», excluyendo el literal «Sin reforestacion».',
+      predio_ref_labels: ['Fundo Dos', 'Fundo Uno'],
+      predio_ref_count: 2,
+      rol_ref_count: 3,
+      sentinel_label: 'Sin reforestacion',
+      sentinel_row_count: 1,
+      etiquetas_compuestas: [],
+      propietarios: 'No disponible en el origen',
+    },
     predios_reforestacion: ['Fundo Dos', 'Fundo Uno'],
     calidad_filas_sin_id_predial_unico: 6,
     calidad_pmf_sin_numero_ingreso: 2,
     calidad_numero_resolucion: 'No disponible',
+    calidad_pmf_estado_resumido_conflictivo: [],
     ...overrides,
   }
 }

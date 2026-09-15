@@ -94,7 +94,8 @@ test('TR-FUNC-038/045: the Resumen prints its figures without its shortcut chrom
   expect(state.topbar).toBe('none')
 
   await expect(page.getByTestId('kpi-row')).toBeVisible()
-  await expect(page.getByTestId('composition-pmf')).toBeVisible()
+  await expect(page.getByTestId('status-pmf')).toBeVisible()
+  await expect(page.getByTestId('status-cards')).toBeVisible()
   await expect(page.getByTestId('work-queue')).toBeVisible()
 })
 

@@ -46,5 +46,7 @@ and the audit that produced them are recorded in:
 
 - [Frontend UX rearchitecture V1](docs/design/2026-09-13-frontend-ux-rearchitecture-v1.md)
 - [Rediseño de la interfaz (español)](docs/es/2026-09-13-rediseno-interfaz-transelec.md)
+- [Workflow refinement from Marianne's evidence V1](docs/design/2026-09-15-workflow-refinement-marianne-evidence-v1.md)
+- [Estado de los planes de manejo (español)](docs/es/2026-09-15-estado-planes-de-manejo.md)
 
 Run it locally with `make transelec-dev` from the repository root.

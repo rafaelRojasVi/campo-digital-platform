@@ -105,22 +105,29 @@ export function useRouter(): RouterContextValue {
   return context
 }
 
-export function Link({
-  to,
-  children,
-  className,
-  current,
-  onNavigate,
-}: {
+/**
+ * `data-*` attributes reach the anchor.
+ *
+ * Without this, TypeScript silently accepts a hyphenated attribute on a
+ * component and React then drops it, so `<Link data-tone="late">` compiles,
+ * renders, and styles nothing — which is exactly what had happened to the
+ * Resumen's attention cards: every `.attention-card[data-tone=...]` rule in
+ * the stylesheet had no element to match.
+ */
+interface LinkProps {
   to: string
   children: ReactNode
   className?: string
   current?: boolean
   onNavigate?: () => void
-}) {
+  [dataAttribute: `data-${string}`]: string | undefined | ReactNode | boolean | (() => void)
+}
+
+export function Link({ to, children, className, current, onNavigate, ...rest }: LinkProps) {
   const { navigate } = useRouter()
   return (
     <a
+      {...(rest as Record<`data-${string}`, string | undefined>)}
       href={to}
       className={className}
       aria-current={current ? 'page' : undefined}

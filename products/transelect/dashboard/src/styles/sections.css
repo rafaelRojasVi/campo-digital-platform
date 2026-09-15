@@ -145,6 +145,125 @@
 }
 
 /*
+ * Status cards: the three (or four) `Estado resumido` buckets, at PMF grain.
+ *
+ * Aligned on one baseline, one row, equal width — the composition bar above
+ * already carries the proportions, so these carry the counts and the route
+ * into the filtered Explorador. Deliberately smaller than the total figure
+ * beside them: the total is the denominator every card is a part of, and a
+ * card that shouted as loudly would break that reading.
+ *
+ * The tone is a 3px top rule, not a fill. A filled card at this size turns
+ * the row into four coloured blocks competing for the eye; a rule states the
+ * same semantics without changing the card's weight. Colour is never alone:
+ * every card prints its count, its label and its share of the population.
+ */
+.status-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--s-3);
+}
+
+.status-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-5);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  transition:
+    border-color var(--d-fast) var(--ease),
+    background-color var(--d-fast) var(--ease),
+    transform var(--d-fast) var(--ease);
+}
+
+a.status-card:hover {
+  background: var(--sunken);
+  border-color: var(--line-strong);
+}
+
+a.status-card:active {
+  transform: translateY(1px);
+}
+
+.status-card[data-tone='approved'] {
+  border-top-color: var(--st-approved);
+}
+
+.status-card[data-tone='progress'] {
+  border-top-color: var(--st-progress);
+}
+
+.status-card[data-tone='late'] {
+  border-top-color: var(--st-late);
+}
+
+.status-card[data-tone='struck'] {
+  border-top-color: var(--st-struck);
+}
+
+.status-card[data-tone='none'] {
+  border-top-color: var(--line-strong);
+}
+
+.status-card-value {
+  font-size: 30px;
+  font-weight: 670;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.028em;
+  line-height: 1;
+}
+
+.status-card-label {
+  color: var(--ink);
+  font-size: var(--t-small);
+  font-weight: 650;
+}
+
+.status-card-sub {
+  color: var(--ink-3);
+  font-size: var(--t-micro);
+}
+
+.status-card-go {
+  margin-top: var(--s-2);
+  color: var(--ink-3);
+  font-size: var(--t-micro);
+  font-weight: 700;
+}
+
+a.status-card .status-card-go {
+  color: var(--forest-deep);
+}
+
+/*
+ * A breakdown table is read down one column of counts, so its numbers align
+ * and its row labels do not compete with the section heading above it.
+ */
+.breakdown td:first-child,
+.breakdown th[scope='row'] {
+  white-space: normal;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
  * Attention row: the three numbers that mean somebody has work to do. They
  * are the only place on the Resumen that carries a status colour, which is
  * what makes them read as "act on me" instead of "look me up".

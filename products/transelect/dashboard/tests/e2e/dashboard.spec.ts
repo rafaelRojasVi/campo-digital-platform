@@ -87,9 +87,13 @@ test('TR-FUNC-001-008: every KPI value the API returns is rendered, in its new g
   // The number that means work — the attention row.
   await expect(page.getByTestId('kpi-pendientes')).toHaveText('5')
 
-  // Approval, now carried by the lead figure and the composition legend.
-  await expect(page.getByTestId('composition-pmf-aprobados')).toHaveText('6')
-  await expect(page.getByTestId('composition-pmf-en-tramite')).toHaveText('3')
+  // Approval at PMF grain, now carried by the status headline. The former
+  // three-way `composition-pmf` bar is superseded rather than removed: the
+  // headline reads the same basis at the same grain, one bucket finer, so
+  // `Tachado` is no longer merged into a "pendiente o tachado" catch-all.
+  await expect(page.getByTestId('status-aprobado')).toHaveText('6')
+  await expect(page.getByTestId('status-en_tramite')).toHaveText('3')
+  await expect(page.getByTestId('status-tachado')).toHaveText('3')
 })
 
 test('TR-FUNC-009/010: one composition bar per grain, each against its own total', async ({
@@ -99,7 +103,7 @@ test('TR-FUNC-009/010: one composition bar per grain, each against its own total
   await expect(page.getByTestId('composition-predios-total')).toHaveText(
     '10 de 20 predios aprobados',
   )
-  await expect(page.getByTestId('composition-pmf-total')).toHaveText('6 de 12 PMF aprobados')
+  await expect(page.getByTestId('status-pmf-total')).toHaveText('12 PMF')
   // 10 of 20 predios: the predio grain's own percentage, not the PMF grain's.
   await expect(page.getByTestId('composition-predios')).toContainText('50% aprobado')
 })
@@ -456,4 +460,92 @@ test('no workbook-derived value is ever rendered as markup', async ({ page }) =>
   expect(
     await page.evaluate(() => (window as unknown as Record<string, unknown>).__xss),
   ).toBeUndefined()
+})
+
+/*
+ * The workflow Marianne actually runs, end to end.
+ *
+ * She answers Javier's "¿cuál es el estado de los planes de manejo?" from the
+ * `Estado resumido` column, so the Resumen has to answer it without her
+ * reconstructing it, and a status has to lead to the plans behind it.
+ */
+test('the status headline answers the recurring question at PMF grain', async ({ page }) => {
+  await openResumen(page)
+
+  await expect(
+    page.getByRole('heading', { name: 'Estado de los planes de manejo' }),
+  ).toBeVisible()
+  await expect(page.getByTestId('kpi-pmf-total')).toHaveText('12')
+
+  // The buckets account for every plan: 6 + 3 + 3 = 12, hand-computed in stubs.
+  const bucketTotal = await page.evaluate(() =>
+    ['aprobado', 'en_tramite', 'pendiente', 'tachado', 'sin_estado']
+      .map((key) => document.querySelector(`[data-testid="status-${key}"]`))
+      .filter((node): node is Element => node !== null)
+      .reduce((sum, node) => sum + Number(node.textContent), 0),
+  )
+  expect(bucketTotal).toBe(12)
+})
+
+test('clicking a status opens the Explorer filtered to exactly that status', async ({ page }) => {
+  await openResumen(page)
+
+  await page.locator('[data-status="aprobado"]').click()
+
+  await expect(page).toHaveURL(/\/transelec\/explorador\?estado_resumido=Aprobado/)
+  await expect(page.getByTestId('active-filters')).toContainText('Aprobado')
+})
+
+test('a status click-through keeps the filters the reader already had', async ({ page }) => {
+  await stubPlatform(page)
+  await page.goto('/transelec?empresa=Campo+Sint%C3%A9tico')
+  await expect(page.getByTestId('status-cards')).toBeVisible()
+
+  await page.locator('[data-status="aprobado"]').click()
+
+  await expect(page).toHaveURL(/empresa=Campo\+Sint%C3%A9tico/)
+  await expect(page).toHaveURL(/estado_resumido=Aprobado/)
+})
+
+test('the filtered Explorer counts the whole API population, not the page', async ({ page }) => {
+  await stubPlatform(page)
+  await page.goto('/transelec/explorador?estado_resumido=Aprobado')
+
+  // The count shown is the API's `total_count` for the whole filtered
+  // population, not the number of rows the current page happens to hold.
+  await expect(page.getByTestId('rows-body')).toBeVisible()
+  const shown = await page.getByTestId('rows-body').locator('tr').count()
+  const total = Number((await page.getByTestId('rows-total').textContent())!.replace(/\D/g, ''))
+  expect(total).toBeGreaterThan(0)
+  expect(total).toBeGreaterThanOrEqual(shown)
+})
+
+test('the detailed Estado drill-down sits under the headline and sums to it', async ({ page }) => {
+  await openResumen(page)
+
+  await expect(page.getByTestId('estado-detalle')).toBeVisible()
+  await expect(page.getByTestId('detalle-total')).toHaveText('12')
+})
+
+test('the company matrix reconciles to the overall PMF total', async ({ page }) => {
+  await openResumen(page)
+
+  await expect(page.getByTestId('company-matrix')).toBeVisible()
+  await expect(page.getByTestId('empresa-total')).toHaveText('12')
+  await expect(page.getByTestId('empresa-Campo Sintético')).toHaveText('12')
+})
+
+test('reforestación states its definition and shows no owner count', async ({ page }) => {
+  await openResumen(page)
+
+  await expect(page.getByTestId('kpi-ref-predios')).toHaveText('13')
+  await expect(page.getByTestId('kpi-ref-propietarios')).toHaveText('No disponible en el origen')
+  await expect(page.getByTestId('reforestacion-definition')).toContainText('Predio Ref')
+})
+
+test('a PMF with two summarized states is disclosed, not double counted', async ({ page }) => {
+  await openResumen(page)
+
+  await expect(page.getByTestId('status-conflict-note')).toContainText('PMF-002')
+  await expect(page.getByTestId('status-reconciliation-warning')).toHaveCount(0)
 })

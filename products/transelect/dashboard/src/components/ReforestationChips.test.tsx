@@ -3,17 +3,17 @@ import { describe, expect, it } from 'vitest'
 import { ReforestationChips } from './ReforestationChips'
 
 describe('ReforestationChips (TR-FUNC-012)', () => {
-  it('renders one chip per distinct predio de reforestación', () => {
+  it('renders one chip per distinct «Predio Ref» label', () => {
     render(<ReforestationChips predios={['Fundo Dos', 'Fundo Uno']} />)
     expect(screen.getByTestId('reforestation-count')).toHaveTextContent('2')
     expect(screen.getByText('Fundo Uno')).toBeInTheDocument()
     expect(screen.getByText('Fundo Dos')).toBeInTheDocument()
-    expect(screen.getByTestId('reforestation')).toHaveTextContent('2 predios únicos')
+    expect(screen.getByTestId('reforestation')).toHaveTextContent('2 etiquetas distintas')
   })
 
-  it('uses the singular noun for a single predio', () => {
+  it('uses the singular noun for a single label', () => {
     render(<ReforestationChips predios={['Fundo Uno']} />)
-    expect(screen.getByTestId('reforestation')).toHaveTextContent('1 predio único')
+    expect(screen.getByTestId('reforestation')).toHaveTextContent('1 etiqueta distinta')
   })
 
   it('collapses the tail into an overflow chip past ten values', () => {

@@ -85,10 +85,69 @@ function summaryBody(shape: SummaryShape) {
       tachado: shape.hero[3],
       sin_estado: 0,
     },
+    // PMF-grain headline. Hand-split so the four buckets sum to pmf_count
+    // exactly — the invariant the acceptance suite checks on screen.
+    estado_resumido_pmf: {
+      aprobado: shape.aprobados,
+      en_tramite: shape.en_tramite,
+      pendiente: 0,
+      tachado: shape.pendiente_o_tachado,
+      sin_estado: 0,
+    },
+    estado_detalle_pmf: [
+      { label: 'Aprobado', normalized: 'aprobado', count: shape.aprobados },
+      { label: 'En Evaluacion', normalized: 'en evaluacion', count: shape.en_tramite },
+      {
+        label: 'Recurso reposicion rechazado',
+        normalized: 'recurso reposicion rechazado',
+        count: shape.pendiente_o_tachado,
+      },
+    ],
+    estado_resumido_valores: {
+      aprobado: ['Aprobado'],
+      en_tramite: ['En tramite'],
+      tachado: ['Tachado'],
+    },
+    por_empresa: [
+      {
+        empresa: 'Campo Sintético',
+        pmf_count: shape.pmf_count,
+        estado_resumido: {
+          aprobado: shape.aprobados,
+          en_tramite: shape.en_tramite,
+          pendiente: 0,
+          tachado: shape.pendiente_o_tachado,
+          sin_estado: 0,
+        },
+      },
+    ],
+    reforestacion: {
+      definicion:
+        'Valores distintos y no vacíos de «Predio Ref», excluyendo el literal «Sin reforestacion».',
+      predio_ref_labels: Array.from(
+        { length: 13 },
+        (_, index) => `Fundo Sintético ${index + 1}`,
+      ),
+      predio_ref_count: 13,
+      rol_ref_count: 9,
+      sentinel_label: 'Sin reforestacion',
+      sentinel_row_count: 1,
+      etiquetas_compuestas: ['Fundo Sintético 1 + Fundo Sintético 2'],
+      propietarios: 'No disponible en el origen',
+    },
     predios_reforestacion: Array.from({ length: 13 }, (_, index) => `Fundo Sintético ${index + 1}`),
     calidad_filas_sin_id_predial_unico: 2,
     calidad_pmf_sin_numero_ingreso: 3,
     calidad_numero_resolucion: 'No disponible',
+    calidad_pmf_estado_resumido_conflictivo: [
+      {
+        pmf: 'PMF-002',
+        valores: ['Aprobado', 'Tachado'],
+        canonico: 'Aprobado',
+        estado_detalle: 'Rechazado',
+        source_row_number: 3,
+      },
+    ],
   }
 }
 

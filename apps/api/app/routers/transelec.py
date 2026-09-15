@@ -718,6 +718,8 @@ def _to_summary_input_row(row: Row[Any]) -> SummaryInputRow:
         id_predio_unico=row.id_predio_unico,
         superficie_corta=row.superficie_corta,
         rol=row.rol,
+        empresa=row.empresa,
+        rol_ref=row.rol_ref,
     )
 
 
@@ -822,6 +824,55 @@ class HeroStateCountsView(BaseModel):
     sin_estado: int
 
 
+class LabelledCountView(BaseModel):
+    """One state of a breakdown, under the raw spelling the source used."""
+
+    label: str | None
+    normalized: str | None
+    count: int
+
+
+class EmpresaBreakdownView(BaseModel):
+    empresa: str | None
+    pmf_count: int
+    estado_resumido: HeroStateCountsView
+
+
+class EstadoResumidoConflictView(BaseModel):
+    """One PMF the source gives more than one ``Estado resumido``.
+
+    Exposed so the conflict is visible rather than reproduced: the headline
+    counts this PMF once, under ``canonico``, and this record names every
+    value the source actually carried and the row the canonical one came
+    from.
+    """
+
+    pmf: str
+    valores: list[str | None]
+    canonico: str | None
+    estado_detalle: str | None
+    source_row_number: int
+
+
+class ReforestacionView(BaseModel):
+    """Reforestation reference counts, with their definition attached.
+
+    ``propietarios`` is a literal, not a number. The source contract has no
+    owner field — ``Tipo de propietario`` is a tenure category, and the
+    surnames inside ``Predio Ref`` are free text — so no owner count is
+    computed or returned anywhere.
+    """
+
+    definicion: str
+    predio_ref_labels: list[str]
+    predio_ref_count: int
+    rol_ref_count: int
+    sentinel_label: str
+    sentinel_row_count: int
+    etiquetas_compuestas: list[str]
+    propietarios: str
+
+
 class TranselecSummaryResponse(BaseModel):
     import_id: int
     row_count: int
@@ -838,10 +889,16 @@ class TranselecSummaryResponse(BaseModel):
     avance_por_predio: Bucket3WayCountsView
     avance_por_pmf: Bucket3WayCountsView
     estado_resumido_hero_predio: HeroStateCountsView
+    estado_resumido_pmf: HeroStateCountsView
+    estado_detalle_pmf: list[LabelledCountView]
+    estado_resumido_valores: dict[str, list[str]]
+    por_empresa: list[EmpresaBreakdownView]
+    reforestacion: ReforestacionView
     predios_reforestacion: list[str]
     calidad_filas_sin_id_predial_unico: int
     calidad_pmf_sin_numero_ingreso: int
     calidad_numero_resolucion: str
+    calidad_pmf_estado_resumido_conflictivo: list[EstadoResumidoConflictView]
 
 
 @router.get(
@@ -880,10 +937,28 @@ def get_summary(
         estado_resumido_hero_predio=HeroStateCountsView(
             **asdict(summary.estado_resumido_hero_predio)
         ),
+        estado_resumido_pmf=HeroStateCountsView(**asdict(summary.estado_resumido_pmf)),
+        estado_detalle_pmf=[
+            LabelledCountView(**asdict(item)) for item in summary.estado_detalle_pmf
+        ],
+        estado_resumido_valores=summary.estado_resumido_valores,
+        por_empresa=[
+            EmpresaBreakdownView(
+                empresa=item.empresa,
+                pmf_count=item.pmf_count,
+                estado_resumido=HeroStateCountsView(**asdict(item.estado_resumido)),
+            )
+            for item in summary.por_empresa
+        ],
+        reforestacion=ReforestacionView(**asdict(summary.reforestacion)),
         predios_reforestacion=summary.predios_reforestacion,
         calidad_filas_sin_id_predial_unico=summary.calidad_filas_sin_id_predial_unico,
         calidad_pmf_sin_numero_ingreso=summary.calidad_pmf_sin_numero_ingreso,
         calidad_numero_resolucion=summary.calidad_numero_resolucion,
+        calidad_pmf_estado_resumido_conflictivo=[
+            EstadoResumidoConflictView(**asdict(item))
+            for item in summary.calidad_pmf_estado_resumido_conflictivo
+        ],
     )
 
 

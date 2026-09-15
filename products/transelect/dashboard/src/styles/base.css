@@ -666,7 +666,13 @@ td.empty,
   .panel,
   .composition,
   .stat-strip,
-  .attention {
+  .attention,
+  .status-cards {
     break-inside: avoid;
+  }
+
+  /* A status card is a link on screen and a figure on paper. */
+  a.status-card .status-card-go {
+    display: none;
   }
 }

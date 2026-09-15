@@ -65,6 +65,46 @@ export interface HeroStateCounts {
   sin_estado: number
 }
 
+/** One state of a breakdown, under the raw spelling the source used. */
+export interface LabelledCount {
+  label: string | null
+  normalized: string | null
+  count: number
+}
+
+export interface EmpresaBreakdown {
+  empresa: string | null
+  pmf_count: number
+  estado_resumido: HeroStateCounts
+}
+
+/** One PMF the source gives more than one `Estado resumido`. */
+export interface EstadoResumidoConflict {
+  pmf: string
+  valores: (string | null)[]
+  canonico: string | null
+  estado_detalle: string | null
+  source_row_number: number
+}
+
+/**
+ * Reforestation reference counts, with the definition attached.
+ *
+ * `propietarios` is a string, not a number, and deliberately so: the source
+ * has no owner field, so there is no owner count to render — and a zero here
+ * would read as "there are no owners" rather than "we cannot know".
+ */
+export interface Reforestacion {
+  definicion: string
+  predio_ref_labels: string[]
+  predio_ref_count: number
+  rol_ref_count: number
+  sentinel_label: string
+  sentinel_row_count: number
+  etiquetas_compuestas: string[]
+  propietarios: string
+}
+
 export interface TranselecSummary {
   import_id: number
   row_count: number
@@ -81,10 +121,17 @@ export interface TranselecSummary {
   avance_por_predio: Bucket3WayCounts
   avance_por_pmf: Bucket3WayCounts
   estado_resumido_hero_predio: HeroStateCounts
+  estado_resumido_pmf: HeroStateCounts
+  estado_detalle_pmf: LabelledCount[]
+  /** Hero-state key -> the literal `Estado resumido` spellings behind it. */
+  estado_resumido_valores: Record<string, string[]>
+  por_empresa: EmpresaBreakdown[]
+  reforestacion: Reforestacion
   predios_reforestacion: string[]
   calidad_filas_sin_id_predial_unico: number
   calidad_pmf_sin_numero_ingreso: number
   calidad_numero_resolucion: string
+  calidad_pmf_estado_resumido_conflictivo: EstadoResumidoConflict[]
 }
 
 /** All 30 A:AD contract fields plus the two derived/technical columns. */
