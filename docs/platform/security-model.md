@@ -186,20 +186,37 @@ Session cookies stay `HttpOnly` and `SameSite=Lax`. `SameSite=Lax` reduces
 but does not eliminate CSRF risk for state-changing `POST` routes, which is
 precisely why the token check above is mandatory rather than belt-and-braces.
 
-**RESOLVED (ADR-008)** — the real (Entra) login flow's cookies
-(`app.routers.entra_auth`'s session and flow-state cookies) set
-`secure=True` whenever `APP_ENV != "development"`.
+**RESOLVED (ADR-008, ADR-010)** — both real login flows' cookies
+(`app.routers.entra_auth`'s and `app.routers.google_auth`'s session and
+flow-state cookies) set `secure=True` whenever `APP_ENV != "development"`.
 `apps/api/app/routers/dev_auth.py`'s own cookie is unaffected and
 deliberately stays non-`Secure`: it only ever runs over plain-HTTP local
 development, where a `Secure` cookie would never be sent at all.
 
 ## Open decisions
 
-- **production identity provider — decided and implemented**: Microsoft
-  Entra ID (`ADR-008-entra-sign-in-implementation.md`), multitenant +
-  personal-account audience, delegated `User.Read` only. Application-side
-  work is complete; the tenant/app registration itself is still an
-  external gate (`../platform/entra-app-registration-handoff.md`).
+- **production identity provider — decided and implemented, now two of
+  them**:
+  - **Transelec: Google Workspace**
+    (`ADR-010-google-workspace-sign-in-for-transelec.md`) — OIDC
+    authorization code + PKCE S256, `id_token` verified with PyJWT against
+    Google's JWKS, accepted only for the verified `hd` claim
+    `campodigital.cl`, sign-in only (no Google token is stored). Chosen
+    because the Entra gate below has never opened and this Workspace
+    already exists. Application-side work is complete and tested against
+    locally-signed tokens; the OAuth client and the final redirect URI are
+    still external gates
+    (`../platform/google-workspace-oauth-handoff.md`), and no real Google
+    sign-in has run yet.
+  - **LiDAR and Forestal: Microsoft Entra ID**
+    (`ADR-008-entra-sign-in-implementation.md`), multitenant +
+    personal-account audience, delegated `User.Read` only. Application-side
+    work is complete; the tenant/app registration itself is still an
+    external gate (`../platform/entra-app-registration-handoff.md`).
+
+  Production startup requires `PLATFORM_TOKEN_ENCRYPTION_KEY` plus at least
+  one *completely* configured provider; a half-configured provider fails
+  closed (`app.identity_safety`).
 - final user/role model;
 - **production network topology / production cloud provider — still
   open**: `ADR-004-revisit-production-cloud-provider-choice.md` (Proposed:

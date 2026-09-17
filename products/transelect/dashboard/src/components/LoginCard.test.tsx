@@ -13,7 +13,7 @@ import { LoginCard } from './LoginCard'
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>()
-  return { ...actual, devLogin: vi.fn(), checkEntraSignIn: vi.fn() }
+  return { ...actual, devLogin: vi.fn(), checkGoogleSignIn: vi.fn() }
 })
 
 const api = await import('../api')
@@ -30,19 +30,19 @@ function assign(): ReturnType<typeof vi.fn> {
 describe('LoginCard in local development', () => {
   beforeEach(() => {
     vi.mocked(api.devLogin).mockReset()
-    vi.mocked(api.checkEntraSignIn).mockReset()
+    vi.mocked(api.checkGoogleSignIn).mockReset()
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('offers exactly the two demo identities, and no Microsoft action', () => {
+  it('offers exactly the two demo identities, and no Google action', () => {
     render(<LoginCard demoAvailable onSignedIn={() => {}} />)
 
     expect(screen.getByRole('button', { name: ADMIN_LABEL })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: VIEWER_LABEL })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Continuar con Microsoft' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Continuar con Google' })).not.toBeInTheDocument()
   })
 
   it('says plainly that the seeded identities are local-only', () => {
@@ -140,7 +140,7 @@ describe('LoginCard in local development', () => {
 describe('LoginCard outside local development', () => {
   beforeEach(() => {
     vi.mocked(api.devLogin).mockReset()
-    vi.mocked(api.checkEntraSignIn).mockReset()
+    vi.mocked(api.checkGoogleSignIn).mockReset()
   })
 
   afterEach(() => {
@@ -157,30 +157,30 @@ describe('LoginCard outside local development', () => {
     expect(container.textContent).not.toContain('demostración')
   })
 
-  it('offers Microsoft Entra sign-in and never calls dev-login', async () => {
+  it('offers Google Workspace sign-in and never calls dev-login', async () => {
     const navigate = assign()
-    vi.mocked(api.checkEntraSignIn).mockResolvedValue({ ok: true, data: undefined })
+    vi.mocked(api.checkGoogleSignIn).mockResolvedValue({ ok: true, data: undefined })
     render(<LoginCard demoAvailable={false} onSignedIn={() => {}} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Continuar con Microsoft' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar con Google' }))
 
-    expect(navigate).toHaveBeenCalledWith('/api/auth/entra/login')
+    expect(navigate).toHaveBeenCalledWith('/api/auth/google/login')
     expect(api.devLogin).not.toHaveBeenCalled()
   })
 
-  it('does not fall back to demo sign-in when Entra is unconfigured', async () => {
+  it('does not fall back to demo sign-in when Google is unconfigured', async () => {
     const navigate = assign()
-    vi.mocked(api.checkEntraSignIn).mockResolvedValue({
+    vi.mocked(api.checkGoogleSignIn).mockResolvedValue({
       ok: false,
       status: 503,
-      error: 'Entra sign-in is not configured.',
+      error: 'Google sign-in is not configured.',
     })
     render(<LoginCard demoAvailable={false} onSignedIn={() => {}} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Continuar con Microsoft' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar con Google' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'El inicio de sesión con Microsoft no está configurado en este entorno.',
+      'El inicio de sesión con Google no está configurado en este entorno.',
     )
     expect(navigate).not.toHaveBeenCalled()
     expect(api.devLogin).not.toHaveBeenCalled()

@@ -519,8 +519,12 @@ export function canPublish(me: Me | null): boolean {
 //                           this call 404s — it cannot be talked into working.
 //  - POST /auth/logout      mounted everywhere; ends whichever kind of
 //                           session the caller has (app/routers/session.py).
-//  - GET  /auth/entra/login mounted everywhere; the only way to authenticate
-//                           outside development (ADR-006).
+//  - GET  /auth/google/login mounted everywhere; Transelec's own identity
+//                           provider and the only way to authenticate here
+//                           outside development (ADR-010). Microsoft Entra
+//                           (/auth/entra/login) remains mounted for the other
+//                           products, and this bundle deliberately does not
+//                           reach it.
 //
 // Nothing here writes a token, secret or identity to localStorage,
 // sessionStorage or a readable cookie: the session stays in the HttpOnly
@@ -543,8 +547,8 @@ export function canPublish(me: Me | null): boolean {
  */
 export type DemoIdentityKey = 'dev-admin' | 'dev-viewer'
 
-/** Top-level navigation target for Microsoft Entra ID sign-in. */
-export const ENTRA_LOGIN_PATH = '/api/auth/entra/login'
+/** Top-level navigation target for Google Workspace sign-in. */
+export const GOOGLE_LOGIN_PATH = '/api/auth/google/login'
 
 /**
  * Start a local development session for one seeded identity.
@@ -573,26 +577,28 @@ export async function logout(): Promise<ApiResult<void>> {
 }
 
 /**
- * Ask whether Microsoft Entra sign-in is actually configured, without
- * following the redirect to Microsoft.
+ * Ask whether Google Workspace sign-in is actually configured, without
+ * following the redirect to Google.
  *
- * `GET /auth/entra/login` answers either a 302 towards Microsoft (configured)
- * or a 503 (`ENTRA_CLIENT_ID`/`ENTRA_CLIENT_SECRET` or the token encryption
- * key unset — see app/main.py's EntraNotConfiguredError handler and
- * app/routers/entra_auth.py's _require_encryption_key). `redirect: 'manual'`
- * is what makes both readable from script: the redirect is surfaced as an
- * opaque response instead of being followed cross-origin to Microsoft, where
- * the absence of CORS would turn every outcome into an indistinguishable
- * network error.
+ * The same shape of probe the platform's Entra sign-in uses, against the
+ * Transelec product's own provider: `GET /auth/google/login` answers either a 302
+ * towards Google (configured) or a 503 (`GOOGLE_CLIENT_ID` /
+ * `GOOGLE_CLIENT_SECRET` or the token encryption key unset — see
+ * app/main.py's GoogleNotConfiguredError handler and
+ * app/routers/google_auth.py's _require_encryption_key). `redirect:
+ * 'manual'` surfaces the redirect as an opaque response instead of
+ * following it cross-origin to Google, where the absence of CORS would turn
+ * every outcome into an indistinguishable network error.
  *
- * The probe's own 302 mints a PKCE flow this app then abandons; the
+ * The probe's 302 mints a PKCE/state/nonce flow this app then abandons; the
  * subsequent top-level navigation mints a fresh one and overwrites the
- * short-lived `entra_login_flow` cookie, so no half-finished flow is left
- * usable. This never authenticates anyone by itself.
+ * short-lived `google_login_flow` cookie, so no half-finished flow is left
+ * usable. This never authenticates anyone by itself, and it never sees a
+ * Google token: the browser is given a session cookie and nothing else.
  */
-export async function checkEntraSignIn(): Promise<ApiResult<void>> {
+export async function checkGoogleSignIn(): Promise<ApiResult<void>> {
   try {
-    const response = await fetch(ENTRA_LOGIN_PATH, {
+    const response = await fetch(GOOGLE_LOGIN_PATH, {
       credentials: 'include',
       redirect: 'manual',
     })

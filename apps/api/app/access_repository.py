@@ -257,3 +257,50 @@ def maybe_grant_bootstrap_admin(
             connection, app_user_id=app_user_id, product_key=product_key, role=Role.ADMIN
         )
     return True
+
+
+TRANSELEC_PRODUCT_KEY = "transelect"
+
+
+def maybe_grant_transelec_bootstrap_admin(
+    connection: Connection,
+    *,
+    settings: Settings,
+    email: str,
+    app_user_id: int,
+) -> bool:
+    """Grant one-time ADMIN on Transelec -- and only Transelec -- by email.
+
+    The counterpart of ``maybe_grant_bootstrap_admin`` for Google Workspace
+    sign-in, kept separate rather than parameterised because the difference
+    is the point: that one opens all three products to a platform operator;
+    this one can only ever open ``transelect``. The Transelec pilot is hosted
+    for one client, and the account that first opens it must not thereby
+    become an administrator of LiDAR or Forestal.
+
+    It is one-time in the same sense as well: it fires only for a user who
+    holds no product grant at all, so an operator who later demotes this
+    account does not have that decision undone by the next sign-in.
+
+    ``email`` is compared case-insensitively because mailbox domains are
+    case-insensitive and Workspace addresses are routinely written either
+    way; it is never compared by suffix. Membership of the Workspace is
+    established upstream by the verified ``hd`` claim
+    (``app.google_auth.verify_id_token``), not here.
+    """
+
+    configured = settings.transelec_bootstrap_admin_email
+    if not configured:
+        return False
+    if configured.strip().casefold() != email.strip().casefold():
+        return False
+    if list_grants_for_user(connection, app_user_id=app_user_id):
+        return False
+
+    grant_product_role(
+        connection,
+        app_user_id=app_user_id,
+        product_key=TRANSELEC_PRODUCT_KEY,
+        role=Role.ADMIN,
+    )
+    return True

@@ -35,7 +35,15 @@ const FORBIDDEN = [
 ]
 
 /** …and the sign-in that must be there instead. */
-const REQUIRED = ['Continuar con Microsoft', '/api/auth/entra/login']
+const REQUIRED = ['Continuar con Google', '/api/auth/google/login']
+
+/**
+ * Transelec signs in with Google Workspace (ADR-010). Microsoft Entra is
+ * still the platform's provider for the other products and is still mounted
+ * server-side, but this bundle must not offer it: two entrances would make
+ * the shipped artifact contradict the one the client is told to use.
+ */
+const FORBIDDEN_PROVIDERS = ['Continuar con Microsoft', '/api/auth/entra/login']
 
 describe('production bundle', () => {
   beforeAll(() => {
@@ -70,5 +78,9 @@ describe('production bundle', () => {
 
   it.each(REQUIRED)('still ships the real identity provider: %j', (needle) => {
     expect(bundle).toContain(needle)
+  })
+
+  it.each(FORBIDDEN_PROVIDERS)('offers no second identity provider: %j', (needle) => {
+    expect(bundle).not.toContain(needle)
   })
 })

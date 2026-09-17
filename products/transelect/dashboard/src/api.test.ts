@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   EMPTY_FILTERS,
-  ENTRA_LOGIN_PATH,
+  GOOGLE_LOGIN_PATH,
   NETWORK_ERROR,
   canPublish,
-  checkEntraSignIn,
+  checkGoogleSignIn,
   devLogin,
   exportCsvUrl,
   filterParams,
@@ -303,31 +303,31 @@ describe('sign-in and sign-out', () => {
     expect(fetchMock.mock.calls[3][1].headers['X-CSRF-Token']).toBe('token-2')
   })
 
-  it('reads the Entra redirect without following it cross-origin', async () => {
+  it('reads the Google redirect without following it cross-origin', async () => {
     fetchMock.mockResolvedValueOnce({ type: 'opaqueredirect', ok: false, status: 0 })
 
-    await expect(checkEntraSignIn()).resolves.toEqual({ ok: true, data: undefined })
+    await expect(checkGoogleSignIn()).resolves.toEqual({ ok: true, data: undefined })
     const [path, init] = fetchMock.mock.calls[0]
-    expect(path).toBe(ENTRA_LOGIN_PATH)
+    expect(path).toBe(GOOGLE_LOGIN_PATH)
     expect(init.redirect).toBe('manual')
     expect(init.credentials).toBe('include')
   })
 
-  it('surfaces an unconfigured Entra tenant as the 503 the API actually returns', async () => {
+  it('surfaces unconfigured Google sign-in as the 503 the API actually returns', async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({ detail: 'Entra sign-in is not configured.' }, { status: 503 }),
+      jsonResponse({ detail: 'Google sign-in is not configured.' }, { status: 503 }),
     )
 
-    await expect(checkEntraSignIn()).resolves.toEqual({
+    await expect(checkGoogleSignIn()).resolves.toEqual({
       ok: false,
       status: 503,
-      error: 'Entra sign-in is not configured.',
+      error: 'Google sign-in is not configured.',
     })
   })
 
-  it('never claims Entra is available when the platform is unreachable', async () => {
+  it('never claims Google sign-in is available when the platform is unreachable', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-    await expect(checkEntraSignIn()).resolves.toEqual({
+    await expect(checkGoogleSignIn()).resolves.toEqual({
       ok: false,
       status: 0,
       error: NETWORK_ERROR,

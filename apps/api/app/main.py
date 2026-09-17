@@ -21,10 +21,12 @@ from app.database import (
 from app.deps import get_object_store
 from app.entra_auth import EntraNotConfiguredError
 from app.execution import ExecutionBackend, InProcessStagingExecutionBackend
+from app.google_auth import GoogleNotConfiguredError
 from app.identity_safety import require_production_identity_configuration
 from app.routers.access_admin import router as access_admin_router
 from app.routers.csrf import router as csrf_router
 from app.routers.entra_auth import router as entra_auth_router
+from app.routers.google_auth import router as google_auth_router
 from app.routers.ingestion import router as ingestion_router
 from app.routers.lidar import router as lidar_router
 from app.routers.session import router as session_router
@@ -100,6 +102,15 @@ async def _entra_not_configured(request: object, exc: EntraNotConfiguredError) -
     return JSONResponse(status_code=503, content={"detail": "Entra sign-in is not configured."})
 
 
+@app.exception_handler(GoogleNotConfiguredError)
+async def _google_not_configured(request: object, exc: GoogleNotConfiguredError) -> JSONResponse:
+    """An unconfigured Google sign-in is an intentionally unavailable state
+    (missing GOOGLE_CLIENT_ID/SECRET), not a server error."""
+
+    del request, exc
+    return JSONResponse(status_code=503, content={"detail": "Google sign-in is not configured."})
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Process liveness probe with no external dependencies."""
@@ -147,6 +158,13 @@ app.include_router(access_admin_router)
 # 404ing or crashing when ENTRA_CLIENT_ID/SECRET are unset.
 app.include_router(entra_auth_router)
 
+# Always mounted, in every APP_ENV, for the same reasons as the Entra router
+# above: this is the Transelec product's real identity provider (see
+# ADR-010), and each route 503s rather than 404ing when GOOGLE_CLIENT_ID/
+# SECRET are unset. Mounting both providers unconditionally is deliberate --
+# a deployment chooses a provider by configuring it, not by being rebuilt.
+app.include_router(google_auth_router)
+
 # Always mounted, in every APP_ENV: inspecting (`/me`) or ending
 # (`/logout`) a session applies uniformly regardless of which identity
 # provider created it, and the frontend already calls both unconditionally
@@ -178,6 +196,7 @@ if APP_ENV == "development":
 app.include_router(csrf_router, prefix="/api")
 app.include_router(access_admin_router, prefix="/api")
 app.include_router(entra_auth_router, prefix="/api")
+app.include_router(google_auth_router, prefix="/api")
 app.include_router(session_router, prefix="/api")
 app.include_router(transelec_router, prefix="/api")
 

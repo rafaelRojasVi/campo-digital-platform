@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted. Extends `ADR-006-restrict-dev-auth-to-development.md` and
+Accepted; point 4 superseded for Transelec by
+`ADR-010-google-workspace-sign-in-for-transelec.md`. Extends
+`ADR-006-restrict-dev-auth-to-development.md` and
 `ADR-008-entra-sign-in-implementation.md` to the browser side. Neither is
 superseded: the server-side gates both describe remain the authority, and
 this decision adds no authentication mechanism.
@@ -58,8 +60,15 @@ would advertise the seeded identities on a public URL.
    `dev-viewer` as the sole survivors of an otherwise eliminated module.
    `DemoIdentityKey` stays in `api.ts` as a *type*, which TypeScript erases.
 
-4. Every non-development build instead offers `Continuar con Microsoft`,
-   routed to the existing `GET /auth/entra/login` (ADR-008). When that
+4. **Superseded for Transelec by
+   `ADR-010-google-workspace-sign-in-for-transelec.md` (2026-09-17): the
+   action is now `Continuar con Google`, routed to
+   `GET /auth/google/login`, and the Microsoft panel has been removed from
+   this bundle. Everything else in this decision — including the demo
+   boundary and the no-fallback rule — is unchanged and still in force.**
+   As originally decided: every non-development build instead offers
+   `Continuar con Microsoft`, routed to the existing
+   `GET /auth/entra/login` (ADR-008). When that
    endpoint answers `503` (tenant not configured) the panel says so and
    stops. There is deliberately **no fallback to demo sign-in**: outside
    development no such identity exists on the server either.

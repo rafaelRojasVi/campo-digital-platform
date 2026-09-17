@@ -26,7 +26,7 @@
  * mounted only under `APP_ENV == "development"` (apps/api/app/main.py).
  */
 import { DemoSignIn } from './DemoSignIn'
-import { EntraSignIn } from './EntraSignIn'
+import { GoogleSignIn } from './GoogleSignIn'
 
 export function LoginCard({
   demoAvailable,
@@ -74,7 +74,7 @@ export function LoginCard({
         {import.meta.env.DEV && demoAvailable ? (
           <DemoSignIn onSignedIn={onSignedIn} />
         ) : (
-          <EntraSignIn />
+          <GoogleSignIn />
         )}
       </section>
     </div>

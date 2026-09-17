@@ -66,3 +66,32 @@ def test_production_starts_with_full_identity_configuration() -> None:
     )
 
     assert "LIFESPAN_FAILED=False" in output
+
+
+def test_production_starts_with_google_sign_in_alone() -> None:
+    # The Transelec hosted pilot's real shape: Google Workspace configured,
+    # no Entra tenant in existence (see
+    # docs/platform/entra-app-registration-handoff.md). This must start.
+    output = _run_with_env(
+        {
+            "POSTGRES_PASSWORD": "x",
+            "GOOGLE_CLIENT_ID": "1234567890-abcdef.apps.googleusercontent.com",
+            "GOOGLE_CLIENT_SECRET": "fake-google-secret",
+            "PLATFORM_TOKEN_ENCRYPTION_KEY": "fake-key",
+        }
+    )
+
+    assert "LIFESPAN_FAILED=False" in output
+
+
+def test_production_refuses_to_start_with_a_half_configured_google_client() -> None:
+    output = _run_with_env(
+        {
+            "POSTGRES_PASSWORD": "x",
+            "GOOGLE_CLIENT_ID": "1234567890-abcdef.apps.googleusercontent.com",
+            "PLATFORM_TOKEN_ENCRYPTION_KEY": "fake-key",
+        }
+    )
+
+    assert "LIFESPAN_FAILED=True" in output
+    assert "ProductionIdentityNotConfiguredError" in output

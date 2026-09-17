@@ -70,6 +70,22 @@ by `get_current_app_user`, but nothing in this codebase yet issues one
 outside dev-auth. This is expected and is exactly the gap Task 7 closes; it
 is not a defect in this packaging work.
 
+**Update (2026-09-17) — this gap is now closed for Transelec.** The product
+signs in with Google Workspace: `GET /auth/google/login` and
+`GET /auth/google/callback` are mounted in every `APP_ENV`
+(`apps/api/app/routers/google_auth.py`,
+`docs/adr/ADR-010-google-workspace-sign-in-for-transelec.md`), so a
+container run with `APP_ENV=staging` or `APP_ENV=production` can issue a
+real `platform.session`. It needs `GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_BASE_URL`,
+`GOOGLE_WORKSPACE_DOMAIN` and `PLATFORM_TOKEN_ENCRYPTION_KEY`; without
+them each route answers `503` rather than 404ing, and under
+`APP_ENV=production` the process refuses to start at all. Microsoft Entra
+remains the provider for the other products. The remaining external gates
+are the OAuth client itself and the final public domain — see
+`../../../docs/platform/google-workspace-oauth-handoff.md`; no real Google
+sign-in has been performed yet.
+
 ## Container image
 
 `Dockerfile` (repo root) is a two-stage build, adapted from the *shape* of

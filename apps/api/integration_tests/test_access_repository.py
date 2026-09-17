@@ -10,6 +10,7 @@ from app.access_repository import (
     list_grantees_for_product,
     list_grants_for_user,
     maybe_grant_bootstrap_admin,
+    maybe_grant_transelec_bootstrap_admin,
     resolve_or_create_app_user,
 )
 from app.config import Settings
@@ -244,3 +245,146 @@ def test_bootstrap_does_not_fire_if_user_already_has_a_grant(
         for g in list_grants_for_user(integration_connection, app_user_id=user.id)
     }
     assert grants == {"forestry": "viewer"}
+
+
+# ---------------------------------------------------------------------------
+# Transelec bootstrap (Google Workspace sign-in)
+# ---------------------------------------------------------------------------
+#
+# A separate bootstrap from maybe_grant_bootstrap_admin above, and
+# deliberately narrower: it can only ever produce ADMIN on `transelect`. The
+# Transelec pilot is hosted for one client, and the account that opens it
+# must not thereby become an administrator of LiDAR or Forestal.
+
+
+def _transelec_bootstrap_settings(**overrides: object) -> Settings:
+    values: dict[str, object] = {
+        "_env_file": None,
+        "app_env": "development",
+        "postgres_password": "x",
+        "transelec_bootstrap_admin_email": "javier@campodigital.cl",
+    }
+    values.update(overrides)
+    return Settings(**values)
+
+
+def _google_user(connection: Connection, email: str) -> int:
+    return resolve_or_create_app_user(
+        connection,
+        identity_kind="google",
+        identity_key=f"google-sub-for-{email}",
+        display_name=email,
+        email=email,
+    ).id
+
+
+def test_transelec_bootstrap_grants_admin_on_transelec_and_on_nothing_else(
+    integration_connection: Connection,
+) -> None:
+    app_user_id = _google_user(integration_connection, "javier@campodigital.cl")
+
+    granted = maybe_grant_transelec_bootstrap_admin(
+        integration_connection,
+        settings=_transelec_bootstrap_settings(),
+        email="javier@campodigital.cl",
+        app_user_id=app_user_id,
+    )
+
+    assert granted is True
+    grants = list_grants_for_user(integration_connection, app_user_id=app_user_id)
+    assert [(grant.product_key, grant.role) for grant in grants] == [("transelect", Role.ADMIN)]
+
+
+def test_transelec_bootstrap_never_grants_lidar_or_forestry(
+    integration_connection: Connection,
+) -> None:
+    app_user_id = _google_user(integration_connection, "javier@campodigital.cl")
+
+    maybe_grant_transelec_bootstrap_admin(
+        integration_connection,
+        settings=_transelec_bootstrap_settings(),
+        email="javier@campodigital.cl",
+        app_user_id=app_user_id,
+    )
+
+    for product_key in ("lidar", "forestry"):
+        assert (
+            get_product_role(
+                integration_connection, app_user_id=app_user_id, product_key=product_key
+            )
+            is None
+        )
+
+
+def test_transelec_bootstrap_does_not_fire_for_any_other_address(
+    integration_connection: Connection,
+) -> None:
+    app_user_id = _google_user(integration_connection, "otra.persona@campodigital.cl")
+
+    granted = maybe_grant_transelec_bootstrap_admin(
+        integration_connection,
+        settings=_transelec_bootstrap_settings(),
+        email="otra.persona@campodigital.cl",
+        app_user_id=app_user_id,
+    )
+
+    assert granted is False
+    assert list_grants_for_user(integration_connection, app_user_id=app_user_id) == ()
+
+
+def test_transelec_bootstrap_does_not_fire_when_no_address_is_configured(
+    integration_connection: Connection,
+) -> None:
+    app_user_id = _google_user(integration_connection, "javier@campodigital.cl")
+
+    granted = maybe_grant_transelec_bootstrap_admin(
+        integration_connection,
+        settings=_transelec_bootstrap_settings(transelec_bootstrap_admin_email=None),
+        email="javier@campodigital.cl",
+        app_user_id=app_user_id,
+    )
+
+    assert granted is False
+    assert list_grants_for_user(integration_connection, app_user_id=app_user_id) == ()
+
+
+def test_transelec_bootstrap_matches_the_address_case_insensitively(
+    integration_connection: Connection,
+) -> None:
+    app_user_id = _google_user(integration_connection, "Javier@CampoDigital.cl")
+
+    granted = maybe_grant_transelec_bootstrap_admin(
+        integration_connection,
+        settings=_transelec_bootstrap_settings(),
+        email="Javier@CampoDigital.cl",
+        app_user_id=app_user_id,
+    )
+
+    assert granted is True
+
+
+def test_transelec_bootstrap_is_one_time_and_never_re_escalates(
+    integration_connection: Connection,
+) -> None:
+    # An operator later demoted this account to VIEWER. A second sign-in must
+    # not silently hand ADMIN back.
+    app_user_id = _google_user(integration_connection, "javier@campodigital.cl")
+    grant_product_role(
+        integration_connection,
+        app_user_id=app_user_id,
+        product_key="transelect",
+        role=Role.VIEWER,
+    )
+
+    granted = maybe_grant_transelec_bootstrap_admin(
+        integration_connection,
+        settings=_transelec_bootstrap_settings(),
+        email="javier@campodigital.cl",
+        app_user_id=app_user_id,
+    )
+
+    assert granted is False
+    assert (
+        get_product_role(integration_connection, app_user_id=app_user_id, product_key="transelect")
+        is Role.VIEWER
+    )

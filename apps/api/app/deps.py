@@ -27,6 +27,7 @@ from app.dev_auth import (
     assert_dev_auth_allowed,
 )
 from app.entra_auth import EntraOidcClient, MsalEntraOidcClient
+from app.google_auth import GoogleOidcClient, GoogleOidcSignInClient
 from app.object_store import LocalObjectStore, ObjectStore
 from app.session_store import PlatformSessionStore
 
@@ -36,6 +37,7 @@ _session_store = DevSessionStore()
 _platform_session_store = PlatformSessionStore()
 _object_store: LocalObjectStore | None = None
 _entra_oidc_client: EntraOidcClient | None = None
+_google_oidc_client: GoogleOidcClient | None = None
 
 
 def get_session_store() -> DevSessionStore:
@@ -75,6 +77,24 @@ def get_entra_oidc_client(
     if _entra_oidc_client is None:
         _entra_oidc_client = MsalEntraOidcClient(settings)
     return _entra_oidc_client
+
+
+def get_google_oidc_client(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> GoogleOidcClient:
+    """Return the process-level Google OIDC client.
+
+    Raises ``app.google_auth.GoogleNotConfiguredError`` (mapped to 503 by
+    ``app.main``) if ``GOOGLE_CLIENT_ID``/``GOOGLE_CLIENT_SECRET`` are unset,
+    and stays uncached in that case for the same reason
+    ``get_entra_oidc_client`` does: one early failed attempt must not leave
+    sign-in permanently broken once the configuration arrives.
+    """
+
+    global _google_oidc_client
+    if _google_oidc_client is None:
+        _google_oidc_client = GoogleOidcSignInClient(settings)
+    return _google_oidc_client
 
 
 def get_db_connection(
