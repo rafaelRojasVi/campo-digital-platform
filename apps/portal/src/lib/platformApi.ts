@@ -43,6 +43,9 @@ export type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; 
 
 export const DEV_IDENTITIES = ['dev-admin', 'dev-operator', 'dev-viewer'] as const
 
+/** Google Workspace sign-in entry point; navigated to, never fetched. */
+export const GOOGLE_LOGIN_PATH = '/api/auth/google/login'
+
 /**
  * All requests go through /api, proxied in dev (see vite.config.ts) to the
  * standalone platform API process started by `make platform-local`. Never

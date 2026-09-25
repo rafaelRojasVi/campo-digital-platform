@@ -44,7 +44,9 @@ Users must not connect directly to PostgreSQL. Private objects must not use perm
 
 ## Authentication
 
-Do not build a custom password system unless a real requirement forces it. Prefer a managed identity provider. Microsoft Entra ID is worth evaluating because the company already uses Microsoft/OneDrive collaboration, but it is not yet an accepted decision.
+Do not build a custom password system unless a real requirement forces it. Prefer a managed identity provider.
+
+**DECISION** ([ADR-008](../adr/ADR-008-google-workspace-sign-in.md)) — the platform signs in with Google Workspace, restricted to `campodigital.cl` by the verified `hd` claim, with `email_verified` required and users keyed by Google's stable `sub`. Signing in creates a normal `platform.session`; it grants no product access by itself. Microsoft Entra ID is no longer pursued (no Campo Digital tenant exists). Setup: [Google Workspace OAuth handoff](google-workspace-oauth-handoff.md).
 
 ## Authorization
 

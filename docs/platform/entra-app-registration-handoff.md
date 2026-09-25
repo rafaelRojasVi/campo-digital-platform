@@ -1,5 +1,11 @@
 # Entra ID app registration — handoff for Campo Digital tenant admin
 
+> **Superseded (2026-09-25)** by
+> [ADR-008 — Google Workspace sign-in](../adr/ADR-008-google-workspace-sign-in.md)
+> and the [Google Workspace OAuth handoff](google-workspace-oauth-handoff.md).
+> Do not create the Entra app registration or its client secret. Kept as a
+> dated record only.
+
 ## Status
 
 Action required from someone with Global Administrator or Application

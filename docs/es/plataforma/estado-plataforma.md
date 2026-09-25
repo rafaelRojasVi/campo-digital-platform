@@ -191,4 +191,37 @@ Lo nuevo en esta actualización:
 - El inicio de sesión real (Entra ID) sigue bloqueado externamente; por eso
   la nueva página "Archivos" en staging muestra un mensaje honesto de que el
   inicio de sesión todavía no está disponible ahí, en vez de botones de
-  desarrollo que no funcionarían.
+  desarrollo que no funcionarían. **Actualización 2026-09-25:** ver la
+  sección "Inicio de sesión con Google Workspace" más abajo.
+
+## Inicio de sesión con Google Workspace (2026-09-25)
+
+**Decisión confirmada:** la plataforma usa el inicio de sesión de Google
+Workspace, restringido a cuentas `@campodigital.cl`. Se descarta Microsoft
+Entra ID (no existe un tenant de Campo Digital).
+
+Qué quedó implementado:
+
+- El botón "Continuar con Google" en la página "Archivos" del entorno
+  hospedado. El desarrollo local sigue usando las identidades de prueba.
+- La API verifica ella misma el token de Google: firma, emisor, destinatario,
+  vigencia, que el correo esté verificado por Google y que la cuenta
+  pertenezca exactamente al dominio de Workspace `campodigital.cl`. Un correo
+  que solo "termina en" `@campodigital.cl` no basta.
+- Cada persona se identifica por el identificador estable de Google, no por
+  su correo; si cambia el correo, conserva su usuario y sus permisos.
+- **Iniciar sesión no da acceso a nada por sí solo.** Una cuenta válida sin
+  permisos entra, pero cada producto responde "sin permiso" hasta que se le
+  asigne un rol.
+- El primer administrador se define por configuración (un correo y la lista
+  de productos). Nada queda fijo en el código.
+
+Qué falta:
+
+- Que un administrador de Google Workspace de Campo Digital cree el cliente
+  OAuth (ver `docs/platform/google-workspace-oauth-handoff.md`).
+- Definir el dominio público definitivo, porque de él depende la dirección
+  de retorno (redirect URI) registrada en Google.
+- Una prueba real de inicio de sesión con una cuenta `@campodigital.cl`.
+- Una pantalla para asignar permisos a más personas; por ahora eso es una
+  acción manual del operador.

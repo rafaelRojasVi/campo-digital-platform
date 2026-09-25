@@ -21,7 +21,8 @@ Product-specific implementation truth remains inside each product boundary. Plat
 - [Source ingestion](source-ingestion.md)
 - [Client data organization](client-data-organization.md)
 - [Security model](security-model.md)
-- [Entra ID app registration — handoff for tenant admin](entra-app-registration-handoff.md)
+- [Google Workspace OAuth client — handoff](google-workspace-oauth-handoff.md)
+- [Entra ID app registration — handoff for tenant admin](entra-app-registration-handoff.md) (superseded by ADR-008)
 - [Platform roadmap](roadmap.md)
 
 ## Architecture contracts
@@ -43,6 +44,7 @@ Product-specific implementation truth remains inside each product boundary. Plat
 - [ADR-004 — Revisit production cloud provider choice](../adr/ADR-004-revisit-production-cloud-provider-choice.md) (Proposed; does not supersede ADR-001)
 - [ADR-005 — Render STAGING experiment](../adr/ADR-005-render-staging-experiment.md) (Accepted for staging only; not a production provider decision)
 - [ADR-006 — Restrict dev-auth to development](../adr/ADR-006-restrict-dev-auth-to-development.md)
+- [ADR-008 — Google Workspace sign-in](../adr/ADR-008-google-workspace-sign-in.md)
 
 ## Research
 

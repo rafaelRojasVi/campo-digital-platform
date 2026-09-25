@@ -19,8 +19,12 @@ from app.database import (
 )
 from app.deps import get_object_store
 from app.execution import ExecutionBackend, InProcessStagingExecutionBackend
+from app.google_auth import GoogleNotConfiguredError
+from app.identity_safety import require_production_identity_configuration
+from app.routers.google_auth import router as google_auth_router
 from app.routers.ingestion import router as ingestion_router
 from app.routers.lidar import router as lidar_router
+from app.routers.session import router as session_router
 
 _execution_backend: ExecutionBackend | None = None
 
@@ -53,6 +57,12 @@ APP_ENV = _resolve_app_env()
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start the staging-only in-process execution backend, if applicable."""
 
+    # Gated on APP_ENV alone: get_settings() needs full DB credentials to
+    # resolve, and every other environment's lifespan must stay startable
+    # without them (see test_lidar_api.py's DB-free TestClient fixture).
+    if APP_ENV == "production":
+        require_production_identity_configuration(get_settings())
+
     global _execution_backend
     if APP_ENV == "staging":
         _execution_backend = InProcessStagingExecutionBackend(
@@ -72,6 +82,15 @@ app = FastAPI(
     version="0.2.0",
     lifespan=_lifespan,
 )
+
+
+@app.exception_handler(GoogleNotConfiguredError)
+async def _google_not_configured(request: object, exc: GoogleNotConfiguredError) -> JSONResponse:
+    """An unconfigured Google sign-in is an intentionally unavailable state
+    (missing GOOGLE_CLIENT_ID/SECRET), not a server error."""
+
+    del request, exc
+    return JSONResponse(status_code=503, content={"detail": "Google sign-in is not configured."})
 
 
 @app.get("/health")
@@ -103,6 +122,14 @@ def readiness(
 
 app.include_router(lidar_router)
 app.include_router(ingestion_router)
+
+# Always mounted, in every APP_ENV: Google Workspace is the platform's real
+# identity provider (ADR-008), and each route 503s rather than 404ing when
+# GOOGLE_CLIENT_ID/SECRET are unset. Inspecting (`/me`) or ending
+# (`/logout`) a session applies uniformly regardless of which provider
+# created it, so the session router is mounted everywhere too.
+app.include_router(google_auth_router)
+app.include_router(session_router)
 
 # Router mounting must not require full DB configuration to resolve (unlike
 # app.config.get_settings(), which requires POSTGRES_PASSWORD) — this decision

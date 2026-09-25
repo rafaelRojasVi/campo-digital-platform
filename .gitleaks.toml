@@ -4,3 +4,12 @@ title = "gitleaks config for campo-digital-platform"
 # Inherit Gitleaks' maintained default rules rather than duplicating
 # detection rules inside this repository.
 useDefault = true
+
+[[allowlists]]
+description = "Historical false positive: test-only Fernet fixture, replaced with generated key in PR #56"
+condition = "AND"
+commits = ["8c27cc904fee04238f50bcc3ab80476b08c596bf"]
+paths = ["apps/api/tests/test_main_production_identity_gate\\.py"]
+fingerprints = [
+  "8c27cc904fee04238f50bcc3ab80476b08c596bf:apps/api/tests/test_main_production_identity_gate.py:generic-api-key:52",
+]

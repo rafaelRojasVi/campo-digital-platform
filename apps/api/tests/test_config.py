@@ -117,3 +117,46 @@ def test_new_settings_default_safely() -> None:
     assert settings.staging_execution_max_bytes == 25 * 1024 * 1024
     assert settings.entra_tenant_id is None
     assert settings.platform_bootstrap_admin_tenant_id is None
+
+
+def test_google_sign_in_settings_default_to_unconfigured() -> None:
+    settings = Settings(_env_file=None, app_env="development", postgres_password="x")
+
+    assert settings.google_client_id is None
+    assert settings.google_client_secret is None
+    assert settings.google_redirect_base_url == "http://localhost:8000"
+    assert settings.google_workspace_domain == "campodigital.cl"
+    assert settings.platform_bootstrap_admin_email is None
+    assert settings.bootstrap_admin_product_keys == ()
+
+
+def test_bootstrap_admin_products_are_parsed_trimmed_and_deduplicated() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="development",
+        postgres_password="x",
+        platform_bootstrap_admin_products=" transelect, lidar ,transelect,",
+    )
+
+    assert settings.bootstrap_admin_product_keys == ("transelect", "lidar")
+
+
+def test_bootstrap_admin_products_reject_an_unknown_product() -> None:
+    with pytest.raises(ValidationError, match="unknown products"):
+        Settings(
+            _env_file=None,
+            app_env="development",
+            postgres_password="x",
+            platform_bootstrap_admin_products="transelec",
+        )
+
+
+def test_google_client_secret_is_not_exposed_in_repr() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="development",
+        postgres_password="x",
+        google_client_secret="google-secret-value",
+    )
+
+    assert "google-secret-value" not in repr(settings)

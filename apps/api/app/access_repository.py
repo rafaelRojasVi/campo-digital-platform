@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import Connection, text
 
 from app.access import Role
-from app.config import Settings
+from app.config import PLATFORM_PRODUCT_KEYS, Settings
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,20 +35,28 @@ def resolve_or_create_app_user(
     identity_kind: str,
     identity_key: str,
     display_name: str,
+    email: str | None = None,
 ) -> AppUser:
-    """Resolve an existing user by identity, or create one idempotently."""
+    """Resolve an existing user by identity, or create one idempotently.
+
+    ``email`` is only recorded on creation (real, non-dev identities have
+    one; dev-auth's seeded identities never pass it). It is not updated on
+    an existing row: the identity is ``(identity_kind, identity_key)`` --
+    Google's stable ``sub`` for Google sign-in -- and never the email.
+    """
 
     parameters = {
         "identity_kind": identity_kind,
         "identity_key": identity_key,
         "display_name": display_name,
+        "email": email,
     }
 
     inserted = connection.execute(
         text(
             """
-            INSERT INTO platform.app_user (identity_kind, identity_key, display_name)
-            VALUES (:identity_kind, :identity_key, :display_name)
+            INSERT INTO platform.app_user (identity_kind, identity_key, display_name, email)
+            VALUES (:identity_kind, :identity_key, :display_name, :email)
             ON CONFLICT (identity_kind, identity_key) DO NOTHING
             RETURNING id, identity_kind, identity_key, display_name, email
             """
@@ -151,7 +159,7 @@ def list_grants_for_user(
     return tuple(ProductGrant(product_key=row.product_key, role=Role(row.role)) for row in rows)
 
 
-_BOOTSTRAP_PRODUCT_KEYS = ("lidar", "forestry", "transelect")
+_BOOTSTRAP_PRODUCT_KEYS = PLATFORM_PRODUCT_KEYS
 
 
 def maybe_grant_bootstrap_admin(
@@ -178,3 +186,43 @@ def maybe_grant_bootstrap_admin(
             connection, app_user_id=app_user_id, product_key=product_key, role=Role.ADMIN
         )
     return True
+
+
+def maybe_grant_google_bootstrap_admin(
+    connection: Connection,
+    *,
+    settings: Settings,
+    email: str,
+    app_user_id: int,
+) -> tuple[str, ...]:
+    """Grant one-time ADMIN to the configured Google bootstrap address.
+
+    Returns the product keys granted (empty when nothing was granted). Both
+    the address (``PLATFORM_BOOTSTRAP_ADMIN_EMAIL``) and the products
+    (``PLATFORM_BOOTSTRAP_ADMIN_PRODUCTS``) are explicit configuration; with
+    either unset, nothing is granted.
+
+    It is one-time: it fires only for a user who holds no product grant at
+    all, so an operator who later demotes this account does not have that
+    decision undone by the next sign-in.
+
+    ``email`` is compared whole and case-insensitively, never by suffix. It
+    must come from a verified id_token: Workspace membership is established
+    upstream by the ``hd`` claim (``app.google_auth.verify_id_token``), and
+    the user row itself is keyed by Google's ``sub``, not by this address.
+    """
+
+    configured = settings.platform_bootstrap_admin_email
+    product_keys = settings.bootstrap_admin_product_keys
+    if not configured or not product_keys:
+        return ()
+    if configured.strip().casefold() != email.strip().casefold():
+        return ()
+    if list_grants_for_user(connection, app_user_id=app_user_id):
+        return ()
+
+    for product_key in product_keys:
+        grant_product_role(
+            connection, app_user_id=app_user_id, product_key=product_key, role=Role.ADMIN
+        )
+    return product_keys

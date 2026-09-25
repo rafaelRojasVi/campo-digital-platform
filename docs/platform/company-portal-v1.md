@@ -14,15 +14,17 @@ shells, iframe embedding, module switcher, back navigation) is implemented.
 hosted product module (LiDAR) and an honest not-yet-hosted state for the
 other two. This is still not production: STAGING has no real sign-in
 mechanism (dev-auth is development-only per
-[ADR-006](../adr/ADR-006-restrict-dev-auth-to-development.md), and Entra ID
-sign-in remains externally blocked), no durable object storage, and no
+[ADR-006](../adr/ADR-006-restrict-dev-auth-to-development.md), and Google
+Workspace sign-in per [ADR-008](../adr/ADR-008-google-workspace-sign-in.md)
+still needs its OAuth client and hosted domain configured), no durable object storage, and no
 multi-tenant access. See [Production platform V1](production-platform-v1.md)
 and [Environments and infrastructure costs](environments-and-costs.md) for
 what production would still require.
 
-**OPEN QUESTION** — Entra ID sign-in, and therefore any real STAGING
-authentication, remains externally blocked; Phase 6 (production deployment)
-remains unstarted.
+**OPEN QUESTION** — Google Workspace sign-in is implemented
+([ADR-008](../adr/ADR-008-google-workspace-sign-in.md)) but has not run
+against a real Google OAuth client; hosted authentication still needs that
+client, the hosted domain, and one end-to-end sign-in.
 
 ## Purpose
 
