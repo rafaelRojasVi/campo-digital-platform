@@ -25,6 +25,7 @@ export const ROUTES = {
   datos: '/transelec/datos',
   importar: '/transelec/importar',
   versiones: '/transelec/versiones',
+  accesos: '/transelec/accesos',
 } as const
 
 export type Route = (typeof ROUTES)[keyof typeof ROUTES]
@@ -34,6 +35,7 @@ export const ADMIN_ROUTES: readonly Route[] = [
   ROUTES.datos,
   ROUTES.importar,
   ROUTES.versiones,
+  ROUTES.accesos,
 ]
 
 interface RouterContextValue {
