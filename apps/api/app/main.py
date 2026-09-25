@@ -224,13 +224,27 @@ app.include_router(transelec_router, prefix="/api")
 # dev and in every test/CI environment, where no products/transelect/
 # dashboard/dist directory exists. Must stay last: it registers a catch-all
 # route that would otherwise shadow the routers registered above.
+TRANSELEC_SPA_PAGE_PATHS = frozenset(
+    {
+        "transelec",
+        "transelec/explorador",
+        "transelec/pendientes",
+        "transelec/calidad",
+        "transelec/datos",
+        "transelec/importar",
+        "transelec/versiones",
+        "transelec/accesos",
+    }
+)
+
 mount_dashboard(
     app,
     reserved_root_segments=frozenset(
         {"health", "ready", "runs", "ingesta", "auth", "transelec", "api"}
     ),
-    # Must match ROUTES in products/transelect/dashboard/src/router.tsx —
-    # these are the frontend's own page paths, not backend endpoints, but
-    # they share the "transelec" first segment with the real API prefix.
-    spa_page_paths=frozenset({"transelec", "transelec/importar", "transelec/versiones"}),
+    # Must match ROUTES in products/transelect/dashboard/src/router.tsx
+    # (enforced by test_dashboard_static.py) — these are the frontend's own
+    # page paths, not backend endpoints, but they share the "transelec"
+    # first segment with the real API prefix.
+    spa_page_paths=TRANSELEC_SPA_PAGE_PATHS,
 )

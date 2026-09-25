@@ -5,6 +5,7 @@ CAMPO_TRANSELEC_DASHBOARD_DIST without needing a database or a session.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -156,3 +157,23 @@ def test_mount_dashboard_rejects_a_path_traversal_attempt(
     response = TestClient(app).get("/../secret.txt")
 
     assert "outside the dist directory" not in response.text
+
+
+def test_spa_page_paths_match_every_dashboard_route() -> None:
+    """A dashboard route missing here 404s on reload or on a shared link."""
+
+    from app.main import TRANSELEC_SPA_PAGE_PATHS
+
+    router_source = (
+        Path(__file__).resolve().parents[3]
+        / "products"
+        / "transelect"
+        / "dashboard"
+        / "src"
+        / "router.tsx"
+    ).read_text(encoding="utf-8")
+    routes_block = router_source.split("export const ROUTES = {", 1)[1].split("} as const", 1)[0]
+    dashboard_paths = {path.lstrip("/") for path in re.findall(r"'(/[^']*)'", routes_block)}
+
+    assert dashboard_paths
+    assert dashboard_paths == TRANSELEC_SPA_PAGE_PATHS
