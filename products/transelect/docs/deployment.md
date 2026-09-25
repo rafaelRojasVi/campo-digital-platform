@@ -150,12 +150,56 @@ routing traffic to it.
 
 ## Object storage
 
-`app.object_store` currently ships only `LocalObjectStore`
-(`CAMPO_OBJECT_STORE_ROOT`, default `.local/object-store` under the
-container's writable `/app`, owned by the `campo` user). There is no managed
-object-storage backend wired in yet — provisioning one (Cloud Storage or
-otherwise) is future work, not attempted here, and is not required for the
-local verification this document records.
+`app.object_store` currently ships only `LocalObjectStore`. Outside
+production, `CAMPO_OBJECT_STORE_ROOT` defaults to the relative
+`.local/object-store`. **DECISION (2026-09-25):** in `APP_ENV=production`
+it must be set explicitly to an **absolute** path, in practice the mount
+point of a persistent volume. Without it, uploads answer `503` and
+`GET /ready` answers `503 not_ready` (`app.object_store.resolve_object_store_root`).
+The relative default resolved inside the container's writable layer, which
+the host discards on every redeploy. Uploaded workbooks would have vanished
+while their database rows survived.
+
+`GET /ready` also writes and removes a probe file under the store root, so a
+volume the process cannot write to fails readiness instead of failing the
+first real upload.
+
+### Persistent volume ownership
+
+The image runs as the non-root `campo` user (uid 999). Hosts such as Railway
+mount volumes owned by root, which `campo` cannot write. The image's
+entrypoint (`scripts/container/entrypoint.sh`) handles this: when the
+container is started as root, and only then, it creates
+`CAMPO_OBJECT_STORE_ROOT`, hands it to `campo`, and drops privileges with
+`setpriv` before the API starts. Under the default user it only execs the
+command. The API process never runs as root.
+
+**RESULT** (local Docker, 2026-09-25, not Railway): with a root-owned named
+volume at `/data` and `CAMPO_OBJECT_STORE_ROOT=/data/object-store`:
+
+- started as `campo`: `/ready` returned `503` (store not writable);
+- started as root: uvicorn ran as uid 999, `/data/object-store` was owned by
+  `campo`, and `/ready` returned `200` (under `APP_ENV=staging`; production
+  additionally requires TLS to PostgreSQL, which the local test database
+  does not offer);
+- a harmless probe object written through `app.deps.get_object_store()`
+  was read back byte-identical from a **new** container on the same volume;
+- `APP_ENV=production` with no `CAMPO_OBJECT_STORE_ROOT`: `/ready` `503`.
+
+### Railway settings
+
+On the Railway service that runs this image:
+
+| Setting | Value |
+|---|---|
+| Volume mount path | `/data` |
+| `CAMPO_OBJECT_STORE_ROOT` | `/data/object-store` |
+| `RAILWAY_RUN_UID` | `0` (Railway's documented setting for a non-root image with a volume; the entrypoint drops back to `campo`) |
+| Healthcheck path | `/ready` |
+
+**LIMITATION:** a Railway volume is a single-instance disk. The service must
+stay at one replica, and the volume is not a backup. A managed object-store
+backend remains future work.
 
 ## Deployment classification
 

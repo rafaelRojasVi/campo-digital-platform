@@ -11,6 +11,8 @@ import pytest
 from app.object_store import (
     LocalObjectStore,
     ObjectStoreError,
+    ObjectStoreNotConfiguredError,
+    resolve_object_store_root,
 )
 
 
@@ -113,3 +115,45 @@ def test_different_content_produces_different_keys(store: LocalObjectStore) -> N
     first = store.put(io.BytesIO(b"content one"), media_type=None)
     second = store.put(io.BytesIO(b"content two"), media_type=None)
     assert first.key != second.key
+
+
+@pytest.mark.parametrize("app_env", ["development", "test", "staging", None])
+def test_non_production_root_defaults_to_local_working_copy(app_env: str | None) -> None:
+    assert resolve_object_store_root(app_env, None) == Path(".local/object-store")
+    assert resolve_object_store_root(app_env, "relative/ok") == Path("relative/ok")
+
+
+def test_production_root_requires_explicit_configuration() -> None:
+    with pytest.raises(ObjectStoreNotConfiguredError):
+        resolve_object_store_root("production", None)
+    with pytest.raises(ObjectStoreNotConfiguredError):
+        resolve_object_store_root("production", "")
+
+
+def test_production_root_rejects_relative_path() -> None:
+    # A relative path lands in the container's own layer, erased on redeploy.
+    with pytest.raises(ObjectStoreNotConfiguredError):
+        resolve_object_store_root("production", ".local/object-store")
+
+
+def test_production_root_accepts_absolute_volume_path() -> None:
+    assert resolve_object_store_root("production", "/data/object-store") == Path(
+        "/data/object-store"
+    )
+
+
+def test_check_writable_leaves_no_probe_behind(store: LocalObjectStore) -> None:
+    store.check_writable()
+
+    assert list((store.root / "_tmp").iterdir()) == []
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_check_writable_raises_on_read_only_root(store: LocalObjectStore) -> None:
+    tmp_dir = store.root / "_tmp"
+    tmp_dir.chmod(0o500)
+    try:
+        with pytest.raises(OSError):
+            store.check_writable()
+    finally:
+        tmp_dir.chmod(0o700)

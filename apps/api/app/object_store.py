@@ -25,6 +25,10 @@ class ObjectStoreError(RuntimeError):
     """Base error for object store operations."""
 
 
+class ObjectStoreNotConfiguredError(ObjectStoreError):
+    """Raised when production has no explicit, absolute object-store root."""
+
+
 class ObjectAlreadyExistsWithDifferentContentError(ObjectStoreError):
     """Raised when a content-addressed key already exists with a different size."""
 
@@ -55,6 +59,35 @@ class ObjectStore(Protocol):
         """Return whether a key is present in the store."""
 
 
+DEFAULT_LOCAL_OBJECT_STORE_ROOT = ".local/object-store"
+
+
+def resolve_object_store_root(app_env: str | None, configured: str | None) -> Path:
+    """Return the object-store root for ``app_env``, failing closed in production.
+
+    Outside production the relative ``.local/object-store`` default is fine:
+    it is a developer's working copy. In production that default resolves
+    inside the container's own writable layer, which most hosts (Railway,
+    Cloud Run, Render) discard on every redeploy or restart -- uploaded
+    workbooks would silently vanish while their database rows survive. So
+    production must name an absolute path explicitly, which in practice is
+    the mount point of a persistent volume.
+    """
+
+    if app_env != "production":
+        return Path(configured or DEFAULT_LOCAL_OBJECT_STORE_ROOT)
+    if not configured:
+        raise ObjectStoreNotConfiguredError(
+            "CAMPO_OBJECT_STORE_ROOT must be set in production (a persistent volume path)."
+        )
+    root = Path(configured)
+    if not root.is_absolute():
+        raise ObjectStoreNotConfiguredError(
+            "CAMPO_OBJECT_STORE_ROOT must be an absolute path in production."
+        )
+    return root
+
+
 def _sha256_to_key(digest_hex: str) -> str:
     return f"sha256/{digest_hex[:2]}/{digest_hex[2:]}"
 
@@ -66,6 +99,18 @@ class LocalObjectStore:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         (self.root / "_tmp").mkdir(parents=True, exist_ok=True)
+
+    def check_writable(self) -> None:
+        """Write and remove a probe file, raising ``OSError`` if the root is not writable.
+
+        A volume mounted root-owned over a non-root process's path passes
+        ``mkdir(exist_ok=True)`` at construction and fails only on the first
+        real upload; this surfaces that at readiness time instead.
+        """
+
+        probe = self.root / "_tmp" / f"ready-{uuid.uuid4().hex}"
+        probe.write_bytes(b"")
+        probe.unlink()
 
     def put(self, data: BinaryIO, *, media_type: str | None) -> StoredObject:
         """Stream ``data`` to a temp file, hash it, then atomically publish it."""

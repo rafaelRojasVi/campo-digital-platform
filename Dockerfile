@@ -60,8 +60,10 @@ COPY apps/api ./apps/api
 COPY migrations ./migrations
 COPY alembic.ini ./alembic.ini
 COPY --from=dashboard-build /dashboard/dist ./products/transelect/dashboard/dist
+COPY scripts/container/entrypoint.sh /usr/local/bin/campo-entrypoint
 
-RUN groupadd --system campo && \
+RUN chmod 0755 /usr/local/bin/campo-entrypoint && \
+    groupadd --system campo && \
     useradd --system --gid campo --home-dir /app --no-create-home campo && \
     chown -R campo:campo /app
 
@@ -79,4 +81,8 @@ EXPOSE 8080
 # docs/platform/production-platform-v1.md: "no implicit destructive
 # migration on app startup"; apply `alembic upgrade head` as a separate
 # release step against this same image.
+# See scripts/container/entrypoint.sh: a no-op under the default non-root
+# user; when a host starts the container as root to mount a root-owned
+# volume, it hands CAMPO_OBJECT_STORE_ROOT to `campo` and drops privileges.
+ENTRYPOINT ["/usr/local/bin/campo-entrypoint"]
 CMD ["sh", "-c", "uv run --frozen --no-sync uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port ${PORT}"]

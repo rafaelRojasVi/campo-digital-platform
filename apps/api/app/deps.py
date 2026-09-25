@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 from collections.abc import Generator
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import Cookie, Depends, HTTPException
@@ -28,7 +27,7 @@ from app.dev_auth import (
 )
 from app.entra_auth import EntraOidcClient, MsalEntraOidcClient
 from app.google_auth import GoogleOidcClient, GoogleOidcSignInClient
-from app.object_store import LocalObjectStore, ObjectStore
+from app.object_store import LocalObjectStore, ObjectStore, resolve_object_store_root
 from app.session_store import PlatformSessionStore
 
 SESSION_COOKIE_NAME = "campo_session"
@@ -53,11 +52,19 @@ def get_platform_session_store() -> PlatformSessionStore:
 
 
 def get_object_store() -> ObjectStore:
-    """Return the process-level local object store."""
+    """Return the process-level local object store.
+
+    Raises ``app.object_store.ObjectStoreNotConfiguredError`` (mapped to 503
+    by ``app.main``) in production without an absolute
+    ``CAMPO_OBJECT_STORE_ROOT``, and stays uncached in that case so a later
+    request succeeds once the configuration arrives.
+    """
 
     global _object_store
     if _object_store is None:
-        root = Path(os.environ.get("CAMPO_OBJECT_STORE_ROOT", ".local/object-store"))
+        root = resolve_object_store_root(
+            os.environ.get("APP_ENV"), os.environ.get("CAMPO_OBJECT_STORE_ROOT")
+        )
         _object_store = LocalObjectStore(root)
     return _object_store
 
