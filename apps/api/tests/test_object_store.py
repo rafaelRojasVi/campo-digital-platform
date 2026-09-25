@@ -12,6 +12,9 @@ from app.object_store import (
     LocalObjectStore,
     ObjectStoreError,
     ObjectStoreNotConfiguredError,
+    ObjectStoreNotPersistentError,
+    open_configured_object_store,
+    require_persistent_mount,
     resolve_object_store_root,
 )
 
@@ -157,3 +160,103 @@ def test_check_writable_raises_on_read_only_root(store: LocalObjectStore) -> Non
             store.check_writable()
     finally:
         tmp_dir.chmod(0o700)
+
+
+# /proc/self/mountinfo of a container started with no volume attached: the
+# overlay root plus the runtime's usual pseudo-filesystems and bind mounts.
+_NO_VOLUME_MOUNTINFO = """\
+600 500 0:52 / / rw,relatime master:300 - overlay overlay rw,lowerdir=/l,upperdir=/u,workdir=/w
+601 600 0:55 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw
+602 600 0:56 / /dev rw,nosuid - tmpfs tmpfs rw,size=65536k,mode=755
+603 600 0:60 / /sys ro,nosuid,nodev,noexec,relatime - sysfs sysfs ro
+604 600 8:1 /docker/containers/abc/resolv.conf /etc/resolv.conf rw,relatime - ext4 /dev/sda1 rw
+605 600 8:1 /docker/containers/abc/hosts /etc/hosts rw,relatime - ext4 /dev/sda1 rw
+606 602 0:51 / /dev/shm rw,nosuid,nodev,noexec,relatime - tmpfs shm rw,size=65536k
+"""
+
+_DATA_VOLUME_LINE = "607 600 8:1 /volumes/data/_data /data rw,relatime - ext4 /dev/sda1 rw\n"
+
+
+def _mountinfo(tmp_path: Path, text: str) -> Path:
+    path = tmp_path / "mountinfo"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_persistent_mount_refuses_a_root_created_on_the_container_layer(
+    tmp_path: Path,
+) -> None:
+    # What the root entrypoint produces with no volume: /data/object-store
+    # exists and is writable, but lives on the overlay root.
+    mountinfo = _mountinfo(tmp_path, _NO_VOLUME_MOUNTINFO)
+
+    with pytest.raises(ObjectStoreNotPersistentError, match="root filesystem"):
+        require_persistent_mount(Path("/data/object-store"), mountinfo_path=mountinfo)
+
+
+def test_persistent_mount_is_an_object_store_configuration_error(tmp_path: Path) -> None:
+    # Subclassing keeps the existing 503 mapping for uploads and readiness.
+    assert issubclass(ObjectStoreNotPersistentError, ObjectStoreNotConfiguredError)
+
+
+def test_persistent_mount_accepts_a_root_under_a_mounted_volume(tmp_path: Path) -> None:
+    mountinfo = _mountinfo(tmp_path, _NO_VOLUME_MOUNTINFO + _DATA_VOLUME_LINE)
+
+    require_persistent_mount(Path("/data/object-store"), mountinfo_path=mountinfo)
+    require_persistent_mount(Path("/data"), mountinfo_path=mountinfo)
+
+
+def test_persistent_mount_does_not_match_a_sibling_prefix(tmp_path: Path) -> None:
+    # /data is mounted; /database is not under it.
+    mountinfo = _mountinfo(tmp_path, _NO_VOLUME_MOUNTINFO + _DATA_VOLUME_LINE)
+
+    with pytest.raises(ObjectStoreNotPersistentError):
+        require_persistent_mount(Path("/database/object-store"), mountinfo_path=mountinfo)
+
+
+def test_persistent_mount_refuses_a_memory_backed_mount(tmp_path: Path) -> None:
+    mountinfo = _mountinfo(
+        tmp_path,
+        _NO_VOLUME_MOUNTINFO + "607 600 0:70 / /data rw,relatime - tmpfs tmpfs rw\n",
+    )
+
+    with pytest.raises(ObjectStoreNotPersistentError, match="tmpfs"):
+        require_persistent_mount(Path("/data/object-store"), mountinfo_path=mountinfo)
+
+
+def test_persistent_mount_decodes_escaped_mount_points(tmp_path: Path) -> None:
+    mountinfo = _mountinfo(
+        tmp_path,
+        _NO_VOLUME_MOUNTINFO + "607 600 8:1 / /mnt/campo\\040data rw - ext4 /dev/sda1 rw\n",
+    )
+
+    require_persistent_mount(Path("/mnt/campo data/object-store"), mountinfo_path=mountinfo)
+
+
+def test_persistent_mount_fails_closed_when_mountinfo_is_unreadable(tmp_path: Path) -> None:
+    with pytest.raises(ObjectStoreNotPersistentError):
+        require_persistent_mount(Path("/data/object-store"), mountinfo_path=tmp_path / "missing")
+
+
+def test_production_store_is_not_opened_off_a_volume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import app.object_store as object_store_module
+
+    monkeypatch.setattr(
+        object_store_module,
+        "PROC_SELF_MOUNTINFO",
+        _mountinfo(tmp_path, _NO_VOLUME_MOUNTINFO),
+    )
+    root = tmp_path / "object-store"
+
+    with pytest.raises(ObjectStoreNotPersistentError):
+        open_configured_object_store("production", str(root))
+    # Refused before the store created anything.
+    assert not root.exists()
+
+
+def test_non_production_store_skips_the_volume_check(tmp_path: Path) -> None:
+    store = open_configured_object_store("staging", str(tmp_path / "object-store"))
+
+    assert store.root == (tmp_path / "object-store").resolve()

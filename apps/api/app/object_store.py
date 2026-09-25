@@ -88,6 +88,93 @@ def resolve_object_store_root(app_env: str | None, configured: str | None) -> Pa
     return root
 
 
+class ObjectStoreNotPersistentError(ObjectStoreNotConfiguredError):
+    """Raised when the production object-store root is not on a mounted volume."""
+
+
+PROC_SELF_MOUNTINFO = Path("/proc/self/mountinfo")
+# Mounted, but held in memory: gone on restart exactly like the container layer.
+_EPHEMERAL_FILESYSTEM_TYPES = frozenset({"tmpfs", "ramfs"})
+_MOUNTINFO_ESCAPE = re.compile(r"\\([0-7]{3})")
+
+
+def _unescape_mountinfo_path(field: str) -> str:
+    return _MOUNTINFO_ESCAPE.sub(lambda match: chr(int(match.group(1), 8)), field)
+
+
+def _enclosing_mount(path: Path, mountinfo: str) -> tuple[Path, str] | None:
+    """Return the mount point and filesystem type that ``path`` lives on.
+
+    ``path`` need not exist: the longest mount point that is ``path`` or one
+    of its ancestors is where it would be created.
+    """
+
+    best: tuple[Path, str] | None = None
+    for line in mountinfo.splitlines():
+        pre, separator, post = line.partition(" - ")
+        fields = pre.split()
+        if not separator or len(fields) < 5 or not post.split():
+            continue
+        mount_point = Path(_unescape_mountinfo_path(fields[4]))
+        if mount_point != path and mount_point not in path.parents:
+            continue
+        # Later lines are later mounts, which shadow earlier ones at the same point.
+        if best is None or len(mount_point.parts) >= len(best[0].parts):
+            best = (mount_point, post.split()[0])
+    return best
+
+
+def require_persistent_mount(root: Path, *, mountinfo_path: Path | None = None) -> None:
+    """Refuse a production object-store root that is not on its own mounted volume.
+
+    An absolute, writable path proves nothing about persistence: a container
+    started as root can ``mkdir -p /data/object-store`` straight onto its own
+    writable layer when no volume is attached (the image's entrypoint does
+    exactly that), and everything written there vanishes on the next
+    redeploy. What a persistent volume adds, and the container layer lacks,
+    is a mount. So the root must sit under a mount point other than ``/``,
+    and that mount must not be memory-backed.
+
+    This establishes that *something* is mounted there, not that the host
+    keeps it across deploys; only the host's volume configuration does that.
+    """
+
+    mountinfo_path = mountinfo_path or PROC_SELF_MOUNTINFO
+    try:
+        mountinfo = mountinfo_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ObjectStoreNotPersistentError(
+            f"Cannot read {mountinfo_path} to confirm CAMPO_OBJECT_STORE_ROOT is on a volume."
+        ) from exc
+
+    enclosing = _enclosing_mount(Path(os.path.abspath(root)), mountinfo)
+    if enclosing is None or enclosing[0] == Path("/"):
+        raise ObjectStoreNotPersistentError(
+            f"CAMPO_OBJECT_STORE_ROOT ({root}) is on the container's root filesystem, "
+            "not on a mounted persistent volume."
+        )
+    mount_point, filesystem_type = enclosing
+    if filesystem_type in _EPHEMERAL_FILESYSTEM_TYPES:
+        raise ObjectStoreNotPersistentError(
+            f"CAMPO_OBJECT_STORE_ROOT ({root}) is on {filesystem_type} at {mount_point}, "
+            "which does not survive a restart."
+        )
+
+
+def open_configured_object_store(app_env: str | None, configured: str | None) -> LocalObjectStore:
+    """Build the process's object store, failing closed in production.
+
+    Production requires an absolute root (``resolve_object_store_root``) on
+    a mounted, non-memory filesystem (``require_persistent_mount``), checked
+    before the store creates any directory.
+    """
+
+    root = resolve_object_store_root(app_env, configured)
+    if app_env == "production":
+        require_persistent_mount(root)
+    return LocalObjectStore(root)
+
+
 def _sha256_to_key(digest_hex: str) -> str:
     return f"sha256/{digest_hex[:2]}/{digest_hex[2:]}"
 

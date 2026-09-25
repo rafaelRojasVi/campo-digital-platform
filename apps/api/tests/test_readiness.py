@@ -114,3 +114,30 @@ def test_readiness_is_ready_with_writable_object_store(
     store = LocalObjectStore(tmp_path / "object-store")
 
     assert _ready_with_store(monkeypatch, lambda: store) == (200, {"status": "ready"})
+
+
+def test_readiness_is_not_ready_when_production_store_has_no_volume(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The Railway misconfiguration this guards against: the variable is set
+    # and the root entrypoint has created /data/object-store, but no volume is
+    # attached, so the path is writable yet lives on the container layer.
+    import app.deps as deps_module
+    import app.object_store as object_store_module
+
+    mountinfo = tmp_path / "mountinfo"
+    mountinfo.write_text(
+        "600 500 0:52 / / rw,relatime - overlay overlay rw,lowerdir=/l,upperdir=/u\n"
+        "601 600 0:55 / /proc rw,nosuid - proc proc rw\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(object_store_module, "PROC_SELF_MOUNTINFO", mountinfo)
+    monkeypatch.setattr(deps_module, "_object_store", None)
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CAMPO_OBJECT_STORE_ROOT", "/data/object-store")
+
+    assert _ready_with_store(monkeypatch, deps_module.get_object_store) == (
+        503,
+        {"status": "not_ready"},
+    )
+    assert deps_module._object_store is None

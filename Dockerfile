@@ -85,4 +85,4 @@ EXPOSE 8080
 # user; when a host starts the container as root to mount a root-owned
 # volume, it hands CAMPO_OBJECT_STORE_ROOT to `campo` and drops privileges.
 ENTRYPOINT ["/usr/local/bin/campo-entrypoint"]
-CMD ["sh", "-c", "uv run --frozen --no-sync uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "exec uv run --frozen --no-sync uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port ${PORT}"]
