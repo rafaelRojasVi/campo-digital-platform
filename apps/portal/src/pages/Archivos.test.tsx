@@ -175,12 +175,12 @@ describe('Archivos', () => {
   })
 })
 
-describe('Archivos — staging (no sign-in mechanism yet)', () => {
+describe('Archivos — staging (Google Workspace sign-in)', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
   })
 
-  it('shows an honest sign-in-unavailable message instead of dead dev-login buttons', async () => {
+  it('offers Google sign-in instead of dev-login buttons', async () => {
     vi.stubEnv('VITE_CAMPO_ENV', 'staging')
     mockPlatformFetch({ me: undefined })
 
@@ -190,9 +190,26 @@ describe('Archivos — staging (no sign-in mechanism yet)', () => {
       </RouterProvider>,
     )
 
-    await screen.findByText(/inicio de sesión/i)
+    const link = await screen.findByRole('link', { name: 'Continuar con Google' })
+    expect(link).toHaveAttribute('href', '/api/auth/google/login')
     expect(screen.queryByText('dev-admin')).not.toBeInTheDocument()
     expect(screen.queryByText('dev-operator')).not.toBeInTheDocument()
     expect(screen.queryByText('dev-viewer')).not.toBeInTheDocument()
+  })
+
+  it('does not label a real session as local development authentication', async () => {
+    vi.stubEnv('VITE_CAMPO_ENV', 'staging')
+    mockPlatformFetch({
+      me: { identity_key: '104728391027364518293', display_name: 'Usuario Campo', product_grants: [] },
+    })
+
+    render(
+      <RouterProvider>
+        <Archivos />
+      </RouterProvider>,
+    )
+
+    await screen.findByText(/Usuario Campo/)
+    expect(screen.queryByText(/Autenticación local de desarrollo/)).not.toBeInTheDocument()
   })
 })

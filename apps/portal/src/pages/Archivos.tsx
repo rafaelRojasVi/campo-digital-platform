@@ -3,6 +3,7 @@ import { Link } from '../router/Router'
 import { getCampoEnvironment } from '../runtime/environment'
 import {
   DEV_IDENTITIES,
+  GOOGLE_LOGIN_PATH,
   devLogin,
   getAuditLog,
   getMe,
@@ -147,10 +148,16 @@ export function Archivos() {
         </p>
         <h1>Archivos</h1>
         {environment === 'staging' ? (
-          <p className="ingesta__note">
-            El inicio de sesión de plataforma aún no está disponible en este entorno (queda
-            pendiente la integración con Entra ID).
-          </p>
+          <>
+            <p className="ingesta__note">
+              Ingresa con tu cuenta de Google Workspace de Campo Digital (@campodigital.cl).
+            </p>
+            <div className="ingesta__login">
+              {/* A full-page navigation, not fetch(): the API redirects the
+                  browser to Google and back, then sets the session cookie. */}
+              <a href={GOOGLE_LOGIN_PATH}>Continuar con Google</a>
+            </div>
+          </>
         ) : (
           <>
             <p className="ingesta__note">
@@ -177,9 +184,11 @@ export function Archivos() {
         <Link to="/">← Campo Digital</Link>
       </p>
       <h1>Archivos</h1>
-      <p className="ingesta__note">
-        Autenticación local de desarrollo — no representa un mecanismo de producción.
-      </p>
+      {getCampoEnvironment() === 'local' && (
+        <p className="ingesta__note">
+          Autenticación local de desarrollo — no representa un mecanismo de producción.
+        </p>
+      )}
 
       <div className="ingesta__session">
         <span>
