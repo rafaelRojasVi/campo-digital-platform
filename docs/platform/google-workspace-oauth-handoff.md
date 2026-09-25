@@ -9,8 +9,19 @@ Platform engineering cannot perform these steps.
 The application side is complete and tested (see
 `../adr/ADR-010-google-workspace-sign-in-for-transelec.md`), against
 locally-signed tokens and a fake provider. **No real Google sign-in has ever
-run.** One item below — the exact redirect URI — cannot be finalised until
-the pilot's public domain is decided.
+run.**
+
+**Update (2026-09-25).** The OAuth client exists. Its registered production
+redirect URI, as reported by Rafael, is:
+
+```
+https://campo-digital-platform-production.up.railway.app/api/auth/google/callback
+```
+
+It is correct as registered and **must not be changed**. See
+"The redirect URI and `/api`" below for why the `/api` segment belongs
+there. The client's audience (Internal or External) has not been read from
+the console by platform engineering; see "User type" below.
 
 ## Why Google rather than Microsoft
 
@@ -25,12 +36,19 @@ already exists is worth more than one that is blocked.
 In the Google Cloud console, in a project owned by the `campodigital.cl`
 organization:
 
-1. **APIs & Services → OAuth consent screen.**
-   - User type: **Internal**. This restricts sign-in to `campodigital.cl`
-     Workspace accounts at the Google end. It is not the only control — the
-     API independently requires the verified `hd` claim to equal
-     `campodigital.cl` — but it is the right posture and avoids Google's
-     verification review entirely.
+1. **APIs & Services → OAuth consent screen** (in newer consoles, **Google
+   Auth Platform → Audience**).
+   - User type: **Internal** is preferred, and is only available when the
+     Cloud project belongs to the `campodigital.cl` organization. It
+     restricts sign-in to Workspace accounts at the Google end. **OPEN
+     QUESTION (2026-09-25):** which audience the existing client actually
+     has. Read it on the Audience page; do not assume Internal. If it is
+     **External**, then while its publishing status is "Testing" only the
+     test users listed there can sign in, so every colleague would have to be
+     listed. Either way, the API independently requires the verified `hd`
+     claim to equal `campodigital.cl` (`app.google_auth.verify_id_token`),
+     and that is the control this application enforces. The Google-side
+     audience is defence in depth, not the boundary.
    - App name: `Campo Digital — Transelec`.
    - Support email and developer contact: a `campodigital.cl` address.
    - Scopes: **`openid`, `email`, `profile` only.** Nothing else. This
@@ -40,16 +58,15 @@ organization:
    - Application type: **Web application** (not "Desktop", not "Android/iOS"
      — the flow runs server-side with a client secret).
    - Name: `Campo Digital Transelec API`.
-   - **Authorized redirect URI** — this is the item that cannot be closed
-     yet. The value is always the API's public origin plus
-     `/auth/google/callback`:
-     - `http://localhost:8000/auth/google/callback` — add this now; it is
-       needed for local development and is already final.
-     - `https://<dominio-definitivo>/auth/google/callback` — **pending the
-       domain decision.** It must match byte for byte: scheme, host, port,
-       path, no trailing slash. Google rejects the sign-in outright if it
-       differs. Once the domain is chosen, add it here and set
-       `GOOGLE_REDIRECT_BASE_URL` to the same origin.
+   - **Authorized redirect URIs.** The application sends exactly
+     `GOOGLE_REDIRECT_BASE_URL + "/auth/google/callback"`
+     (`app.routers.google_auth._redirect_uri`), and Google rejects the
+     sign-in unless that string equals a registered URI byte for byte:
+     scheme, host, port, path, no trailing slash.
+     - Production (registered; keep as is):
+       `https://campo-digital-platform-production.up.railway.app/api/auth/google/callback`
+     - Local development, if wanted:
+       `http://localhost:8000/auth/google/callback`
    - "Authorized JavaScript origins" is not needed and should be left empty:
      no browser code in this application talks to Google.
 
@@ -64,10 +81,30 @@ organization:
 |---|---|---|
 | `GOOGLE_CLIENT_ID` | from step 3 | Not a secret, but must match the registered client. |
 | `GOOGLE_CLIENT_SECRET` | from step 3 | Secret. Never in the repository, never in a frontend build. |
-| `GOOGLE_REDIRECT_BASE_URL` | the API's public origin | The redirect URI is this + `/auth/google/callback`, and must equal what step 2 registered. |
+| `GOOGLE_REDIRECT_BASE_URL` | `https://campo-digital-platform-production.up.railway.app/api` | The redirect URI is this + `/auth/google/callback`, and must equal what step 2 registered. Keep the `/api`. |
 | `GOOGLE_WORKSPACE_DOMAIN` | `campodigital.cl` | The `hd` claim an `id_token` must carry, exactly, to be accepted. |
 | `PLATFORM_TOKEN_ENCRYPTION_KEY` | a generated Fernet key | Encrypts the short-lived sign-in flow cookie. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
 | `TRANSELEC_BOOTSTRAP_ADMIN_EMAIL` | one `campodigital.cl` address | See "Initial permissions" below. Leave unset to grant nothing automatically. |
+
+## The redirect URI and `/api`
+
+The container mounts every browser-facing router twice, at `/…` and at
+`/api/…` (`app.main`, the same-origin `/api/*` alias every dashboard bundle
+is built against). So `/auth/google/callback` and
+`/api/auth/google/callback` reach the same handler. What differs is the
+string Google compares. The API builds the redirect URI from
+`GOOGLE_REDIRECT_BASE_URL`, so with the base URL ending in `/api` it sends
+`…/api/auth/google/callback`. That is what is registered.
+
+**DECISION (2026-09-25):** production keeps
+`GOOGLE_REDIRECT_BASE_URL=https://campo-digital-platform-production.up.railway.app/api`
+and the registered callback with `/api`. Dropping `/api` from only one of
+the two would make every production sign-in fail with a Google
+`redirect_uri_mismatch`, and changing both gains nothing. Nobody needs to
+edit the Google client.
+
+The flow cookie is issued with the default path `/`, so it reaches the
+callback under either prefix.
 
 ## Initial permissions
 
@@ -93,6 +130,53 @@ Access is opened in two steps:
    they need — `viewer` for read-only access to the dashboard, `operator` or
    `admin` to import spreadsheets and publish or restore versions.
 
+   The dashboard's **Datos → Accesos** form offers only `viewer` and
+   `operator`, on purpose. Making someone a second **administrator** goes
+   through the same API the form uses, which accepts `admin`. See the next
+   section.
+
+### Handing administration to a second named account
+
+This procedure is covered end to end by
+`apps/api/integration_tests/test_google_auth_router.py::test_bootstrap_admin_grants_admin_to_a_named_account_through_the_api`.
+
+1. **Keep `TRANSELEC_BOOTSTRAP_ADMIN_EMAIL` set to Javier's address** until
+   his own admin grant is established. It fires once, at his first sign-in.
+2. Javier signs in. **Confirm the grant exists** before anything else: the
+   **Datos → Accesos** pane opens for him and lists him as `admin`, or
+   `GET /api/auth/admin/product-grants/transelect` returns `200` with his row.
+3. The named account (Rafael's `campodigital.cl` Workspace account) signs in
+   once. It is authenticated but has no grant, so it receives `403`. The
+   bootstrap does not apply, because its address is not the configured one.
+4. Javier, signed in on the dashboard, grants it `admin` from his browser's
+   developer console. That runs on the dashboard's own origin, with his
+   session cookie and a CSRF token, exactly as the Accesos form does:
+
+   ```js
+   const { csrf_token } = await (await fetch("/api/auth/csrf")).json();
+   const response = await fetch("/api/auth/admin/product-grants/transelect", {
+     method: "POST",
+     headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf_token },
+     body: JSON.stringify({ email: "<named-account>@campodigital.cl", role: "admin" }),
+   });
+   console.log(response.status, await response.json());
+   ```
+
+   Expect `200` and `"role": "admin"`. A `404` means that account has not
+   signed in yet (step 3).
+5. The named account reloads the dashboard. It now administers Transelec
+   only, not LiDAR or Forestal. Javier keeps his own grant.
+
+Every role change is recorded in `platform.audit_event` as
+`event_type = 'product_grant.changed'`, with the granted account as the
+subject and `{previous_role, role, via}` as metadata. `via` is
+`bootstrap_email` for the configuration grant (no actor) and `admin_api`
+for a grant made by a signed-in administrator (who is the actor).
+
+After step 2 the bootstrap variable has done its job. Leaving it set is
+harmless while Javier holds any Transelec grant. It would fire again only
+for that address holding no grant at all.
+
 ## What this client will never be used for
 
 - It never signs in as the application itself: there is no service account
@@ -105,7 +189,8 @@ Access is opened in two steps:
 
 ## Still pending after this handoff
 
-- The public domain, and therefore the exact production redirect URI.
+- The client's actual audience (Internal or External, and if External its
+  publishing status and test users).
 - One real end-to-end sign-in with a `campodigital.cl` account, which is the
   only thing that can confirm the `hd` claim arrives as expected and that
   the bootstrap grant lands on `transelect` alone.
