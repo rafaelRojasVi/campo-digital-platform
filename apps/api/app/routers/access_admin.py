@@ -22,9 +22,11 @@ from app.access_repository import (
     AppUser,
     ProductGrantee,
     get_app_user_by_email,
+    get_product_role,
     grant_product_role,
     list_grantees_for_product,
 )
+from app.audit import PRODUCT_GRANT_CHANGED_EVENT, record_audit_event
 from app.csrf import require_csrf
 from app.deps import ensure_can, get_current_app_user, get_db_connection
 
@@ -90,10 +92,16 @@ def list_product_grants(
 def grant_product_role_by_email(
     product_key: str,
     payload: GrantProductRoleRequest,
+    caller: Annotated[AppUser, Depends(get_current_app_user)],
     connection: Annotated[Connection, Depends(get_db_connection)],
     _: Annotated[Role, Depends(require_manage_access)],
 ) -> ProductGranteeView:
-    """Grant ``payload.role`` on ``product_key`` to the user with ``payload.email``."""
+    """Grant ``payload.role`` on ``product_key`` to the user with ``payload.email``.
+
+    Every call records a ``product_grant.changed`` audit event in the same
+    transaction, naming who granted what to whom and the role it replaced,
+    including a no-op re-grant of the role already held.
+    """
 
     target = get_app_user_by_email(connection, email=payload.email)
     if target is None:
@@ -102,8 +110,22 @@ def grant_product_role_by_email(
             detail="No user has signed in with that email yet.",
         )
 
+    previous_role = get_product_role(connection, app_user_id=target.id, product_key=product_key)
     grant_product_role(
         connection, app_user_id=target.id, product_key=product_key, role=payload.role
+    )
+    record_audit_event(
+        connection,
+        actor_app_user_id=caller.id,
+        event_type=PRODUCT_GRANT_CHANGED_EVENT,
+        product_key=product_key,
+        subject_kind="app_user",
+        subject_id=str(target.id),
+        metadata={
+            "previous_role": previous_role.value if previous_role else None,
+            "role": payload.role.value,
+            "via": "admin_api",
+        },
     )
 
     return ProductGranteeView(

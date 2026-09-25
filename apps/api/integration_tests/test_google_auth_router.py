@@ -401,3 +401,113 @@ def test_no_bootstrap_at_all_when_no_address_is_configured(client: TestClient) -
     _complete_sign_in(client, provider)
 
     assert client.get("/auth/me").json()["product_grants"] == []
+
+
+def test_the_bootstrap_grant_is_audited_as_a_configuration_grant(
+    client: TestClient, integration_engine: Engine
+) -> None:
+    provider = _use(
+        FakeGoogleOidcClient(sign_in=_sign_in()),
+        transelec_bootstrap_admin_email=_BOOTSTRAP_EMAIL,
+    )
+
+    _complete_sign_in(client, provider)
+
+    with integration_engine.connect() as connection:
+        events = connection.execute(
+            text(
+                """
+                SELECT actor_app_user_id, product_key, subject_id, metadata
+                FROM platform.audit_event
+                WHERE event_type = 'product_grant.changed'
+                """
+            )
+        ).all()
+        user_id = connection.execute(
+            text("SELECT id FROM platform.app_user WHERE email = :email"),
+            {"email": _BOOTSTRAP_EMAIL},
+        ).scalar_one()
+    assert [tuple(event) for event in events] == [
+        (
+            None,
+            "transelect",
+            str(user_id),
+            {"previous_role": None, "role": "admin", "via": "bootstrap_email"},
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Admin handoff: the bootstrap admin makes a named account a second admin
+# ---------------------------------------------------------------------------
+
+_SECOND_ADMIN_EMAIL = "second-admin@campodigital.cl"
+
+
+def _new_browser() -> TestClient:
+    return TestClient(app, base_url="https://testserver", follow_redirects=False)
+
+
+def test_bootstrap_admin_grants_admin_to_a_named_account_through_the_api(
+    client: TestClient, integration_engine: Engine
+) -> None:
+    # 1. The bootstrap address signs in and becomes Transelec admin.
+    provider = _use(
+        FakeGoogleOidcClient(sign_in=_sign_in()),
+        transelec_bootstrap_admin_email=_BOOTSTRAP_EMAIL,
+    )
+    _complete_sign_in(client, provider)
+    assert client.get("/api/auth/me").json()["product_grants"] == [
+        {"product_key": "transelect", "role": "admin"}
+    ]
+
+    # 2. The named account signs in once, in its own browser: authenticated,
+    #    not authorized, and not bootstrapped (it is not the configured email).
+    with _new_browser() as second:
+        provider.sign_in = _sign_in(
+            subject="sub-second-admin", email=_SECOND_ADMIN_EMAIL, display_name="Second Admin"
+        )
+        assert _complete_sign_in(second, provider).status_code == 302
+        assert second.get("/api/auth/me").json()["product_grants"] == []
+        assert second.get("/api/auth/admin/product-grants/transelect").status_code == 403
+
+        # 3. The bootstrap admin grants it admin through the same-origin API,
+        #    exactly as a browser session would: session cookie + CSRF token.
+        csrf = client.get("/api/auth/csrf").json()["csrf_token"]
+        response = client.post(
+            "/api/auth/admin/product-grants/transelect",
+            json={"email": _SECOND_ADMIN_EMAIL, "role": "admin"},
+            headers={"X-CSRF-Token": csrf, "Origin": "https://testserver"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["role"] == "admin"
+
+        # 4. The named account now administers Transelec -- and only Transelec.
+        assert second.get("/api/auth/me").json()["product_grants"] == [
+            {"product_key": "transelect", "role": "admin"}
+        ]
+        grants = second.get("/api/auth/admin/product-grants/transelect")
+        assert grants.status_code == 200
+        assert {(g["email"], g["role"]) for g in grants.json()} == {
+            (_BOOTSTRAP_EMAIL, "admin"),
+            (_SECOND_ADMIN_EMAIL, "admin"),
+        }
+
+    # 5. The bootstrap admin keeps its grant, and both changes are audited.
+    assert client.get("/api/auth/me").json()["product_grants"] == [
+        {"product_key": "transelect", "role": "admin"}
+    ]
+    with integration_engine.connect() as connection:
+        vias = (
+            connection.execute(
+                text(
+                    """
+                    SELECT metadata->>'via' FROM platform.audit_event
+                    WHERE event_type = 'product_grant.changed' ORDER BY id
+                    """
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert vias == ["bootstrap_email", "admin_api"]
