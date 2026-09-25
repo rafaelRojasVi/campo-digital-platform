@@ -6,7 +6,7 @@ unexplained 503 on the first real sign-in attempt.
 Runs each case in a subprocess (matching test_main_dev_auth_gate.py's
 pattern): the check only matters at ASGI lifespan startup, which needs a
 controlled, isolated process environment to vary APP_ENV/Google settings
-without leaking into the rest of this test run's process.
+without leaking into the rest of this test run's process environment.
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+
+from cryptography.fernet import Fernet
 
 API_ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,8 +50,9 @@ def _run_with_env(extra_env: dict[str, str]) -> str:
     return result.stdout
 
 
-# A syntactically valid Fernet key; not a secret of any environment.
-_FERNET_KEY = "Wm9vZ0tleUZvclRlc3RzT25seU5vdEFSZWFsS2V5MDA="
+# Generate a throwaway, valid-format key for the test; never embed key-shaped
+# literals that a history secret scanner can mistake for a real credential.
+_FERNET_KEY = Fernet.generate_key().decode("ascii")
 
 _COMPLETE_GOOGLE = {
     "POSTGRES_PASSWORD": "x",
