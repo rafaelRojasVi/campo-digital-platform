@@ -23,6 +23,7 @@ from app.entra_auth import EntraNotConfiguredError
 from app.execution import ExecutionBackend, InProcessStagingExecutionBackend
 from app.google_auth import GoogleNotConfiguredError
 from app.identity_safety import require_production_identity_configuration
+from app.object_store import LocalObjectStore, ObjectStoreError, ObjectStoreNotConfiguredError
 from app.routers.access_admin import router as access_admin_router
 from app.routers.csrf import router as csrf_router
 from app.routers.entra_auth import router as entra_auth_router
@@ -111,6 +112,17 @@ async def _google_not_configured(request: object, exc: GoogleNotConfiguredError)
     return JSONResponse(status_code=503, content={"detail": "Google sign-in is not configured."})
 
 
+@app.exception_handler(ObjectStoreNotConfiguredError)
+async def _object_store_not_configured(
+    request: object, exc: ObjectStoreNotConfiguredError
+) -> JSONResponse:
+    """Production without a persistent object-store root refuses uploads
+    rather than writing them into a container layer the next deploy erases."""
+
+    del request, exc
+    return JSONResponse(status_code=503, content={"detail": "File storage is not configured."})
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Process liveness probe with no external dependencies."""
@@ -122,11 +134,12 @@ def health() -> dict[str, str]:
 def readiness(
     engine: Annotated[Engine, Depends(get_database_engine)],
 ) -> JSONResponse:
-    """Dependency readiness probe for the platform database."""
+    """Dependency readiness probe for the platform database and file storage."""
 
     try:
         check_database_connection(engine)
-    except DatabaseUnavailableError:
+        _check_object_store_writable()
+    except (DatabaseUnavailableError, ObjectStoreError, OSError):
         return JSONResponse(
             status_code=503,
             content={"status": "not_ready"},
@@ -136,6 +149,12 @@ def readiness(
         status_code=200,
         content={"status": "ready"},
     )
+
+
+def _check_object_store_writable() -> None:
+    store = get_object_store()
+    if isinstance(store, LocalObjectStore):
+        store.check_writable()
 
 
 app.include_router(lidar_router)
@@ -205,13 +224,27 @@ app.include_router(transelec_router, prefix="/api")
 # dev and in every test/CI environment, where no products/transelect/
 # dashboard/dist directory exists. Must stay last: it registers a catch-all
 # route that would otherwise shadow the routers registered above.
+TRANSELEC_SPA_PAGE_PATHS = frozenset(
+    {
+        "transelec",
+        "transelec/explorador",
+        "transelec/pendientes",
+        "transelec/calidad",
+        "transelec/datos",
+        "transelec/importar",
+        "transelec/versiones",
+        "transelec/accesos",
+    }
+)
+
 mount_dashboard(
     app,
     reserved_root_segments=frozenset(
         {"health", "ready", "runs", "ingesta", "auth", "transelec", "api"}
     ),
-    # Must match ROUTES in products/transelect/dashboard/src/router.tsx —
-    # these are the frontend's own page paths, not backend endpoints, but
-    # they share the "transelec" first segment with the real API prefix.
-    spa_page_paths=frozenset({"transelec", "transelec/importar", "transelec/versiones"}),
+    # Must match ROUTES in products/transelect/dashboard/src/router.tsx
+    # (enforced by test_dashboard_static.py) — these are the frontend's own
+    # page paths, not backend endpoints, but they share the "transelec"
+    # first segment with the real API prefix.
+    spa_page_paths=TRANSELEC_SPA_PAGE_PATHS,
 )

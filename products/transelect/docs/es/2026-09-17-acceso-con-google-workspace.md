@@ -73,24 +73,51 @@ entra.
    `viewer` para consultar el tablero, `operator` o `admin` para además
    importar planillas y publicar o restaurar versiones.
 
+   El formulario **Datos → Accesos** ofrece sólo `viewer` y `operator`, a
+   propósito. Nombrar a un **segundo administrador** se hace con la misma
+   API que usa ese formulario, que sí acepta `admin`.
+
+### Actualización (2026-09-25): segundo administrador
+
+1. La dirección de primer administrador sigue siendo la de **Javier**, hasta
+   confirmar que su rol de administrador quedó creado: la sección
+   **Datos → Accesos** se le abre y lo muestra como `admin`.
+2. La cuenta Workspace de Rafael entra una vez (verá «sin permisos»).
+3. Javier, con su sesión abierta en el tablero, le asigna `admin` a esa
+   cuenta. Los pasos exactos, con el fragmento para la consola del
+   navegador, están en `docs/platform/google-workspace-oauth-handoff.md`,
+   sección «Handing administration to a second named account».
+4. Javier conserva su propio rol.
+
+Cada cambio de rol queda registrado en el historial de auditoría de la
+plataforma: quién lo hizo, a quién, qué rol tenía antes y cuál tiene ahora.
+El rol inicial de Javier queda registrado como otorgado por configuración.
+
 ## Qué debe configurar Javier
 
 En la consola de Google Cloud, en un proyecto del dominio `campodigital.cl`.
 El detalle exacto está en `docs/platform/google-workspace-oauth-handoff.md`;
 el resumen:
 
-1. **Pantalla de consentimiento OAuth**, de tipo **Interno** (sólo cuentas
-   `campodigital.cl`). Permisos solicitados: únicamente `openid`, `email` y
-   `profile`. Nada más — esta aplicación no lee Drive, ni correo, ni
-   calendario.
-2. **Cliente OAuth de tipo «Aplicación web»**, con la **URI de retorno**
-   exacta:
-   - `http://localhost:8000/auth/google/callback` (desarrollo local; ya es
-     definitiva y se puede agregar ahora).
-   - `https://<dominio-definitivo>/auth/google/callback` — **esta no se puede
-     cerrar todavía**, porque depende de qué dominio público se elija para el
-     piloto (ver `2026-09-16-alternativas-alojamiento-piloto.md`). Debe
-     coincidir carácter por carácter; si difiere, Google rechaza el ingreso.
+1. **Pantalla de consentimiento OAuth** (o «Público» / *Audience*).
+   Permisos solicitados: únicamente `openid`, `email` y `profile`. Nada más
+   — esta aplicación no lee Drive, ni correo, ni calendario. Lo ideal es el
+   tipo **Interno** (sólo cuentas `campodigital.cl`), pero sólo existe si el
+   proyecto pertenece a la organización `campodigital.cl`. **Pregunta
+   abierta:** qué tipo tiene realmente el cliente ya creado. Si es
+   **Externo** y está «en pruebas», sólo pueden entrar los usuarios de
+   prueba que figuren en esa página. En cualquier caso, el servidor exige
+   por su cuenta que Google certifique la pertenencia al Workspace
+   `campodigital.cl`.
+2. **Cliente OAuth de tipo «Aplicación web».** Actualización (2026-09-25):
+   ya está creado, y su **URI de retorno** registrada es
+
+   `https://campo-digital-platform-production.up.railway.app/api/auth/google/callback`
+
+   **Es correcta y no hay que cambiarla.** El `/api` debe estar: la
+   plataforma arma la URI a partir de su configuración, que termina en
+   `/api`, y Google exige que coincida carácter por carácter. Quitarlo en
+   Google haría fallar todos los ingresos.
 3. Entregar por un canal seguro (no correo ni chat en texto plano):
    - el **ID de cliente**;
    - el **secreto de cliente**.
@@ -107,8 +134,7 @@ Pero ninguna de esas pruebas habla con Google.
 
 Para confirmarlo hace falta, y aún no ocurre:
 
-- el cliente OAuth creado por Javier (los dos valores del punto 3);
-- el dominio público definitivo, que fija la URI de retorno;
+- confirmar el tipo de acceso del cliente (Interno o Externo);
 - **una prueba real de inicio de sesión** con una cuenta `@campodigital.cl`,
   que es lo único que puede confirmar que el dominio llega como se espera y
   que el primer administrador recibe el rol correcto.
@@ -118,7 +144,6 @@ expectativa bien fundamentada, no un hecho confirmado.
 
 ## Documentación relacionada
 
-[Alternativas de alojamiento del piloto](2026-09-16-alternativas-alojamiento-piloto.md) ·
 [Estado de los planes de manejo](2026-09-15-estado-planes-de-manejo.md) ·
 [ADR-010 — Google Workspace sign-in (inglés)](../../../../docs/adr/ADR-010-google-workspace-sign-in-for-transelec.md) ·
 [Pasos en Google Cloud (inglés)](../../../../docs/platform/google-workspace-oauth-handoff.md)

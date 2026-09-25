@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import Connection, text
 
 from app.access import Role
+from app.audit import PRODUCT_GRANT_CHANGED_EVENT, record_audit_event
 from app.config import Settings
 
 
@@ -302,5 +303,15 @@ def maybe_grant_transelec_bootstrap_admin(
         app_user_id=app_user_id,
         product_key=TRANSELEC_PRODUCT_KEY,
         role=Role.ADMIN,
+    )
+    # No actor: configuration granted this, not a signed-in administrator.
+    record_audit_event(
+        connection,
+        actor_app_user_id=None,
+        event_type=PRODUCT_GRANT_CHANGED_EVENT,
+        product_key=TRANSELEC_PRODUCT_KEY,
+        subject_kind="app_user",
+        subject_id=str(app_user_id),
+        metadata={"previous_role": None, "role": Role.ADMIN.value, "via": "bootstrap_email"},
     )
     return True

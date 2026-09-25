@@ -37,7 +37,7 @@ def client(integration_engine: Engine) -> Generator[TestClient, None, None]:
 def _isolated_platform_tables(integration_engine: Engine) -> Generator[None, None, None]:
     yield
     with integration_engine.connect() as conn:
-        for table in ("session", "product_grant", "app_user"):
+        for table in ("session", "audit_event", "product_grant", "app_user"):
             conn.execute(text(f"DELETE FROM platform.{table}"))
         conn.commit()
 
@@ -164,3 +164,85 @@ def test_grant_on_one_product_is_not_visible_when_listing_another(client: TestCl
     lidar_grants = client.get("/auth/admin/product-grants/lidar")
     assert lidar_grants.status_code == 200
     assert "javier@example.com" not in {row["email"] for row in lidar_grants.json()}
+
+
+def _grant_events(client: TestClient) -> list[dict[str, object]]:
+    engine: Engine = client.engine
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT actor_app_user_id, product_key, subject_kind, subject_id, metadata
+                FROM platform.audit_event
+                WHERE event_type = 'product_grant.changed'
+                ORDER BY id
+                """
+            )
+        ).mappings()
+        return [dict(row) for row in rows]
+
+
+def _actor_id(client: TestClient, identity_key: str) -> int:
+    engine: Engine = client.engine
+    with engine.connect() as connection:
+        return int(
+            connection.execute(
+                text("SELECT id FROM platform.app_user WHERE identity_key = :key"),
+                {"key": identity_key},
+            ).scalar_one()
+        )
+
+
+def test_a_grant_records_who_changed_which_role_to_what(client: TestClient) -> None:
+    _login(client, "dev-admin")
+    grantee_id = _create_signed_in_user(client, email="javier@example.com", display_name="Javier")
+
+    response = client.post(
+        "/auth/admin/product-grants/transelect",
+        json={"email": "javier@example.com", "role": "viewer"},
+        headers={CSRF_HEADER_NAME: _csrf_token(client), "Origin": _SAME_ORIGIN},
+    )
+
+    assert response.status_code == 200, response.text
+    assert _grant_events(client) == [
+        {
+            "actor_app_user_id": _actor_id(client, "dev-admin"),
+            "product_key": "transelect",
+            "subject_kind": "app_user",
+            "subject_id": str(grantee_id),
+            "metadata": {"previous_role": None, "role": "viewer", "via": "admin_api"},
+        }
+    ]
+
+
+def test_a_role_change_records_the_role_it_replaced(client: TestClient) -> None:
+    _login(client, "dev-admin")
+    _create_signed_in_user(client, email="javier@example.com", display_name="Javier")
+    csrf = _csrf_token(client)
+
+    for role in ("viewer", "admin"):
+        response = client.post(
+            "/auth/admin/product-grants/transelect",
+            json={"email": "javier@example.com", "role": role},
+            headers={CSRF_HEADER_NAME: csrf, "Origin": _SAME_ORIGIN},
+        )
+        assert response.status_code == 200, response.text
+
+    assert [event["metadata"] for event in _grant_events(client)] == [
+        {"previous_role": None, "role": "viewer", "via": "admin_api"},
+        {"previous_role": "viewer", "role": "admin", "via": "admin_api"},
+    ]
+
+
+def test_a_refused_grant_records_no_role_change(client: TestClient) -> None:
+    _login(client, "dev-viewer")
+    _create_signed_in_user(client, email="javier@example.com", display_name="Javier")
+
+    response = client.post(
+        "/auth/admin/product-grants/transelect",
+        json={"email": "javier@example.com", "role": "admin"},
+        headers={CSRF_HEADER_NAME: _csrf_token(client), "Origin": _SAME_ORIGIN},
+    )
+
+    assert response.status_code == 403
+    assert _grant_events(client) == []

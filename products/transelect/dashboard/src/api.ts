@@ -499,6 +499,11 @@ export function transelecRole(me: Me | null): Role | null {
   return grant ? grant.role : null
 }
 
+/** ADMIN gate for the access pane (server re-enforces MANAGE_ACCESS). */
+export function isTranselecAdmin(me: Me | null): boolean {
+  return transelecRole(me) === 'admin'
+}
+
 /** OPERATOR/ADMIN gate for the import and version pages (server re-enforces). */
 export function canPublish(me: Me | null): boolean {
   const role = transelecRole(me)
@@ -700,4 +705,38 @@ export function publishImport(importId: number): Promise<ApiResult<ActivationRes
 
 export function restoreImport(importId: number): Promise<ApiResult<ActivationResult>> {
   return request<ActivationResult>(`/api/transelec/imports/${importId}/restore`, { method: 'POST' })
+}
+
+// ---------------------------------------------------------------------------
+// Access administration (admin only)
+//
+// Thin wrappers over app.routers.access_admin, fixed to the `transelect`
+// product. The server requires Action.MANAGE_ACCESS (ADMIN) on both routes
+// and a CSRF token on the grant; a grant only resolves for an address that
+// has already signed in once.
+// ---------------------------------------------------------------------------
+
+export interface ProductGrantee {
+  app_user_id: number
+  email: string | null
+  display_name: string
+  role: Role
+}
+
+/** Roles this dashboard may hand out. ADMIN stays a deliberate, out-of-band act. */
+export type GrantableRole = 'viewer' | 'operator'
+
+export function listTranselecGrants(): Promise<ApiResult<ProductGrantee[]>> {
+  return request<ProductGrantee[]>('/api/auth/admin/product-grants/transelect')
+}
+
+export function grantTranselecRole(
+  email: string,
+  role: GrantableRole,
+): Promise<ApiResult<ProductGrantee>> {
+  return request<ProductGrantee>('/api/auth/admin/product-grants/transelect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), role }),
+  })
 }

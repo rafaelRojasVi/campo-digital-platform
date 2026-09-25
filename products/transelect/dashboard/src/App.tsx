@@ -6,6 +6,7 @@ import {
   canPublish as canPublishFor,
   getActiveImport,
   getMe,
+  isTranselecAdmin,
 } from './api'
 import { AppHeader } from './components/AppHeader'
 import { LoginCard } from './components/LoginCard'
@@ -171,11 +172,13 @@ function Shell() {
       case ROUTES.datos:
       case ROUTES.importar:
       case ROUTES.versiones:
+      case ROUTES.accesos:
         return (
           <DatosPage
             route={route}
             activeImport={activeImport}
             onActiveVersionChanged={onActiveVersionChanged}
+            isAdmin={isTranselecAdmin(me)}
           />
         )
       default:
