@@ -67,6 +67,9 @@ test.describe('sections', () => {
     await page.keyboard.press('Escape')
     await expect(drawer).toBeHidden()
     await expect(row).toBeFocused()
+
+    await row.click()
+    await expect(drawer).toBeVisible()
   })
 
   test('the two legacy administration routes still resolve, into the Datos section', async ({
