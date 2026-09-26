@@ -89,6 +89,33 @@ were the OAuth client itself and the final public domain — see
 which requires `GOOGLE_REDIRECT_BASE_URL` to end in `/api`. No real Google
 sign-in has been performed yet.
 
+### HTTP hardening
+
+`apps/api/app/http_hardening.py` wraps the whole app in two middlewares.
+Both are wired in `app.main`.
+
+- **Request-body limits.**
+  - An upload route whose session cookie is missing, forged, expired or
+    revoked is answered `401` before any of the body is read. The session
+    is resolved against `platform.session` there, not just checked for
+    presence.
+  - Bodies are capped at 64 MiB for a Transelec workbook, 2 GiB for
+    `/ingesta/upload`, and 1 MiB for everything else, and are answered `413`
+    past the cap.
+  - This runs before FastAPI parses the body, which it otherwise does before
+    authentication.
+- **Security headers.**
+  - Every response gets `X-Frame-Options: DENY`, `X-Content-Type-Options:
+    nosniff`, `Referrer-Policy: same-origin` and a same-origin CSP with
+    `frame-ancestors 'none'`.
+  - Everything except `/assets/*` gets `Cache-Control: no-store`.
+  - Staging and production add HSTS.
+  - The dashboard needs no inline script or style and no third-party origin.
+    If a change to it adds one, the CSP in that module has to change with it.
+
+See the [2026-09-26 security readiness audit](audit/2026-09-26-security-readiness-audit.md)
+for the evidence behind both.
+
 ## Container image
 
 `Dockerfile` (repo root) is a two-stage build, adapted from the *shape* of

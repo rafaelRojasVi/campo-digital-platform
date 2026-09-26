@@ -150,6 +150,30 @@ def get_current_app_user(
     )
 
 
+def has_active_session(session_token: str) -> bool:
+    """Whether ``session_token`` would authenticate in ``get_current_app_user``.
+
+    Used by ``app.http_hardening.RequestBodyLimitMiddleware`` to refuse an
+    upload before reading its body, where FastAPI dependencies have not run
+    yet -- hence the process-level engine, settings and stores rather than
+    ``Depends``. Mirrors ``get_current_app_user``'s resolution order: a live
+    platform session, then (development only) a dev-auth token. It creates
+    no app_user row; the route still resolves the user itself.
+    """
+
+    with get_database_engine().connect() as connection:
+        app_user_id = _platform_session_store.resolve_session(connection, session_token)
+        connection.commit()
+    if app_user_id is not None:
+        return True
+
+    try:
+        assert_dev_auth_allowed(get_settings())
+    except DevAuthDisabledInProductionError:
+        return False
+    return _session_store.resolve_session(session_token) is not None
+
+
 def _load_app_user(connection: Connection, app_user_id: int) -> AppUser:
     row = connection.execute(
         text(

@@ -54,7 +54,9 @@ workbook said. The raw text is kept on the row (``source_text_dates``).
 
 CSV formula-injection hardening is a **separate, mandatory, security**
 requirement, independent of the field-set question above: any cell value
-beginning with ``=``, ``+``, ``-``, or ``@`` is prefixed with a single quote
+beginning with ``=``, ``+``, ``-``, ``@``, a tab or a carriage return (the
+full OWASP set: a leading tab or CR is stripped by some spreadsheet
+importers, exposing a formula behind it) is prefixed with a single quote
 before being written, so it can never be interpreted as a live formula by
 Excel/LibreOffice/Google Sheets on open ("CSV injection" / "formula
 injection"). This is a deliberate, security-motivated divergence from
@@ -107,14 +109,14 @@ EXPORT_FIELDS_V1: tuple[tuple[str, str], ...] = (
 
 assert len(EXPORT_FIELDS_V1) == 18  # 17 Actualizable fields, Carpeta split into 2, net +1
 
-_DANGEROUS_LEADING_CHARACTERS = ("=", "+", "-", "@")
+_DANGEROUS_LEADING_CHARACTERS = ("=", "+", "-", "@", "\t", "\r")
 
 _CSV_DELIMITER = ";"
 _CSV_LINE_TERMINATOR = "\r\n"
 
 
 def neutralize_formula_injection(value: str) -> str:
-    """Prefix ``value`` with ``'`` if it begins with =, +, -, or @.
+    """Prefix ``value`` with ``'`` if it begins with =, +, -, @, tab or CR.
 
     A leading apostrophe forces spreadsheet software to treat the cell as
     text rather than evaluating it as a formula, without changing the

@@ -86,6 +86,11 @@ router = APIRouter(prefix="/transelec", tags=["transelec"])
 
 _DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 
+# One planilla is a few MB to ~16 MB; the generic boundary's 2 GiB exists
+# for LiDAR point clouds, not for spreadsheets. Enforced before the body is
+# read by app.http_hardening.RequestBodyLimitMiddleware (see app.main).
+TRANSELEC_MAX_UPLOAD_BYTES = 64 * 1024 * 1024
+
 # Stakeholder-safe Spanish copy. Never interpolate exception text, file
 # paths, or row content into any of these.
 _RUN_NOT_FOUND = "No se encontró la carga solicitada."

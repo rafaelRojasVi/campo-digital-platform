@@ -18,19 +18,22 @@ from app.database import (
     check_database_connection,
     get_database_engine,
 )
-from app.deps import get_object_store
+from app.deps import SESSION_COOKIE_NAME, get_object_store, has_active_session
 from app.entra_auth import EntraNotConfiguredError
 from app.execution import ExecutionBackend, InProcessStagingExecutionBackend
 from app.google_auth import GoogleNotConfiguredError
+from app.http_hardening import RequestBodyLimitMiddleware, SecurityHeadersMiddleware
 from app.identity_safety import require_production_identity_configuration
 from app.object_store import LocalObjectStore, ObjectStoreError, ObjectStoreNotConfiguredError
 from app.routers.access_admin import router as access_admin_router
 from app.routers.csrf import router as csrf_router
 from app.routers.entra_auth import router as entra_auth_router
 from app.routers.google_auth import router as google_auth_router
+from app.routers.ingestion import MAX_UPLOAD_BYTES as INGESTION_MAX_UPLOAD_BYTES
 from app.routers.ingestion import router as ingestion_router
 from app.routers.lidar import router as lidar_router
 from app.routers.session import router as session_router
+from app.routers.transelec import TRANSELEC_MAX_UPLOAD_BYTES
 from app.routers.transelec import router as transelec_router
 
 _execution_backend: ExecutionBackend | None = None
@@ -92,6 +95,29 @@ app = FastAPI(
     version="0.2.0",
     lifespan=_lifespan,
 )
+
+# Multipart framing (boundaries, part headers, the product_key field) on top
+# of the file itself.
+_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
+UPLOAD_BODY_LIMITS: dict[str, int] = {
+    "/transelec/uploads": TRANSELEC_MAX_UPLOAD_BYTES + _MULTIPART_OVERHEAD_BYTES,
+    "/api/transelec/uploads": TRANSELEC_MAX_UPLOAD_BYTES + _MULTIPART_OVERHEAD_BYTES,
+    "/ingesta/upload": INGESTION_MAX_UPLOAD_BYTES + _MULTIPART_OVERHEAD_BYTES,
+}
+# Every other route takes, at most, a small JSON body.
+DEFAULT_MAX_BODY_BYTES = 1024 * 1024
+
+# Added before SecurityHeadersMiddleware so it sits inside it: the 401/413
+# answers it produces carry the security headers too.
+app.add_middleware(
+    RequestBodyLimitMiddleware,
+    default_limit=DEFAULT_MAX_BODY_BYTES,
+    path_limits=UPLOAD_BODY_LIMITS,
+    session_cookie_name=SESSION_COOKIE_NAME,
+    session_validator=has_active_session,
+    session_required=UPLOAD_BODY_LIMITS.keys(),
+)
+app.add_middleware(SecurityHeadersMiddleware, app_env=APP_ENV)
 
 
 @app.exception_handler(EntraNotConfiguredError)

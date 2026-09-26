@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy import Connection
 
 from app.access_repository import AppUser, list_grants_for_user
+from app.csrf import require_csrf
 from app.deps import (
     SESSION_COOKIE_NAME,
     get_current_app_user,
@@ -64,7 +65,7 @@ def me(
     )
 
 
-@router.post("/logout", status_code=204)
+@router.post("/logout", status_code=204, dependencies=[Depends(require_csrf)])
 def logout(
     response: Response,
     session_store: Annotated[DevSessionStore, Depends(get_session_store)],
@@ -80,6 +81,10 @@ def logout(
     ``DevSessionStore`` — but not which one. Clearing on both stores is
     safe: each ``clear_session`` call is a no-op delete against a hash/token
     that won't match rows it doesn't own.
+
+    CSRF-protected like every other mutation: ending a session changes
+    state, and another site must not be able to sign a user out. Both
+    frontends already send the token on every non-GET request.
     """
 
     del identity_key  # authenticates the call; the token itself is read via the cookie
