@@ -682,7 +682,6 @@ a.status-card .status-card-go {
   display: flex;
   align-items: baseline;
   gap: var(--s-3);
-  flex-wrap: wrap;
 }
 
 .quality-headline b {
@@ -693,14 +692,25 @@ a.status-card .status-card-go {
 }
 
 .quality-item[data-tone='warn'] .quality-headline b {
-  color: #7a5600;
+  color: var(--st-progress-ink);
 }
 
 .quality-headline span {
+  flex: 1 1 0;
+  min-width: 0;
   color: var(--ink);
   font-size: var(--t-body);
   font-weight: 650;
   text-wrap: balance;
+}
+
+/* When the headline value is words («No disponible»), the label goes below. */
+.quality-item[data-finding='resolucion'] .quality-headline {
+  flex-wrap: wrap;
+}
+
+.quality-item[data-finding='resolucion'] .quality-headline span {
+  flex-basis: 100%;
 }
 
 .quality-what {

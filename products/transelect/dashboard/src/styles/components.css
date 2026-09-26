@@ -383,8 +383,11 @@
   background: var(--st-approved);
 }
 
+/* White fails 4.5:1 on the amber (2.75:1) and grey (3.6:1) segments; the
+ * darkest ink passes on both (6.0:1 and 4.6:1). */
 .composition-seg[data-tone='progress'] {
   background: var(--st-progress);
+  color: var(--ink);
 }
 
 .composition-seg[data-tone='late'] {
@@ -393,6 +396,7 @@
 
 .composition-seg[data-tone='struck'] {
   background: var(--st-struck);
+  color: var(--ink);
 }
 
 .composition-seg[data-tone='none'] {

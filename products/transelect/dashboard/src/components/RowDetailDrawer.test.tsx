@@ -67,13 +67,44 @@ describe('RowDetailDrawer — AEF section', () => {
     expect(screen.getByTestId('drawer-aef')).toHaveTextContent('AEF de esta fila de origen')
     expect(screen.getByTestId('drawer-aef')).toHaveTextContent('AEFSin registro en esta fila')
     await waitFor(() =>
-      expect(screen.getByTestId('drawer-pmf-aef')).toHaveTextContent('Presentado · fila 2'),
+      expect(screen.getByTestId('drawer-pmf-aef-rows')).toHaveTextContent(
+        'Todos los valores de este PMF vienen de la fila 2 de la hoja «Resumen».',
+      ),
     )
+    expect(screen.getByTestId('drawer-pmf-aef')).toHaveTextContent('AEFPresentado')
+    expect(screen.getByTestId('drawer-pmf-aef')).not.toHaveTextContent('· fila')
     await waitFor(() =>
       expect(screen.getByTestId('drawer-aef-coverage')).toHaveTextContent(
         '1 de 2 filas de BN001 tienen registro AEF. El seguimiento de este PMF está en la fila 2; esta fila no lo repite y se muestra vacía, como en la planilla.',
       ),
     )
+  })
+
+  it('names each value\'s source row when the PMF\'s values come from different rows', async () => {
+    vi.mocked(getAef).mockResolvedValue({
+      ok: true,
+      data: {
+        pmfs: [{
+          ...pmfTracking,
+          fields: {
+            ...pmfTracking.fields,
+            quien_solicita: {
+              status: 'value',
+              value: 'Persona Sintética',
+              value_kind: 'text',
+              source_rows: [3],
+              variants: [],
+            },
+          },
+        }],
+      } as unknown as TranselecAef,
+    })
+    render(<RowDetailDrawer row={untracked} onClose={() => {}} sourceFields={['aef', 'pmf']} />)
+    await waitFor(() =>
+      expect(screen.getByTestId('drawer-pmf-aef')).toHaveTextContent('AEFPresentadofila 2'),
+    )
+    expect(screen.getByTestId('drawer-pmf-aef')).toHaveTextContent('Persona Sintéticafila 3')
+    expect(screen.queryByTestId('drawer-pmf-aef-rows')).not.toBeInTheDocument()
   })
 
   it('says the published workbook has no AEF columns rather than implying blanks', () => {

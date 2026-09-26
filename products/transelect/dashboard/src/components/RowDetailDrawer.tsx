@@ -58,7 +58,19 @@ function Fact({ label, children, wide = false }: { label: string; children: Reac
   )
 }
 
-function AefPmfValue({ field }: { field: AefPmfField }) {
+function rowsLabel(rows: readonly number[]): string {
+  return `${rows.length === 1 ? 'fila' : 'filas'} ${rows.join(', ')}`
+}
+
+/** The source rows shared by every resolved field, or null when they differ or conflict. */
+function sharedSourceRows(pmf: AefPmf): number[] | null {
+  const fields = AEF_FIELDS.map((key) => pmf.fields[key]).filter((f) => f.status !== 'blank')
+  if (fields.length === 0 || fields.some((f) => f.status === 'conflict')) return null
+  const first = fields[0].source_rows.join(',')
+  return fields.every((f) => f.source_rows.join(',') === first) ? fields[0].source_rows : null
+}
+
+function AefPmfValue({ field, showRows }: { field: AefPmfField; showRows: boolean }) {
   if (field.status === 'blank') return <>Sin dato en este PMF</>
   if (field.status === 'conflict') {
     return (
@@ -67,8 +79,7 @@ function AefPmfValue({ field }: { field: AefPmfField }) {
         <ul className="variant-list">
           {field.variants.map((variant) => (
             <li key={variant.source_rows.join('-')}>
-              {variant.value} · {variant.source_rows.length === 1 ? 'fila' : 'filas'}{' '}
-              {variant.source_rows.join(', ')}
+              {variant.value} · {rowsLabel(variant.source_rows)}
             </li>
           ))}
         </ul>
@@ -81,10 +92,7 @@ function AefPmfValue({ field }: { field: AefPmfField }) {
         ? formatDate(field.value)
         : field.value}
       {field.value_kind === 'raw_text' && ' · texto sin fecha interpretada'}
-      <span className="source-row">
-        {' '}· {field.source_rows.length === 1 ? 'fila' : 'filas'}{' '}
-        {field.source_rows.join(', ')}
-      </span>
+      {showRows && <span className="source-row">{rowsLabel(field.source_rows)}</span>}
     </>
   )
 }
@@ -98,6 +106,7 @@ function PmfAefSection({
   loading: boolean
   failed: boolean
 }) {
+  const shared = pmf ? sharedSourceRows(pmf) : null
   return (
     <section className="drawer-section" data-testid="drawer-pmf-aef">
       <h3>Seguimiento AEF del PMF</h3>
@@ -108,18 +117,25 @@ function PmfAefSection({
       ) : pmf ? (
         <dl className="facts">
           {AEF_FIELDS.map((key) => (
-            <Fact key={key} label={AEF_FIELD_LABELS[key]} wide>
-              <AefPmfValue field={pmf.fields[key]} />
+            <Fact key={key} label={AEF_FIELD_LABELS[key]} wide={pmf.fields[key].status === 'conflict'}>
+              <AefPmfValue field={pmf.fields[key]} showRows={shared === null} />
             </Fact>
           ))}
         </dl>
       ) : (
         <p className="hint">Este PMF no tiene seguimiento AEF registrado.</p>
       )}
-      <p className="hint">
-        Valores del PMF calculados a partir de todas sus filas; cada valor indica su fila de
-        origen. Las celdas vacías de otras filas siguen vacías.
-      </p>
+      {shared ? (
+        <p className="hint" data-testid="drawer-pmf-aef-rows">
+          Todos los valores de este PMF vienen de {shared.length === 1 ? 'la' : 'las'} {rowsLabel(shared)} de la hoja «Resumen».
+          Las celdas vacías de otras filas siguen vacías.
+        </p>
+      ) : (
+        <p className="hint">
+          Valores del PMF reunidos desde todas sus filas; cada valor indica su fila de origen.
+          Las celdas vacías de otras filas siguen vacías.
+        </p>
+      )}
     </section>
   )
 }

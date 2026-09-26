@@ -60,6 +60,8 @@
 
   --st-approved-tint: #e7f1eb;
   --st-progress-tint: #faf0d9;
+  /* Amber for text: --st-progress is 2.6:1 on the surface; this is 5.8:1 or more on every ground. */
+  --st-progress-ink: #7a5600;
   --st-late-tint: #f8e9e3;
   --st-rejected-tint: #f6e5e5;
   --st-struck-tint: #eceeeb;

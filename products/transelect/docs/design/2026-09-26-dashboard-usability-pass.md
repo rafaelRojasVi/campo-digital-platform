@@ -19,6 +19,16 @@ Implemented on PR #59 (`feat/transelec-dashboard-ux-pass`), targeting the Railwa
 - The dashboard bundles a resized copy of the official Campo Digital logo instead of fetching it from the public website at runtime. The Transelec name remains text and the brand link has an accessible name.
 - `.claude/skills/transelec-workbook/SKILL.md` provides an intake procedure and `CLAUDE.md` routes planilla tasks to it. The canonical parsing rules remain in [Source Contract V2](../source-contract-v2.md). The private structural inspector uses the importer's recognizer and writes its report outside the repository.
 
+## Follow-up audit on the final head
+
+A second review of the final head used the `web-design-guidelines`, `design:accessibility-review`, `design:ux-copy` and `playwright-cli` skills at 1440×900 and 390×844 with synthetic stub data. It found and fixed:
+
+- White count labels on the amber (2.75:1) and grey (3.6:1) composition segments, and amber `td.warn` text (2.6:1), failed WCAG 1.4.3. They now use dark ink or a new `--st-progress-ink` token (5.8:1 or more on every ground).
+- The drawer repeated «fila N» under every PMF AEF value. When all values come from the same rows, it now says so once; per-value rows are shown only when they differ. Conflicts still list each variant with its rows.
+- A Calidad card's number and title split onto separate lines when the title wrapped.
+
+No calculation, API call or permission changed.
+
 ## Verification and limits
 
 The author reported 228 Vitest tests, 107 Playwright tests, typecheck and build passing locally on the PR head. Two early browser runs each had one timeout; the cause was not established. GitHub CI is the merge gate. PR #59 adds a Transelec dashboard job for lint, unit tests, typecheck/build and browser tests; its outcome must be checked on the final head. Screenshots were made with synthetic data in a local scratchpad and are not committed to the PR.
