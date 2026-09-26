@@ -120,4 +120,6 @@ jobs:
 
       - name: Dashboard browser tests
         working-directory: products/transelect/dashboard
+        env:
+          DEBUG: pw:webserver
         run: npm run test:e2e
