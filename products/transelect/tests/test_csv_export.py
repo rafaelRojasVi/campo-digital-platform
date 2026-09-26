@@ -72,7 +72,7 @@ def test_observacion_auxiliar_column_always_renders_empty_even_if_present_in_the
 
 
 def test_neutralize_formula_injection_prefixes_dangerous_leading_characters() -> None:
-    for dangerous in ("=SUM(A1:A2)", "+1+1", "-2+3", "@cmd|'/bin/sh'"):
+    for dangerous in ("=SUM(A1:A2)", "+1+1", "-2+3", "@cmd|'/bin/sh'", "\t=1+1", "\r=1+1"):
         neutralized = neutralize_formula_injection(dangerous)
         assert neutralized.startswith("'")
         assert neutralized == f"'{dangerous}"
