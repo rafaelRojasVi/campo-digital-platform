@@ -2,20 +2,49 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RowDetailDrawer } from './RowDetailDrawer'
 import { makeRow } from '../test/factories'
+import type { AefPmf, TranselecAef } from '../api'
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>()
-  return { ...actual, getPmfDetail: vi.fn() }
+  return { ...actual, getPmfDetail: vi.fn(), getAef: vi.fn() }
 })
 
-const { getPmfDetail } = await import('../api')
+const { getPmfDetail, getAef } = await import('../api')
 
 const tracked = makeRow({ source_row_number: 2, pmf: 'BN001', aef: 'Presentado' })
 const untracked = makeRow({ source_row_number: 3, pmf: 'BN001' })
+const blank = { status: 'blank', value: null, value_kind: null, source_rows: [], variants: [] } as const
+const pmfTracking: AefPmf = {
+  pmf: 'BN001',
+  total_rows: 2,
+  rows_with_any_tracking: 1,
+  rows_with_aef: 1,
+  source_row_numbers: [2, 3],
+  has_conflict: false,
+  chronology_flags: [],
+  fields: {
+    aef: {
+      status: 'value',
+      value: 'Presentado',
+      value_kind: 'text',
+      source_rows: [2],
+      variants: [],
+    },
+    quien_solicita: blank,
+    fecha_solicitud: blank,
+    fecha_corta: blank,
+    fecha_termino: blank,
+  },
+}
 
 describe('RowDetailDrawer — AEF section', () => {
   beforeEach(() => {
     vi.mocked(getPmfDetail).mockReset()
+    vi.mocked(getAef).mockReset()
+    vi.mocked(getAef).mockResolvedValue({
+      ok: true,
+      data: { pmfs: [pmfTracking] } as TranselecAef,
+    })
     vi.mocked(getPmfDetail).mockResolvedValue({
       ok: true,
       data: {
@@ -33,7 +62,11 @@ describe('RowDetailDrawer — AEF section', () => {
       <RowDetailDrawer row={untracked} onClose={() => {}} sourceFields={['aef', 'pmf']} />,
     )
 
+    expect(screen.getByTestId('drawer-aef')).toHaveTextContent('AEF de esta fila de origen')
     expect(screen.getByTestId('drawer-aef')).toHaveTextContent('AEFSin registro en esta fila')
+    await waitFor(() =>
+      expect(screen.getByTestId('drawer-pmf-aef')).toHaveTextContent('Presentado · fila 2'),
+    )
     await waitFor(() =>
       expect(screen.getByTestId('drawer-aef-coverage')).toHaveTextContent(
         '1 de 2 filas de BN001 tienen registro AEF. El seguimiento de este PMF está en la fila 2; esta fila no lo repite y se muestra vacía, como en la planilla.',
@@ -48,6 +81,42 @@ describe('RowDetailDrawer — AEF section', () => {
       'La planilla publicada no incluye las columnas de seguimiento AEF',
     )
     expect(screen.queryByText('Sin registro en esta fila')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('drawer-pmf-aef')).not.toBeInTheDocument()
+    expect(getAef).not.toHaveBeenCalled()
+  })
+
+  it('does not choose between conflicting PMF AEF values', async () => {
+    vi.mocked(getAef).mockResolvedValue({
+      ok: true,
+      data: {
+        pmfs: [{
+          ...pmfTracking,
+          has_conflict: true,
+          fields: {
+            ...pmfTracking.fields,
+            aef: {
+              status: 'conflict',
+              value: null,
+              value_kind: null,
+              source_rows: [],
+              variants: [
+                { value: 'Presentado', source_rows: [2] },
+                { value: 'Solicitado', source_rows: [3] },
+              ],
+            },
+          },
+        }],
+      } as TranselecAef,
+    })
+    render(<RowDetailDrawer row={untracked} onClose={() => {}} sourceFields={['aef', 'pmf']} />)
+    await waitFor(() =>
+      expect(screen.getByTestId('drawer-pmf-aef')).toHaveTextContent(
+        'Valores distintos; requiere revisión',
+      ),
+    )
+    expect(screen.getByTestId('drawer-pmf-aef')).toHaveTextContent('Presentado · fila 2')
+    expect(screen.getByTestId('drawer-pmf-aef')).toHaveTextContent('Solicitado · fila 3')
+    expect(screen.getByTestId('drawer-aef')).toHaveTextContent('Sin registro en esta fila')
   })
 
   it('shows the raw text of a date cell, and marks unresolved text as not a date', () => {
