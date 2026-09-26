@@ -24,7 +24,7 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: `npx vite --port ${PORT} --strictPort`,
+    command: `npx vite --host 127.0.0.1 --port ${PORT} --strictPort`,
     url: `${BASE_URL}/transelec`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

@@ -57,5 +57,7 @@ and the audit that produced them are recorded in:
 - [Workflow refinement from Marianne's evidence V1](docs/design/2026-09-15-workflow-refinement-marianne-evidence-v1.md)
 - [Estado de los planes de manejo (español)](docs/es/2026-09-15-estado-planes-de-manejo.md)
 - [Planilla del 09-sept: seguimiento AEF y revisión de columnas (español)](docs/es/2026-09-26-planilla-09sept-seguimiento-aef.md)
+- [Dashboard usability pass — 2026-09-26](docs/design/2026-09-26-dashboard-usability-pass.md)
+- [Panel Transelec: mejoras de uso y preguntas (español)](docs/es/2026-09-26-panel-usabilidad.md)
 
 Run it locally with `make transelec-dev` from the repository root.

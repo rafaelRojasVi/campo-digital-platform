@@ -9,11 +9,17 @@
  * Grouped here, they stop competing with the work and start reading as one
  * job: produce and defend evidence.
  *
+ * The page is written for Javier and the operators: each block leads with what
+ * was found, how many plans, predios or rows it affects and what to review,
+ * and keeps the exact rule, source columns and API identifier in a closed
+ * «Cómo se calcula» detail.
+ *
  * The owner-status table keeps its own disagreeing rule and keeps saying so.
  * `owner_stage_legacy` overrides `Estado resumido` with "Rechazado" whenever
  * the raw `Estado` contains "rechaz", so the same predio can be "En trámite"
  * on the Resumen and "Rechazado" here. That is the current behaviour,
- * reproduced rather than reconciled, with the rule shown rather than hidden.
+ * reproduced rather than reconciled; the section now explains the difference
+ * in plain words and shows both predio counts side by side.
  */
 import { useCallback } from 'react'
 import {
@@ -78,7 +84,7 @@ export function CalidadPage({ filterController }: { filterController: FilterCont
     <div className="page enter">
       <SectionHeader
         title="Calidad y reportes"
-        meta="Qué tan confiable es la versión publicada, y qué se puede informar a partir de ella."
+        meta="Qué conviene revisar en la versión publicada antes de informar sus cifras."
       />
 
       {chips.length > 0 && (
@@ -105,17 +111,17 @@ export function CalidadPage({ filterController }: { filterController: FilterCont
           <section aria-labelledby="quality-title">
             <SectionHeader
               id="quality-title"
-              title="Controles de calidad y gestión"
-              meta="Se calculan sobre el alcance seleccionado."
+              title="Qué revisar en la planilla"
+              meta="Sobre el alcance seleccionado."
             />
-            <QualityPanel summary={data.summary} />
+            <QualityPanel summary={data.summary} filters={filters} />
           </section>
 
           <section className="ruled" aria-labelledby="conflict-title">
             <SectionHeader
               id="conflict-title"
-              title="PMF con más de un «Estado resumido»"
-              meta="La inconsistencia que hace que los estados no cuadren si se suman fila a fila."
+              title="PMF con estados distintos entre sus filas"
+              meta="Por qué los estados no cuadran si se suman fila a fila."
             />
             <ConflictPanel
               conflicts={data.summary.calidad_pmf_estado_resumido_conflictivo}
@@ -124,20 +130,20 @@ export function CalidadPage({ filterController }: { filterController: FilterCont
             />
           </section>
 
+          <section className="ruled" aria-labelledby="owner-title">
+            <OwnerStatusTable ownerStatus={data.ownerStatus} summary={data.summary} />
+          </section>
+
           <section className="ruled" aria-labelledby="ref-title">
             <SectionHeader
               id="ref-title"
               title="Reforestación"
-              meta="Definición exacta de la métrica y lo que el origen no permite responder."
+              meta="Qué se puede contar con la planilla actual, y qué no."
             />
             <ReforestacionPanel reforestacion={data.summary.reforestacion} />
             <div style={{ marginTop: 'var(--s-6)' }}>
               <ReforestationChips predios={data.summary.reforestacion.predio_ref_labels} />
             </div>
-          </section>
-
-          <section className="ruled" aria-labelledby="owner-title">
-            <OwnerStatusTable ownerStatus={data.ownerStatus} />
           </section>
 
           <section className="ruled" aria-labelledby="report-title">

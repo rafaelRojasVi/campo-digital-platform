@@ -23,6 +23,7 @@ import {
 } from '../lib/statusHeadline'
 import { Link, ROUTES } from '../router'
 import { CompositionBar } from '../ui/CompositionBar'
+import { HowCalculated } from '../ui/HowCalculated'
 
 function bucketHref(filters: TranselecFilterState, bucket: StatusBucket): string {
   return `${ROUTES.explorador}${searchFromFilters(bucketFilters(filters, bucket))}`
@@ -51,7 +52,6 @@ export function StatusHeadline({
             {formatInteger(summary.row_count)} filas de detalle en el alcance seleccionado
           </div>
         </div>
-        <span className="basis-tag">{summary.basis_estado_resumido}</span>
       </div>
 
       <div className="compositions">
@@ -112,12 +112,14 @@ export function StatusHeadline({
         {conflicts.length > 0 && (
           <p className="hint" data-testid="status-conflict-note">
             {formatInteger(conflicts.length)}{' '}
-            {conflicts.length === 1 ? 'PMF tiene' : 'PMF tienen'} más de un «Estado resumido» en el
-            origen ({conflicts.map((conflict) => conflict.pmf).join(', ')}). Cada uno se cuenta una
-            sola vez, con el valor de su primera fila de origen.{' '}
+            {conflicts.length === 1 ? 'PMF tiene' : 'PMF tienen'} filas con distinto «Estado
+            resumido» ({conflicts.map((conflict) => conflict.pmf).join(', ')}). Cada uno se cuenta
+            una sola vez, con el estado de su primera fila.{' '}
             <Link to={ROUTES.calidad}>Ver el detalle en Calidad</Link>.
           </p>
         )}
+
+        <HowCalculated bases={[summary.basis_estado_resumido]} testId="status-how" />
       </div>
     </section>
   )

@@ -15,6 +15,7 @@
 import type { EstadoResumidoConflict, TranselecFilterState } from '../api'
 import { searchFromFilters } from '../lib/filterUrl'
 import { Link, ROUTES } from '../router'
+import { HowCalculated } from '../ui/HowCalculated'
 
 export function ConflictPanel({
   conflicts,
@@ -38,16 +39,17 @@ export function ConflictPanel({
       <div className="tablewrap">
         <table className="breakdown">
           <caption className="sr-only">
-            PMF con más de un Estado resumido en el origen, con el valor canónico aplicado.
+            PMF cuyas filas tienen distinto «Estado resumido», con el estado con que se cuentan
+            en las cifras y la fila de la que sale.
           </caption>
           <thead>
             <tr>
               <th scope="col">PMF</th>
-              <th scope="col">Valores en el origen</th>
-              <th scope="col">Valor aplicado</th>
-              <th scope="col">Estado (detalle)</th>
+              <th scope="col">Estados en sus filas</th>
+              <th scope="col">Se cuenta como</th>
+              <th scope="col">«Estado» en esa fila</th>
               <th scope="col" className="numeric">
-                Fila de origen
+                Fila usada
               </th>
             </tr>
           </thead>
@@ -75,11 +77,16 @@ export function ConflictPanel({
         </table>
       </div>
       <p className="hint" style={{ marginTop: 'var(--s-4)' }}>
-        Cada PMF se cuenta una sola vez en el encabezado, con el valor de su primera fila de
-        origen (<span className="basis-tag">{basis}</span>). Sumar los valores fila a fila daría un
-        total mayor que el número de PMF — es exactamente la diferencia entre 160 y 159 en el
-        resumen de Power BI del 29 de julio. Falta confirmar con Javier qué estado corresponde.
+        En todas las cifras cada uno de estos planes se cuenta una sola vez, con el estado de su
+        primera fila. Falta que Campo Digital confirme qué estado corresponde a cada uno.
       </p>
+      <HowCalculated bases={[basis]} testId="conflicts-how">
+        <p>
+          Si se sumaran los estados fila a fila, estos planes se contarían dos veces y el total
+          superaría el número de PMF: es exactamente la diferencia entre 160 y 159 en el resumen
+          de Power BI del 29 de julio.
+        </p>
+      </HowCalculated>
     </div>
   )
 }

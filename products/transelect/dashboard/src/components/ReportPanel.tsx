@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TranselecReport } from '../api'
 import { formatDateTime } from '../format'
+import { HowCalculated } from '../ui/HowCalculated'
 
 const FILE_NAME = 'reporte_ejecutivo_conaf.txt'
 
@@ -64,10 +65,12 @@ export function ReportPanel({ report }: { report: TranselecReport }) {
       </pre>
       <p className="hint" style={{ marginTop: 'var(--s-4)' }}>
         Corte de información tomado de la versión activa ({formatDateTime(report.generated_at)}),
-        no de la fecha de consulta. Reglas aplicadas:{' '}
-        <span className="basis-tag">{report.basis_estado_resumido}</span> y{' '}
-        <span className="basis-tag">{report.basis_pending_priority}</span>.
+        no de la fecha de consulta.
       </p>
+      <HowCalculated
+        bases={[report.basis_estado_resumido, report.basis_pending_priority]}
+        testId="report-how"
+      />
       <div className="btns no-print" style={{ marginTop: 'var(--s-4)' }}>
         <button type="button" className="btn alt" onClick={copyReport} data-testid="copy-report">
           Copiar reporte

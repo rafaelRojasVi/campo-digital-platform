@@ -266,6 +266,36 @@ export async function stubPlatform(page: Page, options: StubOptions = {}): Promi
     ])
   })
 
+  // One PMF's detail, for the row drawer: the clicked row plus one synthetic
+  // sibling. Registered before `options.extra` so a test's own handler wins.
+  await page.route('**/api/transelec/pmfs/*', (route) => {
+    if (fail) return json(route, failBody, fail)
+    const pmf = decodeURIComponent(new URL(route.request().url()).pathname.split('/').pop() ?? '')
+    const index = Number(pmf.replace(/\D/g, '')) || 1
+    return json(route, {
+      pmf,
+      row_count: 2,
+      basis_estado_resumido: 'estado_resumido_first_row',
+      estado_resumido: 'En tramite',
+      rows: [
+        makeApiRow(index),
+        makeApiRow(index + 100, {
+          pmf,
+          rol: `10${index}-2`,
+          numero_area_corta: 'A2',
+          superficie_corta: 1.5,
+          estado_resumido: 'En tramite',
+          aef: null,
+          quien_solicita: null,
+          fecha_solicitud: null,
+          fecha_corta: null,
+          fecha_termino: null,
+          chronology_flags: [],
+        }),
+      ],
+    })
+  })
+
   if (options.extra) await options.extra(page)
 
   await page.route('**/api/transelec/summary*', (route) => {

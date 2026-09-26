@@ -38,7 +38,7 @@ function nav() {
 }
 
 describe('AppHeader (TR-FUNC-041/046)', () => {
-  it('renders the identity as text, with no image element at all', () => {
+  it('shows Campo Digital’s own logo, served from the bundle, with the brand as text', () => {
     const { container } = renderWithRouter(
       <AppHeader
         me={me}
@@ -47,10 +47,15 @@ describe('AppHeader (TR-FUNC-041/046)', () => {
         canPublish
       />,
     )
-    expect(screen.getByText(/Campo Digital/)).toBeInTheDocument()
-    expect(screen.getByText(/Transelec/)).toBeInTheDocument()
-    // TR-OPEN-06: no logo payload is reused, so there is no <img> to carry one.
-    expect(container.querySelector('img')).toBeNull()
+    const logo = screen.getByRole('img', { name: 'Campo Digital' })
+    // Served locally from the dashboard's own assets, never hotlinked.
+    expect(logo.getAttribute('src')).not.toMatch(/^https?:/)
+    expect(logo).toHaveAttribute('width')
+    expect(logo).toHaveAttribute('height')
+    expect(screen.getByText('Transelec')).toBeInTheDocument()
+    // The home link reads as the brand even without the picture.
+    expect(screen.getByRole('link', { name: /^Campo Digital\s*·\s*Transelec$/ })).toBeInTheDocument()
+    expect(container.querySelectorAll('img')).toHaveLength(1)
   })
 
   it('stamps the active version’s own publish timestamp, not the current date', () => {

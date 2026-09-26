@@ -215,9 +215,11 @@ th.numeric {
 /* ------------------------------------------------------------- basis tag */
 
 /*
- * The named legacy rule behind a number. These rules genuinely disagree with
- * each other, so the identifier stays visible next to every figure it
- * produced rather than being hidden in a footnote.
+ * The identifier of a named counting rule, as the API reports it. These
+ * rules genuinely disagree with each other, so the identifier stays one click
+ * away from every figure it produced — inside that figure's «Cómo se calcula»
+ * detail — rather than in the reading line, where it meant nothing to the
+ * people the page is for.
  */
 .basis-tag {
   display: inline-block;
@@ -225,12 +227,109 @@ th.numeric {
   border: 1px solid var(--line-strong);
   border-radius: var(--r-pill);
   background: var(--sunken);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-micro);
   font-weight: 500;
   letter-spacing: 0;
   white-space: nowrap;
+}
+
+/* A source column name, as headed in the workbook. */
+.source-col {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* ------------------------------------------------------- how calculated */
+
+.how {
+  max-width: var(--measure);
+  margin-top: var(--s-4);
+  font-size: var(--t-small);
+}
+
+.how > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 32px;
+  color: var(--forest-deep);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  touch-action: manipulation;
+}
+
+.how > summary::-webkit-details-marker {
+  display: none;
+}
+
+.how > summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid currentcolor;
+  transition: transform var(--d-fast) var(--ease);
+}
+
+.how[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.how > summary:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.how > summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-control);
+}
+
+.how-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  margin-top: var(--s-3);
+  padding: var(--s-4) var(--s-5);
+  border-left: 3px solid var(--line-strong);
+  background: var(--sunken);
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+
+.how-body p,
+.how-body ol {
+  margin: 0;
+}
+
+.how-body ol {
+  padding-left: var(--s-6);
+}
+
+.how-rule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.how-rule-name {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.how-meta {
+  color: var(--ink-3);
+}
+
+@media print {
+  .how:not([open]) {
+    display: none;
+  }
 }
 
 /* -------------------------------------------------------------- buttons */
@@ -506,7 +605,7 @@ td.ok {
 }
 
 td.warn {
-  color: var(--st-progress);
+  color: var(--st-progress-ink);
   font-weight: 600;
 }
 

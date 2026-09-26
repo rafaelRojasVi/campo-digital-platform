@@ -18,6 +18,7 @@
  */
 import type { Reforestacion } from '../api'
 import { formatInteger } from '../format'
+import { HowCalculated } from '../ui/HowCalculated'
 
 export function ReforestacionPanel({ reforestacion }: { reforestacion: Reforestacion }) {
   return (
@@ -71,11 +72,20 @@ export function ReforestacionPanel({ reforestacion }: { reforestacion: Reforesta
       )}
 
       <p className="hint">
-        Para responder «¿cuántos predios?» y «¿cuántos propietarios?» con certeza, el origen
-        necesita <code>id_predio_reforestacion</code>, <code>id_propietario_reforestacion</code> y{' '}
-        <code>nombre_propietario_reforestacion</code>, con una asociación que admita más de un
-        propietario por predio. Ver las preguntas abiertas en la documentación de diseño.
+        Para saber con certeza cuántos predios y cuántos propietarios de reforestación hay, la
+        planilla tendría que identificar cada predio de reforestación y a su propietario (o
+        propietarios) en columnas propias. Hoy solo tiene un texto libre por fila.
       </p>
+      <HowCalculated testId="reforestacion-how">
+        <p>
+          Columnas que se proponen a Campo Digital (preguntas abiertas en la documentación de
+          diseño):{' '}
+          <code translate="no">id_predio_reforestacion</code>,{' '}
+          <code translate="no">id_propietario_reforestacion</code> y{' '}
+          <code translate="no">nombre_propietario_reforestacion</code>, con una asociación que
+          admita más de un propietario por predio.
+        </p>
+      </HowCalculated>
     </div>
   )
 }

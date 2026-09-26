@@ -11,22 +11,35 @@
  * close, Escape closes, and a click on the backdrop closes. Tab is contained
  * inside the panel while it is open, so a keyboard reader cannot end up
  * driving the table behind a modal surface they cannot see.
+ *
+ * The panel is portalled to `<body>`. Rendered inside a section, it sat in
+ * that section's stacking context (its entrance animation uses a transform),
+ * so the sticky top bar was painted over the backdrop and stayed live beside
+ * a modal. The page behind is also kept from scrolling while the panel is
+ * open, so a scroll that reaches the end of the panel does not move the list.
  */
 import { useCallback, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
 
 export function Drawer({
   title,
+  eyebrow,
   subtitle,
+  headerExtra,
   onClose,
   children,
   testId,
 }: {
   title: string
+  /** A short label above the title naming what kind of record this is. */
+  eyebrow?: ReactNode
   subtitle?: ReactNode
+  /** Content that stays in the fixed header, such as a status and provenance. */
+  headerExtra?: ReactNode
   onClose: () => void
   children: ReactNode
   testId?: string
@@ -42,6 +55,9 @@ export function Drawer({
     returnFocusTo.current = document.activeElement as HTMLElement | null
     const panel = panelRef.current
     panel?.querySelector<HTMLElement>(FOCUSABLE)?.focus()
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -68,13 +84,14 @@ export function Drawer({
     document.addEventListener('keydown', onKeyDown)
     return () => {
       document.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = previousOverflow
       // Returning focus is what makes "open a row, read it, close it, keep
       // going" work without the keyboard reader losing their place.
       returnFocusTo.current?.focus?.()
     }
   }, [close])
 
-  return (
+  return createPortal(
     <>
       <div className="drawer-backdrop no-print" role="presentation" onClick={close} />
       <aside
@@ -86,22 +103,31 @@ export function Drawer({
         ref={panelRef}
       >
         <div className="drawer-head">
-          <div>
-            <h2>{title}</h2>
-            {subtitle && <p className="hint">{subtitle}</p>}
+          <div className="drawer-head-row">
+            <div className="drawer-title">
+              {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+              <h2>{title}</h2>
+              {subtitle && <p className="hint">{subtitle}</p>}
+            </div>
+            <button
+              type="button"
+              className="drawer-close"
+              aria-label="Cerrar el detalle"
+              title="Cerrar (Esc)"
+              onClick={close}
+              data-testid={testId && `${testId}-close`}
+            >
+              <span aria-hidden="true">×</span>
+              <span className="drawer-close-text" aria-hidden="true">
+                Cerrar
+              </span>
+            </button>
           </div>
-          <button
-            type="button"
-            className="drawer-close"
-            aria-label="Cerrar el detalle"
-            onClick={close}
-            data-testid={testId && `${testId}-close`}
-          >
-            ×
-          </button>
+          {headerExtra}
         </div>
         <div className="drawer-body">{children}</div>
       </aside>
-    </>
+    </>,
+    document.body,
   )
 }

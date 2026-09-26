@@ -8,9 +8,13 @@
  * The client's full name and the programme description move into the Resumen's
  * own context strip, where they belong to a page rather than to every page.
  *
- * Brand marks stay generic. The source HTML files embed both logos as inline
- * base64; those payloads are deliberately not reused, because TR-OPEN-06
- * (logo/brand asset sourcing authorization) is still open.
+ * The brand mark is Campo Digital's own logo, as published on
+ * campodigital.cl (logo-campo-blanco-home-1-02.png), resized to a 2x asset
+ * and served from this bundle rather than hotlinked. It is the white variant,
+ * drawn for a dark ground, which is what this bar is. The image's alt text
+ * carries the company name, and "Transelec" stays real text beside it, so
+ * the link still reads "Campo Digital Transelec" without the picture.
+ * The Transelec logo embedded in the source HTML is still not reused.
  *
  * The version stamp is still TR-FUNC-046's fix: it is the *active version's
  * own publish timestamp*, read from `GET /transelec/imports/active`, never a
@@ -21,6 +25,7 @@ import type { Me, TranselecActiveImport } from '../api'
 import { logout, transelecRole } from '../api'
 import { formatDateTime } from '../format'
 import { Link, ROUTES, useRouter, type Route } from '../router'
+import campoDigitalLogo from '../assets/campo-digital-logo.png'
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
@@ -150,13 +155,18 @@ export function AppHeader({
     <header className="topbar no-print">
       <div className="topbar-inner">
         <Link to={ROUTES.resumen} className="wordmark">
-          <span className="wordmark-glyph" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
-          <span className="wordmark-text">
-            Campo Digital <span>· Transelec</span>
+          <img
+            className="wordmark-logo"
+            src={campoDigitalLogo}
+            alt="Campo Digital"
+            width={103}
+            height={44}
+            fetchPriority="high"
+            translate="no"
+          />
+          <span className="sr-only">{' · '}</span>
+          <span className="wordmark-text" translate="no">
+            Transelec
           </span>
         </Link>
 

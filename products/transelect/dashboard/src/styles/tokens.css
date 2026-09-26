@@ -30,7 +30,10 @@
   /* ---------------------------------------------------------------- ink */
   --ink: #16211d;
   --ink-2: #42524c;
-  --ink-3: #6b7a74;
+  /* Darkened from #6b7a74 (3.8–4.1:1) so hint text, the most common small
+   * text in the app, clears WCAG AA 4.5:1 on every ground it sits on:
+   * ground, surface, sunken, info, warn, approved and late tints. */
+  --ink-3: #5d6c66;
   --ink-inverse: #f2f6f3;
   --ink-inverse-2: #b6ccc0;
 
@@ -57,6 +60,8 @@
 
   --st-approved-tint: #e7f1eb;
   --st-progress-tint: #faf0d9;
+  /* Amber for text: --st-progress is 2.6:1 on the surface; this is 5.8:1 or more on every ground. */
+  --st-progress-ink: #7a5600;
   --st-late-tint: #f8e9e3;
   --st-rejected-tint: #f6e5e5;
   --st-struck-tint: #eceeeb;

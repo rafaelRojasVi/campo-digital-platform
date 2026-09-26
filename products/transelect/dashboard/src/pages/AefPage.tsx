@@ -23,7 +23,7 @@
  * source never described.
  */
 import { useCallback, useState } from 'react'
-import { type AefPmf, type AefPmfField, type ResumenRow, type TranselecAef, getAef } from '../api'
+import { type AefPmf, type AefPmfField, type ResumenRow, type TranselecAef, getAef, getPmfDetail } from '../api'
 import { RowDetailDrawer } from '../components/RowDetailDrawer'
 import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
 import { StatusPill } from '../components/StatusPill'
@@ -126,7 +126,15 @@ function CountTable({
   )
 }
 
-function PmfTable({ pmfs }: { pmfs: AefPmf[] }) {
+function PmfTable({
+  pmfs,
+  onOpen,
+  openingPmf,
+}: {
+  pmfs: AefPmf[]
+  onOpen: (entry: AefPmf) => void
+  openingPmf: string | null
+}) {
   return (
     <div className="tablewrap">
       <table className="rows-table" data-testid="aef-pmfs">
@@ -146,7 +154,21 @@ function PmfTable({ pmfs }: { pmfs: AefPmf[] }) {
         </thead>
         <tbody>
           {pmfs.map((entry) => (
-            <tr key={entry.pmf} data-testid={`aef-pmf-${entry.pmf}`}>
+            <tr
+              key={entry.pmf}
+              data-testid={`aef-pmf-${entry.pmf}`}
+              tabIndex={0}
+              aria-haspopup="dialog"
+              aria-label={`Abrir detalle del PMF ${entry.pmf}`}
+              aria-busy={openingPmf === entry.pmf}
+              onClick={() => onOpen(entry)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  onOpen(entry)
+                }
+              }}
+            >
               <td>
                 <b>{entry.pmf}</b>
               </td>
@@ -182,6 +204,8 @@ export function AefPage({
   const { filters, replaceFilters } = filterController
   const key = JSON.stringify(filters)
   const [openRow, setOpenRow] = useState<ResumenRow | null>(null)
+  const [openingPmf, setOpeningPmf] = useState<string | null>(null)
+  const [openError, setOpenError] = useState<string | null>(null)
 
   const { data, loading, failure } = useReads<TranselecAef>(
     useCallback(
@@ -193,6 +217,29 @@ export function AefPage({
   )
 
   const chips = activeFilterChips(filters)
+
+  async function openPmf(entry: AefPmf) {
+    if (openingPmf !== null) return
+    setOpeningPmf(entry.pmf)
+    setOpenError(null)
+    try {
+      const result = await getPmfDetail(entry.pmf)
+      if (!result.ok) {
+        setOpenError(`No se pudo abrir el PMF ${entry.pmf}: ${result.error}`)
+        return
+      }
+      const row = result.data.rows.find(
+        (candidate) => candidate.source_row_number === entry.source_row_numbers[0],
+      ) ?? result.data.rows[0]
+      if (!row) {
+        setOpenError(`El PMF ${entry.pmf} no tiene filas de detalle disponibles.`)
+        return
+      }
+      setOpenRow(row)
+    } finally {
+      setOpeningPmf(null)
+    }
+  }
 
   if (failure && !data) {
     return (
@@ -232,7 +279,6 @@ export function AefPage({
     <div className="page enter" aria-busy={loading}>
       <SectionHeader
         title="Seguimiento AEF"
-        basis="por PMF"
         meta="AEF, solicitante y fechas de cada PMF, con la fila de la hoja «Resumen» de la que viene cada valor."
       />
 
@@ -252,10 +298,11 @@ export function AefPage({
       )}
 
       <AlertBanner tone="info" title="Valores por PMF, con su fila de origen">
-        La planilla escribe el AEF una vez por PMF, en una de sus filas. Aquí se muestra como valor
-        del PMF indicando esa fila; las demás filas no se modifican y siguen vacías en el detalle
-        por fila. Si dos filas de un PMF tienen valores distintos, se marca para revisión y no se
-        elige ninguno.
+        En la planilla, el AEF aparece en una sola fila de cada PMF. Aquí se muestra como valor del
+        PMF indicando esa fila; las demás filas no se modifican y siguen vacías en el detalle por
+        fila. Si dos filas de un PMF tienen valores distintos, se marca para revisión y no se elige
+        ninguno. Campo Digital aún no confirma qué significa cada valor de AEF ni si se registra
+        por PMF o por área de corta.
         {chips.length > 0 &&
           ' Los PMF mostrados tienen alguna fila en el alcance filtrado; sus valores consideran todas sus filas.'}
         {missingColumns > 0 &&
@@ -320,7 +367,8 @@ export function AefPage({
                 </span>
               </div>
             </div>
-            <PmfTable pmfs={data.pmfs} />
+            {openError && <AlertBanner tone="warn" title="No se pudo abrir el detalle">{openError}</AlertBanner>}
+            <PmfTable pmfs={data.pmfs} onOpen={(entry) => { void openPmf(entry) }} openingPmf={openingPmf} />
           </section>
 
           <section className="ruled split-two" style={{ marginTop: 'var(--s-6)' }}>

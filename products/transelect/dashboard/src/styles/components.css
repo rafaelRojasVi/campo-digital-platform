@@ -38,51 +38,24 @@
 }
 
 /*
- * A CSS-drawn mark. The base64 logo payloads embedded in the source HTML
- * files are deliberately not reused: TR-OPEN-06 (logo/brand asset sourcing
- * authorization) is still open, so the identity here stays typographic.
+ * Campo Digital's own white logo, drawn for a dark ground. At 44px the
+ * wordmark stays legible; the small tagline under it is part of the mark and
+ * is not relied on for meaning (the alt text carries the name).
  */
-.wordmark-glyph {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  padding: 4px;
-  grid-template-columns: repeat(3, 1fr);
-  align-items: end;
-  gap: 2px;
-  border-radius: var(--r-control);
-  background: rgb(255 255 255 / 0.16);
-}
-
-.wordmark-glyph span {
+.wordmark-logo {
   display: block;
-  border-radius: 1px;
-  background: currentcolor;
-}
-
-.wordmark-glyph span:nth-child(1) {
-  height: 45%;
-}
-
-.wordmark-glyph span:nth-child(2) {
-  height: 72%;
-  opacity: 0.62;
-}
-
-.wordmark-glyph span:nth-child(3) {
-  height: 100%;
+  width: auto;
+  height: 44px;
 }
 
 .wordmark-text {
+  padding-left: var(--s-3);
+  border-left: 1px solid rgb(255 255 255 / 0.28);
+  color: var(--ink-inverse);
   font-size: var(--t-small);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   white-space: nowrap;
-}
-
-.wordmark-text span {
-  color: var(--ink-inverse-2);
-  font-weight: 500;
 }
 
 /* ------------------------------------------------------------ shell nav */
@@ -410,8 +383,11 @@
   background: var(--st-approved);
 }
 
+/* White fails 4.5:1 on the amber (2.75:1) and grey (3.6:1) segments; the
+ * darkest ink passes on both (6.0:1 and 4.6:1). */
 .composition-seg[data-tone='progress'] {
   background: var(--st-progress);
+  color: var(--ink);
 }
 
 .composition-seg[data-tone='late'] {
@@ -420,6 +396,7 @@
 
 .composition-seg[data-tone='struck'] {
   background: var(--st-struck);
+  color: var(--ink);
 }
 
 .composition-seg[data-tone='none'] {
@@ -653,7 +630,7 @@
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: rgb(22 33 29 / 0.34);
+  background: rgb(22 33 29 / 0.42);
   animation: fade var(--d-base) var(--ease) both;
 }
 
@@ -665,7 +642,7 @@
   z-index: 61;
   display: flex;
   flex-direction: column;
-  width: min(480px, 100vw);
+  width: min(560px, 100vw);
   border-left: 1px solid var(--line-strong);
   background: var(--surface);
   box-shadow: var(--shadow-overlay);
@@ -685,46 +662,227 @@
   }
 }
 
+/* The header never scrolls: the PMF, its status and the source row it came
+ * from stay in view however far down the reader goes. */
 .drawer-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  flex-shrink: 0;
+  padding: var(--s-5) var(--s-6) var(--s-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.drawer-head-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--s-4);
-  padding: var(--s-5) var(--s-6);
-  border-bottom: 1px solid var(--line);
+}
+
+.drawer-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.drawer-title p,
+.drawer-title h2 {
+  margin: 0;
+}
+
+.drawer-title h2 {
+  font-size: var(--t-title);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.drawer-title .hint {
+  overflow-wrap: anywhere;
+}
+
+.drawer-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.provenance {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: var(--sunken);
+  color: var(--ink-2);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .drawer-body {
   flex: 1;
-  padding: var(--s-6);
+  min-height: 0;
+  padding: var(--s-5) var(--s-6) var(--s-8);
   overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.drawer-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+
+.drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.drawer-section + .drawer-section {
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--line);
+}
+
+.drawer-section h3 {
+  margin: 0;
+  font-size: var(--t-body);
+}
+
+.drawer-note {
+  margin: 0;
+  padding: var(--s-3) var(--s-4);
+  border-left: 3px solid var(--info-line);
+  background: var(--info-tint);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+
+/* Short facts in two columns: label above value, so a long value wraps
+ * inside its own cell instead of stretching a single label column. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-4) var(--s-5);
+  margin: 0;
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.fact.wide {
+  grid-column: 1 / -1;
+}
+
+.fact dt {
+  color: var(--ink-3);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fact dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-body);
+  overflow-wrap: anywhere;
+}
+
+.drawer-rows tr[aria-current='true'] td {
+  background: var(--forest-tint);
+  font-weight: 600;
+}
+
+.drawer-rows tr[aria-current='true'] td:first-child {
+  box-shadow: inset 3px 0 0 var(--forest);
+}
+
+.row-here {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+}
+
+.row-here-tag {
+  color: var(--forest-deep);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.row-switch {
+  min-width: 36px;
+  min-height: 28px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--forest-deep);
+  font-family: inherit;
+  font-size: var(--t-small);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--d-fast) var(--ease);
+}
+
+.row-switch:hover {
+  background: var(--forest-tint);
+}
+
+.row-switch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .drawer-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  gap: var(--s-2);
+  min-width: 44px;
+  height: 40px;
   flex-shrink: 0;
-  padding: 0;
+  padding: 0 var(--s-4);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-control);
   background: var(--surface);
-  color: var(--ink-2);
+  color: var(--ink);
   font-family: inherit;
-  font-size: 15px;
+  font-size: var(--t-small);
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
+  touch-action: manipulation;
   transition:
     background-color var(--d-fast) var(--ease),
     color var(--d-fast) var(--ease);
 }
 
+.drawer-close > span:first-child {
+  font-size: 18px;
+}
+
 .drawer-close:hover {
   background: var(--sunken);
-  color: var(--ink);
+}
+
+.drawer-close:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .defs {
@@ -1291,8 +1449,8 @@
     justify-content: space-between;
   }
 
-  .wordmark-text {
-    font-size: var(--t-micro);
+  .wordmark-logo {
+    height: 40px;
   }
 
   /* The separators exist to divide a single line. Stacked, they become
@@ -1315,11 +1473,26 @@
     top: auto;
     left: 0;
     width: 100vw;
-    max-height: 90vh;
+    height: 92dvh;
+    max-height: 92dvh;
     border-top: 1px solid var(--line-strong);
     border-left: 0;
-    border-radius: var(--r-surface) var(--r-surface) 0 0;
+    border-radius: 12px 12px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
     animation: sheet-in var(--d-slow) var(--ease-out) both;
+  }
+
+  .drawer-head {
+    padding: var(--s-4) var(--s-4) var(--s-3);
+    border-radius: 12px 12px 0 0;
+  }
+
+  .drawer-body {
+    padding: var(--s-4) var(--s-4) var(--s-8);
+  }
+
+  .facts {
+    gap: var(--s-3) var(--s-4);
   }
 
   @keyframes sheet-in {
@@ -1414,4 +1587,22 @@
   font-family: var(--font-mono);
   font-size: var(--t-small);
   white-space: pre-wrap;
+}
+
+/* The drawer's rows table has to fit 560px (and a phone) without clipping
+ * its last column: tighter cells, and the «esta fila» mark under the number. */
+.drawer-rows th,
+.drawer-rows td {
+  padding-left: var(--s-3);
+  padding-right: var(--s-3);
+}
+
+.drawer-rows .row-here {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.drawer-rows td:last-child {
+  overflow-wrap: anywhere;
 }

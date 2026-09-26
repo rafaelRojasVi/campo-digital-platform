@@ -19,6 +19,13 @@
  *  2. The 90-day consultation (TR-FUNC-031) lives here, as a toggle on the
  *     page whose scope it shares, instead of as a panel that appeared in the
  *     middle of the dashboard.
+ *
+ * And, from the dashboard UI pass: every queue row now opens the same PMF
+ * detail drawer as the Explorador (the rows were styled as hoverable but did
+ * nothing), and the two buttons that both only cleared the filters — which
+ * did nothing at all on an unfiltered page — are one «Quitar filtros» button
+ * that appears only when there is a filter to remove. The rule identifiers
+ * moved into «Cómo se calcula».
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -29,6 +36,7 @@ import {
 } from '../api'
 import { OverduePanel } from '../components/OverduePanel'
 import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
+import { RowDetailDrawer } from '../components/RowDetailDrawer'
 import { StatusPill } from '../components/StatusPill'
 import { cell, formatInteger, formatNumber } from '../format'
 import { activeFilterChips, withoutChip } from '../lib/filterUrl'
@@ -38,6 +46,7 @@ import { collectAllRows } from '../lib/rowCollection'
 import { selectOverdueRows } from '../lib/overdue'
 import { useReads, type FilterController } from '../lib/useFilters'
 import { CompositionBar, type CompositionSegment } from '../ui/CompositionBar'
+import { HowCalculated } from '../ui/HowCalculated'
 import { Chip, Figure, SectionHeader } from '../ui/Primitives'
 
 /**
@@ -57,8 +66,11 @@ function stageSegments(pending: TranselecPending): CompositionSegment[] {
 
 export function PendientesPage({
   filterController,
+  sourceFields = null,
 }: {
   filterController: FilterController
+  /** Contract fields the published workbook had, for the detail drawer. */
+  sourceFields?: readonly string[] | null
 }) {
   const { filters, replaceFilters, reset } = filterController
   const key = JSON.stringify(filters)
@@ -72,6 +84,7 @@ export function PendientesPage({
     [key],
   )
 
+  const [openRow, setOpenRow] = useState<ResumenRow | null>(null)
   const [overdueOpen, setOverdueOpen] = useState(false)
   const [overdueRows, setOverdueRows] = useState<ResumenRow[]>([])
   const [overdueLoading, setOverdueLoading] = useState(false)
@@ -159,15 +172,10 @@ export function PendientesPage({
                 data.total_pmf_count,
               )}`}
               label="PMF pendientes prioritarios"
-              note={
-                <>
-                  {formatNumber(data.pending_pmf_percentage)}% de los PMF del alcance seleccionado ·{' '}
-                  <span className="basis-tag">{data.basis}</span>
-                </>
-              }
+              note={`${formatNumber(data.pending_pmf_percentage)}% de los PMF del alcance seleccionado`}
             />
             <CompositionBar
-              title="Etapa inferida del texto de «Estado»"
+              title="Etapa, según el texto de «Estado»"
               noun="PMF pendientes"
               testId="pending-stage"
               lead={false}
@@ -176,25 +184,24 @@ export function PendientesPage({
           </div>
 
           <p className="hint">
-            Esta regla no es la misma que la de los indicadores «Aprobado» y «En trámite» del
-            resumen, por lo que un PMF puede aparecer en trámite allí y como pendiente prioritario
-            aquí. La subdivisión por etapa usa la heurística{' '}
-            <span className="basis-tag">{data.stage_basis}</span>, inferida del texto de «Estado»:
-            no es una taxonomía CONAF confirmada.
+            Un PMF es pendiente prioritario si le falta el N.º de ingreso o si su «Estado» menciona
+            un rechazo. Esto no se basa en el «Estado resumido» del Resumen, así que un PMF puede
+            figurar «En trámite» allí y aparecer aquí. La etapa se deduce del texto de «Estado»; no
+            es una clasificación confirmada por CONAF.
           </p>
+          <HowCalculated bases={[data.basis, data.stage_basis]} testId="pending-how" />
 
           <div className="btns no-print" style={{ margin: 'var(--s-5) 0' }}>
-            <button
-              type="button"
-              className="btn alt"
-              onClick={reset}
-              data-testid="show-pending"
-            >
-              Ver todos los PMF pendientes
-            </button>
-            <button type="button" className="btn alt" onClick={reset} data-testid="back-to-total">
-              Volver al total
-            </button>
+            {chips.length > 0 && (
+              <button
+                type="button"
+                className="btn alt"
+                onClick={reset}
+                data-testid="clear-pending-filters"
+              >
+                Quitar filtros y ver todos los pendientes
+              </button>
+            )}
             <button
               type="button"
               className={overdueOpen ? 'btn' : 'btn alt'}
@@ -220,10 +227,10 @@ export function PendientesPage({
             <SectionHeader
               id="pending-rows-title"
               title="Cola de PMF pendientes"
-              meta={`${formatInteger(data.rows.length)} filas de origen`}
+              meta={`${formatInteger(data.rows.length)} filas de origen · seleccione una para ver el detalle del PMF`}
             />
             <div className="tablewrap">
-              <table className="queue-table">
+              <table className="queue-table rows-table">
                 <thead>
                   <tr>
                     <th scope="col">PMF</th>
@@ -240,7 +247,20 @@ export function PendientesPage({
                 </thead>
                 <tbody>
                   {data.rows.map((row) => (
-                    <tr key={row.source_row_number}>
+                    <tr
+                      key={row.source_row_number}
+                      tabIndex={0}
+                      aria-selected={openRow?.source_row_number === row.source_row_number}
+                      aria-haspopup="dialog"
+                      data-testid={`pending-row-${row.source_row_number}`}
+                      onClick={() => setOpenRow(row)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          setOpenRow(row)
+                        }
+                      }}
+                    >
                       <td>
                         <b>{row.pmf}</b>
                       </td>
@@ -269,6 +289,14 @@ export function PendientesPage({
             </div>
           </section>
         </section>
+      )}
+
+      {openRow && (
+        <RowDetailDrawer
+          row={openRow}
+          onClose={() => setOpenRow(null)}
+          sourceFields={sourceFields}
+        />
       )}
     </div>
   )

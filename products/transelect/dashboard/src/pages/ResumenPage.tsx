@@ -27,8 +27,9 @@
  * `useReads`), so the lead figure, the bars and the queue can never describe
  * two different filter states.
  */
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import {
+  type ResumenRow,
   type TranselecActiveImport,
   type TranselecPending,
   type TranselecSummary,
@@ -36,6 +37,7 @@ import {
   getSummary,
 } from '../api'
 import { CompanyMatrix } from '../components/CompanyMatrix'
+import { RowDetailDrawer } from '../components/RowDetailDrawer'
 import { EstadoDetalleTable } from '../components/EstadoDetalleTable'
 import { ReforestacionPanel } from '../components/ReforestacionPanel'
 import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
@@ -52,6 +54,7 @@ import {
 import { useReads, type FilterController } from '../lib/useFilters'
 import { Link, ROUTES } from '../router'
 import { CompositionBar } from '../ui/CompositionBar'
+import { HowCalculated } from '../ui/HowCalculated'
 import { Chip, SectionHeader, StatStrip } from '../ui/Primitives'
 
 const QUEUE_LIMIT = 6
@@ -85,6 +88,7 @@ export function ResumenPage({
   )
 
   const chips = activeFilterChips(filters)
+  const [openRow, setOpenRow] = useState<ResumenRow | null>(null)
 
   if (failure && !data) {
     return (
@@ -152,7 +156,6 @@ export function ResumenPage({
             <SectionHeader
               id="detalle-title"
               title="Estado detallado de tramitación"
-              basis={data.summary.basis_estado_resumido}
               meta={`Desglose del encabezado sobre los mismos ${formatInteger(
                 data.summary.pmf_count,
               )} PMF · evaluación, rechazos y recursos`}
@@ -164,7 +167,6 @@ export function ResumenPage({
             <SectionHeader
               id="empresa-title"
               title="Por empresa"
-              basis={data.summary.basis_estado_resumido}
               meta="Cada PMF pertenece a una sola empresa, por lo que los subtotales suman el total."
             />
             <CompanyMatrix summary={data.summary} filters={filters} />
@@ -198,13 +200,14 @@ export function ResumenPage({
               ))}
             </div>
             <p className="hint" style={{ marginTop: 'var(--s-4)' }}>
-              «Pendientes prioritarios» aplica{' '}
-              <span className="basis-tag">{data.summary.basis_pending_priority}</span>, una regla
-              distinta de la que produce «Aprobado» y «En trámite» (
-              <span className="basis-tag">{data.summary.basis_estado_resumido}</span>): puede
-              clasificar el mismo PMF de otra forma, y las dos cifras no son subconjuntos una de la
-              otra.
+              «Pendientes prioritarios» no se basa en el «Estado resumido» como «Aprobado» y «En
+              trámite»: mira si falta el N.º de ingreso o si el «Estado» menciona un rechazo. Por
+              eso un mismo PMF puede figurar «En trámite» y a la vez ser pendiente prioritario.
             </p>
+            <HowCalculated
+              bases={[data.summary.basis_pending_priority, data.summary.basis_estado_resumido]}
+              testId="attention-how"
+            />
           </section>
 
           <section className="ruled" aria-labelledby="alcance-title" data-testid="kpi-row">
@@ -236,7 +239,6 @@ export function ResumenPage({
             <SectionHeader
               id="estado-predio-title"
               title="Estado resumido por predio"
-              basis={data.summary.basis_estado_resumido}
               meta={`${formatInteger(
                 data.summary.predio_count,
               )} predios únicos del alcance seleccionado · un denominador distinto del de los PMF`}
@@ -252,13 +254,13 @@ export function ResumenPage({
               testId="composition-predios"
               segments={approvalSegments(data.summary.avance_por_predio)}
             />
+            <HowCalculated bases={[data.summary.basis_estado_resumido]} testId="predio-how" />
           </section>
 
           <section className="ruled" aria-labelledby="cola-title" data-testid="work-queue">
             <SectionHeader
               id="cola-title"
               title="Cola de trabajo"
-              basis={data.pending.basis}
               meta={
                 <>
                   {formatInteger(data.pending.pending_pmf_count)} de{' '}
@@ -276,7 +278,16 @@ export function ResumenPage({
             ) : (
               <div className="queue">
                 {data.pending.rows.slice(0, QUEUE_LIMIT).map((row) => (
-                  <div className="queue-row" key={row.source_row_number}>
+                  <button
+                    type="button"
+                    className="queue-row"
+                    key={row.source_row_number}
+                    data-testid={`queue-row-${row.source_row_number}`}
+                    aria-haspopup="dialog"
+                    aria-label={`Ver el detalle de ${row.pmf}, fila ${row.source_row_number}`}
+                    data-selected={openRow?.source_row_number === row.source_row_number}
+                    onClick={() => setOpenRow(row)}
+                  >
                     <span className="queue-pmf">{row.pmf}</span>
                     <span className="queue-where">
                       {cell(row.predio_ref, 'Sin predio de reforestación informado')}
@@ -286,7 +297,7 @@ export function ResumenPage({
                     <span className="queue-stage">
                       {cell(row.numero_ingreso, 'Sin ingreso')}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -298,8 +309,20 @@ export function ResumenPage({
                 Abrir el explorador
               </Link>
             </div>
+            <HowCalculated
+              bases={[data.pending.basis, data.pending.stage_basis]}
+              testId="queue-how"
+            />
           </section>
         </>
+      )}
+
+      {openRow && (
+        <RowDetailDrawer
+          row={openRow}
+          onClose={() => setOpenRow(null)}
+          sourceFields={activeImport?.source_fields ?? null}
+        />
       )}
     </div>
   )
