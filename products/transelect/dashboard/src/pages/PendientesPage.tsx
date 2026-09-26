@@ -228,8 +228,8 @@ export function PendientesPage({
                   <tr>
                     <th scope="col">PMF</th>
                     <th scope="col">Predio de reforestación</th>
-                    <th scope="col">Carpeta (col. E)</th>
-                    <th scope="col">Carpeta (col. AC)</th>
+                    <th scope="col">Carpeta PMF</th>
+                    <th scope="col">Carpeta normalizada</th>
                     <th scope="col">Predio</th>
                     <th scope="col">Rol</th>
                     <th scope="col">Estado resumido</th>

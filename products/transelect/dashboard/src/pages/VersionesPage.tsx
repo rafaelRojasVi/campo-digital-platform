@@ -25,15 +25,68 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   type TranselecActiveImport,
   type TranselecImportHistoryRow,
+  type TranselecImportReport,
+  getImportReport,
   listImportHistory,
   restoreImport,
 } from '../api'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { LayoutReview } from '../components/LayoutReview'
 import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
 import { formatBytes, formatDateTime, formatInteger, formatNumber, shortHash } from '../format'
 import { classifyFailure, type ApiFailure, type FailureView } from '../lib/apiState'
 import { Link, ROUTES } from '../router'
 import { SectionHeader } from '../ui/Primitives'
+
+/**
+ * The active version's persisted layout review, loaded on request.
+ *
+ * The review an operator saw before publishing stays with the import, so the
+ * warnings a version was published with can be re-read later by anyone who
+ * can import. Imports validated before contract V2 kept no review; that is
+ * said plainly rather than shown as "no warnings".
+ */
+function ActiveImportReview({ importId }: { importId: number }) {
+  const [report, setReport] = useState<TranselecImportReport | null>(null)
+  const [error, setError] = useState<FailureView | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    const result = await getImportReport(importId)
+    setLoading(false)
+    if (result.ok) setReport(result.data)
+    else setError(classifyFailure(result))
+  }, [importId])
+
+  if (report) {
+    return report.mapping_report ? (
+      <LayoutReview report={report.mapping_report} heading="Revisión de la versión activa" />
+    ) : (
+      <p className="hint" data-testid="review-unavailable">
+        Esta versión se validó con el contrato anterior, que no guardaba un informe de columnas.
+      </p>
+    )
+  }
+
+  return (
+    <div className="stack-tight">
+      {error && <AlertBanner title={error.title}>{error.message}</AlertBanner>}
+      <div className="btns no-print">
+        <button
+          type="button"
+          className="btn alt small"
+          onClick={() => void load()}
+          disabled={loading}
+          data-testid="load-review"
+        >
+          {loading ? 'Cargando la revisión…' : 'Ver la revisión de columnas y advertencias'}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export function VersionesPage({
   activeImport,
@@ -218,6 +271,12 @@ export function VersionesPage({
             </dd>
             <dt>Validada</dt>
             <dd>{formatDateTime(activeImport.validated_at)}</dd>
+            <dt>Advertencias</dt>
+            <dd data-testid="active-warning-count">
+              {activeImport.warning_count === 0
+                ? 'Ninguna registrada'
+                : `${formatInteger(activeImport.warning_count)} revisadas al publicar`}
+            </dd>
             <dt>Contenido</dt>
             <dd>
               {formatInteger(activeImport.business_rows)} filas ·{' '}
@@ -226,6 +285,9 @@ export function VersionesPage({
               prediales · {formatNumber(activeImport.surface_total)} ha
             </dd>
           </dl>
+          <div style={{ marginTop: 'var(--s-5)' }}>
+            <ActiveImportReview key={activeImport.import_id} importId={activeImport.import_id} />
+          </div>
           <p className="hint" style={{ marginTop: 'var(--s-5)' }}>
             Fuente: hoja «Resumen» de la planilla maestra publicada. Las hojas históricas no se
             suman para evitar duplicidad y la hoja «Pendientes» no se cruza automáticamente. Esta

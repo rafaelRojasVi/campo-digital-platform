@@ -1339,3 +1339,60 @@
     padding: var(--s-6);
   }
 }
+
+/* ------------------------------------------------ import layout review */
+
+.issue-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin: 0;
+  padding-left: var(--s-5);
+}
+
+.issue-list li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.issue-refs {
+  color: var(--ink-3);
+  font-size: var(--t-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.review-details > summary {
+  cursor: pointer;
+  padding: var(--s-2) 0;
+  font-weight: 600;
+}
+
+.review-details[open] > summary {
+  margin-bottom: var(--s-3);
+}
+
+.ack {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  font-size: var(--t-small);
+}
+
+/* ---------------------------------------------------- AEF tracking */
+
+.flag {
+  display: inline-block;
+  padding: 1px var(--s-3);
+  border: 1px solid #e3cd93;
+  border-radius: var(--r-pill);
+  background: var(--st-progress-tint);
+  color: #8a6100;
+  font-size: var(--t-micro);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.aef-empty {
+  color: var(--ink-3);
+}

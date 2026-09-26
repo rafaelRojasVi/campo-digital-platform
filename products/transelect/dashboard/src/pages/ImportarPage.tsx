@@ -9,8 +9,14 @@
  * reproduced. This drives the real three-step pipeline instead:
  *
  *   1. upload            POST /transelec/uploads          (bounded, hashed, stored)
- *   2. validate/project  POST .../validate-and-project    (hard contract gate)
+ *   2. validate/project  POST .../validate-and-project    (layout review + projection)
  *   3. publish           POST .../publish                 (explicit, audited, atomic)
+ *
+ * Since contract V2 step 2 recognizes the `Resumen` columns by header and
+ * returns a layout report either way: on success (what matched, what was
+ * ignored, warnings to review) and on refusal (every blocking issue with its
+ * row and column references). A version with warnings can be published only
+ * after the operator explicitly acknowledges having reviewed them.
  *
  * Validating never publishes. A validated import sits there until an operator
  * deliberately publishes it, which is why step 3 is a separate, confirmed
@@ -25,14 +31,17 @@
 import { useCallback, useRef, useState } from 'react'
 import {
   type ActivationResult,
+  type LayoutReport,
   type UploadResult,
   type ValidateAndProjectResult,
+  layoutReportFromFailure,
   listRecentUploads,
   publishImport,
   uploadWorkbook,
   validateAndProject,
 } from '../api'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { LayoutReview } from '../components/LayoutReview'
 import { AlertBanner } from '../components/StateViews'
 import { formatBytes, formatDateTime, formatInteger, formatNumber, shortHash } from '../format'
 import { classifyFailure, type FailureView } from '../lib/apiState'
@@ -59,6 +68,8 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
   const [activation, setActivation] = useState<ActivationResult | null>(null)
   const [busy, setBusy] = useState<Stage | null>(null)
   const [failure, setFailure] = useState<{ stage: Stage; view: FailureView } | null>(null)
+  const [refusalReport, setRefusalReport] = useState<LayoutReport | null>(null)
+  const [warningsAcknowledged, setWarningsAcknowledged] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [dragging, setDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -69,6 +80,8 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
     setValidation(null)
     setActivation(null)
     setFailure(null)
+    setRefusalReport(null)
+    setWarningsAcknowledged(false)
     setBusy(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -78,6 +91,8 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
     setValidation(null)
     setActivation(null)
     setFailure(null)
+    setRefusalReport(null)
+    setWarningsAcknowledged(false)
 
     setBusy('upload')
     const uploaded = await uploadWorkbook(selected)
@@ -111,6 +126,7 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
     setBusy(null)
     if (!validated.ok) {
       setFailure({ stage: 'validate', view: classifyFailure(validated) })
+      setRefusalReport(layoutReportFromFailure(validated.payload))
       return
     }
     setValidation(validated.data)
@@ -119,7 +135,9 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
   const confirmPublish = useCallback(async () => {
     if (!validation) return
     setBusy('publish')
-    const result = await publishImport(validation.import_id)
+    const result = await publishImport(validation.import_id, {
+      acknowledgeWarnings: validation.warning_count > 0 && warningsAcknowledged,
+    })
     setBusy(null)
     setConfirming(false)
     if (!result.ok) {
@@ -129,7 +147,7 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
     setActivation(result.data)
     setFailure(null)
     onActiveVersionChanged()
-  }, [onActiveVersionChanged, validation])
+  }, [onActiveVersionChanged, validation, warningsAcknowledged])
 
   const stepState = (stage: Stage): StepState => {
     if (failure?.stage === stage) return 'failed'
@@ -144,8 +162,12 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
     | { contract_error?: string | null; resumen_row_count?: number | null }
     | undefined
 
+  const warningCount = validation?.warning_count ?? 0
   const canPublishNow =
-    validation !== null && !validation.is_active && validation.status !== 'already_current'
+    validation !== null &&
+    !validation.is_active &&
+    validation.status !== 'already_current' &&
+    (warningCount === 0 || warningsAcknowledged)
 
   /** A dropped file is the same input as a chosen one; nothing else changes. */
   const acceptDrop = (dropped: File | undefined) => {
@@ -182,8 +204,9 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
             <div className="step-body">
               <b>Validar y proyectar</b>
               <span>
-                Se verifica el contrato de origen (columnas A:AD, hoja «Resumen») y se proyectan las
-                filas. Si algo falla, no queda ninguna importación a medias.
+                Se reconocen las columnas de la hoja «Resumen» por su encabezado y se proyectan las
+                filas. Verá qué se reconoció, qué se ignoró y qué revisar; si algo bloquea la
+                importación, no queda ninguna importación a medias.
               </span>
             </div>
           </li>
@@ -276,6 +299,9 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
           >
             {failure.view.message}
           </AlertBanner>
+          {refusalReport && (
+            <LayoutReview report={refusalReport} heading="Qué hay que corregir en la planilla" />
+          )}
           {failure.stage !== 'upload' && (
             <p className="hint">
               La versión publicada actualmente no ha cambiado. Puede corregir la planilla y volver a
@@ -362,6 +388,31 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
             validada {formatDateTime(validation.validated_at)}
           </p>
 
+          {validation.mapping_report ? (
+            <LayoutReview report={validation.mapping_report} />
+          ) : (
+            <p className="hint">
+              Esta importación se validó con el contrato anterior, que no guardaba un informe de
+              columnas.
+            </p>
+          )}
+
+          {warningCount > 0 && !validation.is_active && validation.status !== 'already_current' && (
+            <label className="ack no-print">
+              <input
+                type="checkbox"
+                checked={warningsAcknowledged}
+                onChange={(event) => setWarningsAcknowledged(event.target.checked)}
+                data-testid="warnings-ack"
+              />
+              <span>
+                Revisé {warningCount === 1 ? 'la advertencia' : `las ${warningCount} advertencias`}{' '}
+                y quiero poder publicar esta versión tal como viene. Los datos no se corrigen
+                automáticamente.
+              </span>
+            </label>
+          )}
+
           <div className="btns no-print">
             <button
               type="button"
@@ -419,6 +470,13 @@ export function ImportarPage({ onActiveVersionChanged }: { onActiveVersionChange
             {formatInteger(validation.distinct_pmf)} PMF ·{' '}
             {formatNumber(validation.surface_total)} ha.
           </p>
+          {warningCount > 0 && (
+            <p>
+              Se publica con {formatInteger(warningCount)}{' '}
+              {warningCount === 1 ? 'advertencia revisada' : 'advertencias revisadas'}; quedan
+              registradas con la versión.
+            </p>
+          )}
         </ConfirmDialog>
       )}
     </div>

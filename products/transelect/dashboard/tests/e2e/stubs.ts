@@ -185,6 +185,14 @@ export function makeApiRow(index: number, overrides: Record<string, unknown> = {
     predio_group_key: `PMF-${index}-10`,
     tramite: null,
     sector: 'Norte',
+    // Contract V2's AEF block: sparse and row-level, as in the source. Row 2
+    // carries a full record with an inverted date; every other row is blank.
+    aef: index === 2 ? 'Presentado' : null,
+    quien_solicita: index === 2 ? 'Persona Sintética' : null,
+    fecha_solicitud: index === 2 ? '2026-08-20' : null,
+    fecha_corta: index === 2 ? '2026-08-19' : null,
+    fecha_termino: index === 2 ? '2026-09-01' : null,
+    chronology_flags: index === 2 ? ['cronologia_corta_antes_de_solicitud'] : [],
     ...overrides,
   }
 }
@@ -342,6 +350,39 @@ export async function stubPlatform(page: Page, options: StubOptions = {}): Promi
       published_at: '2026-09-02T21:00:00+00:00',
       published_by_app_user_id: 3,
       published_by_display_name: 'Dev Admin',
+      warning_count: 1,
+      source_fields: [
+        'aef',
+        'quien_solicita',
+        'fecha_solicitud',
+        'fecha_corta',
+        'fecha_termino',
+        'pmf',
+        'estado_resumido',
+      ],
+    })
+  })
+
+  await page.route('**/api/transelec/aef*', (route) => {
+    if (fail) return json(route, failBody, fail)
+    return json(route, {
+      basis: 'row_level_source_values',
+      source_fields: ['aef', 'quien_solicita', 'fecha_solicitud', 'fecha_corta', 'fecha_termino'],
+      row_count: totalRows,
+      pmf_count: 12,
+      rows_with_any_tracking: 1,
+      rows_with_aef: 1,
+      rows_with_quien_solicita: 1,
+      rows_with_fecha_solicitud: 1,
+      rows_with_fecha_corta: 1,
+      rows_with_fecha_termino: 1,
+      pmf_with_aef: 1,
+      pmf_with_partial_aef: 0,
+      rows_with_chronology_warning: 1,
+      por_aef: [{ label: 'Presentado', count: 1 }],
+      por_solicitante: [{ label: 'Persona Sintética', count: 1 }],
+      pmf_coverage: [{ pmf: 'PMF-002', total_rows: 1, rows_with_aef: 1, rows_with_any_tracking: 1 }],
+      rows: [makeApiRow(2)],
     })
   })
 

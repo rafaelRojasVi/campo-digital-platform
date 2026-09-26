@@ -50,6 +50,7 @@ const NAV: readonly NavItem[] = [
   { to: ROUTES.resumen, label: 'Resumen', filtered: true },
   { to: ROUTES.explorador, label: 'Explorador', filtered: true },
   { to: ROUTES.pendientes, label: 'Pendientes', filtered: true },
+  { to: ROUTES.aef, label: 'AEF', filtered: true },
   { to: ROUTES.calidad, label: 'Calidad', filtered: true },
   {
     to: ROUTES.datos,

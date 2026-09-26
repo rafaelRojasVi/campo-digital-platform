@@ -10,6 +10,7 @@ import {
   filterParams,
   filtersActive,
   getSummary,
+  layoutReportFromFailure,
   logout,
   observedServerNow,
   publishImport,
@@ -203,7 +204,43 @@ describe('transport', () => {
       ok: false,
       status: 422,
       error: 'La planilla no cumple el contrato de origen esperado. Contacte a soporte.',
+      payload: { detail: 'La planilla no cumple el contrato de origen esperado. Contacte a soporte.' },
     })
+    expect(layoutReportFromFailure(result.ok ? null : result.payload)).toBeNull()
+  })
+
+  it('carries the layout review of a refused import alongside its detail string', async () => {
+    const report = {
+      parser_version: 'transelec_ingestion.resumen_layout@2',
+      sheet_name: 'Resumen',
+      header_row: 1,
+      business_rows: 0,
+      columns: [],
+      fields: [],
+      auxiliary_regions: [],
+      issues: [
+        {
+          code: 'carpeta_ambigua',
+          severity: 'error',
+          message: 'La columna L se llama «Carpeta»…',
+          field: null,
+          columns: ['L'],
+          rows: [],
+          row_count: 0,
+        },
+      ],
+      counts: { error: 1, warning: 0, info: 0 },
+    }
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ csrf_token: 't', header_name: 'X-CSRF-Token' }))
+      .mockResolvedValueOnce(jsonResponse({ detail: 'Revise', report }, { status: 422 }))
+
+    const result = await validateAndProject(41)
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).toBe('Revise')
+    expect(layoutReportFromFailure(result.payload)?.issues[0].columns).toEqual(['L'])
   })
 
   it('never throws on a network failure', async () => {

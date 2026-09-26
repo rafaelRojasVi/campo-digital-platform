@@ -35,6 +35,12 @@ function row(overrides: Partial<ResumenRow> & { source_row_number: number }): Re
     predio_group_key: `k-${overrides.source_row_number}`,
     tramite: null,
     sector: null,
+    aef: null,
+    quien_solicita: null,
+    fecha_solicitud: null,
+    fecha_corta: null,
+    fecha_termino: null,
+    chronology_flags: [],
     ...overrides,
   }
 }
@@ -153,6 +159,8 @@ describe('deriveFilterOptions', () => {
       pas: [],
       sector: [],
       tipo_propietario: [],
+      aef: [],
+      quien_solicita: [],
     })
   })
 })

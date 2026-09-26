@@ -21,6 +21,7 @@ export const ROUTES = {
   resumen: '/transelec',
   explorador: '/transelec/explorador',
   pendientes: '/transelec/pendientes',
+  aef: '/transelec/seguimiento-aef',
   calidad: '/transelec/calidad',
   datos: '/transelec/datos',
   importar: '/transelec/importar',

@@ -13,13 +13,14 @@ describe('RowsTable (TR-FUNC-039)', () => {
     expect(headers).toEqual([
       'PMF',
       'Predio de reforestación',
-      'Carpeta (col. E)',
-      'Carpeta (col. AC)',
+      'Carpeta PMF',
+      'Carpeta normalizada',
       'Rol',
       'Predio',
       'Área corta',
       'Sup. ha',
       'Estado resumido',
+      'AEF',
       'N.º ingreso',
       'Empresa',
       'Propietario',
@@ -33,6 +34,30 @@ describe('RowsTable (TR-FUNC-039)', () => {
     const cells = within(row).getAllByRole('cell').map((cell) => cell.textContent)
     expect(cells[2]).toBe('CARP-E-01')
     expect(cells[3]).toBe('CARP-AC-01')
+  })
+
+  it('shows AEF per row, blank stays blank, and flags inverted dates', () => {
+    render(
+      <RowsTable
+        {...base}
+        rows={[
+          makeRow({
+            source_row_number: 2,
+            aef: 'Presentado',
+            chronology_flags: ['cronologia_termino_antes_de_corta'],
+          }),
+          makeRow({ source_row_number: 3, aef: null }),
+        ]}
+      />,
+    )
+    const [first, second] = within(screen.getByTestId('rows-body')).getAllByRole('row')
+    const aefCell = within(first).getAllByRole('cell')[9]
+    expect(aefCell).toHaveTextContent('Presentado')
+    expect(within(aefCell).getByText('Revisar fechas')).toHaveAttribute(
+      'title',
+      'Fecha término anterior a la corta',
+    )
+    expect(within(second).getAllByRole('cell')[9]).toHaveTextContent('—')
   })
 
   it('renders a blank workbook value as an empty cell, never as "null"', () => {

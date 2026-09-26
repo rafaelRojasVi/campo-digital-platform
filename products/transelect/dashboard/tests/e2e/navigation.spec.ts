@@ -38,6 +38,7 @@ test.describe('sections', () => {
     for (const [label, path, marker] of [
       ['Explorador', '/transelec/explorador', 'rows-body'],
       ['Pendientes', '/transelec/pendientes', 'pending-zone'],
+      ['AEF', '/transelec/seguimiento-aef', 'aef-kpis'],
       ['Calidad', '/transelec/calidad', 'quality-panel'],
       ['Datos', '/transelec/datos', 'upload-submit'],
       ['Resumen', '/transelec', 'kpi-row'],
@@ -280,7 +281,7 @@ test.describe('role differences', () => {
 
     await page.goto('/transelec')
     await expect(page.getByTestId('kpi-row')).toBeVisible()
-    for (const label of ['Resumen', 'Explorador', 'Pendientes', 'Calidad']) {
+    for (const label of ['Resumen', 'Explorador', 'Pendientes', 'AEF', 'Calidad']) {
       await expect(nav(page).getByRole('link', { name: label })).toBeVisible()
     }
     await expect(nav(page).getByRole('link', { name: 'Datos' })).toHaveCount(0)
