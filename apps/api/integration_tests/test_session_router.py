@@ -88,10 +88,31 @@ def test_logout_without_authentication_is_rejected(client: TestClient) -> None:
     assert client.post("/auth/logout").status_code == 401
 
 
-def test_logout_clears_a_real_platform_session(client: TestClient) -> None:
+def _csrf_headers(client: TestClient) -> dict[str, str]:
+    body = client.get("/auth/csrf").json()
+    return {body["header_name"]: body["csrf_token"]}
+
+
+def test_logout_without_a_csrf_token_is_rejected_and_keeps_the_session(
+    client: TestClient,
+) -> None:
+    """Ending a session is a state change: another site must not be able to
+    sign a user out, so logout demands the same token every mutation does."""
+
     raw_secret = _real_session(client)
 
     response = client.post("/auth/logout")
+
+    assert response.status_code == 403
+    assert client.get("/auth/me").status_code == 200
+    with client.engine.connect() as connection:
+        assert _platform_sessions.resolve_session(connection, raw_secret) is not None
+
+
+def test_logout_clears_a_real_platform_session(client: TestClient) -> None:
+    raw_secret = _real_session(client)
+
+    response = client.post("/auth/logout", headers=_csrf_headers(client))
 
     assert response.status_code == 204
     assert client.get("/auth/me").status_code == 401
