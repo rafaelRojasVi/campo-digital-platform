@@ -71,7 +71,8 @@ def main() -> int:
     print(f"column decisions: {dict(statuses)}")
     for region in report.auxiliary_regions:
         print(
-            f"auxiliary region {region.first_column}-{region.last_column} ({region.column_count} cols)"
+            f"auxiliary region {region.first_column}-{region.last_column} "
+            f"({region.column_count} cols)"
         )
     print(
         f"issues: {report.count('error')} error, {report.count('warning')} warning, "
