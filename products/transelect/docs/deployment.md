@@ -95,8 +95,10 @@ sign-in has been performed yet.
 Both are wired in `app.main`.
 
 - **Request-body limits.**
-  - An upload route without a session cookie is answered `401` before any of
-    the body is read.
+  - An upload route whose session cookie is missing, forged, expired or
+    revoked is answered `401` before any of the body is read. The session
+    is resolved against `platform.session` there, not just checked for
+    presence.
   - Bodies are capped at 64 MiB for a Transelec workbook, 2 GiB for
     `/ingesta/upload`, and 1 MiB for everything else, and are answered `413`
     past the cap.

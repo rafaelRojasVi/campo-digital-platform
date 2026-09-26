@@ -14,15 +14,20 @@ problems they close happen *before* any dependency runs:
 - Security headers have to be present on every response -- the built
   dashboard, API JSON, redirects and error bodies alike -- including the
   ``401``/``413`` answers this module itself produces.
+
+The upload routes additionally resolve the caller's session here, before any
+of the body is read: merely *carrying* a session cookie proves nothing, and
+``campo_session=anything`` must not buy a 2 GiB spool either.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
-from http.cookies import CookieError, SimpleCookie
+from collections.abc import Callable, Iterable, Mapping
 
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import Headers, MutableHeaders
+from starlette.requests import cookie_parser
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 # ---------------------------------------------------------------------------
@@ -51,19 +56,20 @@ async def _send_json(send: Send, status_code: int, detail: str) -> None:
     await send({"type": "http.response.body", "body": body})
 
 
-def _has_cookie(headers: Headers, name: str) -> bool:
+def _cookie(headers: Headers, name: str) -> str | None:
+    """Read ``name`` exactly as ``Request.cookies`` (and so FastAPI's
+    ``Cookie()`` parameters) will: every ``Cookie`` header, later values
+    winning. Checking a different value than the route authenticates would
+    let a valid cookie vouch for a forged one."""
+
+    cookies: dict[str, str] = {}
     for raw in headers.getlist("cookie"):
-        try:
-            parsed = SimpleCookie(raw)
-        except CookieError:
-            continue
-        if name in parsed and parsed[name].value:
-            return True
-    return False
+        cookies.update(cookie_parser(raw))
+    return cookies.get(name) or None
 
 
 class RequestBodyLimitMiddleware:
-    """Bound every request body, and refuse anonymous uploads before reading them.
+    """Bound every request body, and refuse unauthenticated uploads before reading them.
 
     ``default_limit`` applies to every path not listed in ``path_limits``
     (every JSON mutation this API has fits in far less). ``path_limits``
@@ -72,11 +78,16 @@ class RequestBodyLimitMiddleware:
     anything; a chunked or under-declared body is counted as it streams and
     cut off at the limit.
 
-    ``session_cookie_required`` lists upload paths that are answered ``401``
-    before any of the body is read when the request carries no session
-    cookie at all. This does not authenticate anyone -- the route still does
-    that -- it only stops an anonymous caller from making the server receive
-    an upload-sized body first.
+    ``session_required`` lists upload paths that are answered ``401`` before
+    any of the body is read unless the session cookie resolves to a live
+    session through ``session_validator`` -- the same lookup the route's
+    ``get_current_app_user`` does, so a missing, forged, expired or revoked
+    session never makes the server receive an upload-sized body. This only
+    decides whether the body is worth reading: the route still resolves the
+    user itself and enforces CSRF and the product permission.
+
+    ``session_validator`` is synchronous (it queries the database) and runs
+    in the threadpool.
     """
 
     def __init__(
@@ -86,13 +97,15 @@ class RequestBodyLimitMiddleware:
         default_limit: int,
         path_limits: Mapping[str, int],
         session_cookie_name: str,
-        session_cookie_required: Iterable[str] = (),
+        session_validator: Callable[[str], bool],
+        session_required: Iterable[str] = (),
     ) -> None:
         self.app = app
         self.default_limit = default_limit
         self.path_limits = dict(path_limits)
         self.session_cookie_name = session_cookie_name
-        self.session_cookie_required = frozenset(session_cookie_required)
+        self.session_validator = session_validator
+        self.session_required = frozenset(session_required)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -103,11 +116,11 @@ class RequestBodyLimitMiddleware:
         limit = self.path_limits.get(path, self.default_limit)
         headers = Headers(scope=scope)
 
-        if path in self.session_cookie_required and not _has_cookie(
-            headers, self.session_cookie_name
-        ):
-            await _send_json(send, 401, "Not authenticated.")
-            return
+        if path in self.session_required:
+            token = _cookie(headers, self.session_cookie_name)
+            if token is None or not await run_in_threadpool(self.session_validator, token):
+                await _send_json(send, 401, "Not authenticated.")
+                return
 
         declared = headers.get("content-length")
         if declared is not None:

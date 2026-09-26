@@ -28,6 +28,7 @@ from starlette.types import ASGIApp, Scope
 
 UPLOAD_PATH = "/upload"
 LIMIT = 1000
+VALID_SESSION = "valid-session-secret"
 
 Message = MutableMapping[str, Any]
 
@@ -46,14 +47,30 @@ def _upload_app() -> FastAPI:
     return app
 
 
-def _limited(app: FastAPI) -> RequestBodyLimitMiddleware:
+class _Sessions:
+    """Stand-in for app.deps.has_active_session: only VALID_SESSION is live."""
+
+    def __init__(self) -> None:
+        self.checked: list[str] = []
+
+    def __call__(self, token: str) -> bool:
+        self.checked.append(token)
+        return token == VALID_SESSION
+
+
+def _limited(app: FastAPI, sessions: _Sessions | None = None) -> RequestBodyLimitMiddleware:
     return RequestBodyLimitMiddleware(
         app,
         default_limit=100,
         path_limits={UPLOAD_PATH: LIMIT},
         session_cookie_name=SESSION_COOKIE_NAME,
-        session_cookie_required=(UPLOAD_PATH,),
+        session_validator=sessions or _Sessions(),
+        session_required=(UPLOAD_PATH,),
     )
+
+
+def _session_cookie(value: str = VALID_SESSION) -> tuple[bytes, bytes]:
+    return (b"cookie", f"{SESSION_COOKIE_NAME}={value}".encode())
 
 
 def _multipart(payload_size: int) -> tuple[bytes, bytes]:
@@ -141,6 +158,59 @@ def test_anonymous_upload_is_refused_before_any_body_is_read() -> None:
     assert exchange.bytes_read == 0
 
 
+def test_unresolvable_session_cookie_is_refused_before_any_body_is_read() -> None:
+    body, content_type = _multipart(50_000)
+    for value in ("anything", ""):
+        sessions = _Sessions()
+        exchange = _Exchange(body)
+
+        exchange.run(
+            _limited(_upload_app(), sessions),
+            path=UPLOAD_PATH,
+            headers=[(b"content-type", content_type), _session_cookie(value)],
+        )
+
+        assert exchange.status == 401, value
+        assert exchange.json == {"detail": "Not authenticated."}
+        assert exchange.bytes_read == 0, value
+
+
+def test_session_check_sees_the_cookie_the_route_will_authenticate() -> None:
+    # Starlette merges every Cookie header, later values winning; a valid
+    # cookie followed by a forged one must be judged on the forged one.
+    body, content_type = _multipart(500)
+    sessions = _Sessions()
+    exchange = _Exchange(body)
+
+    exchange.run(
+        _limited(_upload_app(), sessions),
+        path=UPLOAD_PATH,
+        headers=[
+            (b"content-type", content_type),
+            _session_cookie(),
+            _session_cookie("forged"),
+        ],
+    )
+
+    assert sessions.checked == ["forged"]
+    assert exchange.status == 401
+    assert exchange.bytes_read == 0
+
+
+def test_session_is_only_checked_on_upload_paths() -> None:
+    sessions = _Sessions()
+    exchange = _Exchange(b"{}")
+
+    exchange.run(
+        _limited(_upload_app(), sessions),
+        path="/json",
+        headers=[(b"content-type", b"application/json"), _session_cookie("forged")],
+    )
+
+    assert exchange.status == 200
+    assert sessions.checked == []
+
+
 def test_declared_oversized_upload_is_refused_before_any_body_is_read() -> None:
     body, content_type = _multipart(50_000)
     exchange = _Exchange(body)
@@ -151,7 +221,7 @@ def test_declared_oversized_upload_is_refused_before_any_body_is_read() -> None:
         headers=[
             (b"content-type", content_type),
             (b"content-length", str(len(body)).encode()),
-            (b"cookie", f"{SESSION_COOKIE_NAME}=anything".encode()),
+            _session_cookie(),
         ],
     )
 
@@ -168,7 +238,7 @@ def test_undeclared_oversized_upload_is_cut_off_at_the_limit() -> None:
         path=UPLOAD_PATH,
         headers=[
             (b"content-type", content_type),
-            (b"cookie", f"{SESSION_COOKIE_NAME}=anything".encode()),
+            _session_cookie(),
         ],
     )
 
@@ -188,7 +258,7 @@ def test_upload_within_the_limit_reaches_the_route() -> None:
         headers=[
             (b"content-type", content_type),
             (b"content-length", str(len(body)).encode()),
-            (b"cookie", f"{SESSION_COOKIE_NAME}=anything".encode()),
+            _session_cookie(),
         ],
     )
 

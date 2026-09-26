@@ -58,14 +58,25 @@ Severity reflects this deployment: one client, an authenticated
 - Impact: anyone on the internet could fill the container's temporary disk or
   memory without an account.
 - Fix: `app.http_hardening.RequestBodyLimitMiddleware` does three things:
-  - Upload routes answer `401` before reading the body when no session cookie
-    is present.
+  - Upload routes resolve the session cookie against `platform.session`
+    (the same lookup `get_current_app_user` does) and answer `401` before
+    reading the body when it is missing, forged, expired or revoked. The
+    route still authenticates the user, checks CSRF and enforces the
+    product permission.
   - Bodies are capped by `Content-Length` and while they stream: 64 MiB for a
     Transelec workbook, 2 GiB for `/ingesta/upload`, 1 MiB elsewhere, each
     plus 1 MiB multipart framing where it applies.
   - A body over its cap is answered `413`.
 - After the fix, the same 400 MB request is refused in about 1 ms with 0
   bytes accepted.
+- **FACT**, found in PR review: the first version of this fix only checked
+  that a nonempty `campo_session` cookie was present, so
+  `campo_session=anything` still bought a full upload-sized spool (up to
+  2 GiB on `/ingesta/upload`) before the route's `401`. Local tests in
+  `apps/api/integration_tests/test_upload_session_gate.py`, run with 64 KiB
+  limits against real session rows, show missing, forged, expired and
+  revoked sessions now read 0 body bytes on both upload routes, while a
+  valid session still uploads.
 - **DECISION**: 64 MiB for a workbook. The largest local `.xlsx` measured
   15.7 MB, so this leaves about 4× headroom.
 

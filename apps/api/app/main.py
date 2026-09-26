@@ -18,7 +18,7 @@ from app.database import (
     check_database_connection,
     get_database_engine,
 )
-from app.deps import SESSION_COOKIE_NAME, get_object_store
+from app.deps import SESSION_COOKIE_NAME, get_object_store, has_active_session
 from app.entra_auth import EntraNotConfiguredError
 from app.execution import ExecutionBackend, InProcessStagingExecutionBackend
 from app.google_auth import GoogleNotConfiguredError
@@ -114,7 +114,8 @@ app.add_middleware(
     default_limit=DEFAULT_MAX_BODY_BYTES,
     path_limits=UPLOAD_BODY_LIMITS,
     session_cookie_name=SESSION_COOKIE_NAME,
-    session_cookie_required=UPLOAD_BODY_LIMITS.keys(),
+    session_validator=has_active_session,
+    session_required=UPLOAD_BODY_LIMITS.keys(),
 )
 app.add_middleware(SecurityHeadersMiddleware, app_env=APP_ENV)
 
