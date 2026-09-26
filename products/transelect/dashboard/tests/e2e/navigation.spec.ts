@@ -53,6 +53,22 @@ test.describe('sections', () => {
     }
   })
 
+  test('an AEF PMF row opens its detail by keyboard and returns focus when closed', async ({ page }) => {
+    await page.goto('/transelec/seguimiento-aef')
+    const row = page.getByTestId('aef-pmf-PMF-002')
+    await expect(row).toBeVisible()
+    await row.focus()
+    await page.keyboard.press('Enter')
+
+    const drawer = page.getByTestId('row-drawer')
+    await expect(drawer).toBeVisible()
+    await expect(drawer).toContainText('PMF-002')
+    await expect(drawer).toContainText('Fila de origen 2')
+    await page.keyboard.press('Escape')
+    await expect(drawer).toBeHidden()
+    await expect(row).toBeFocused()
+  })
+
   test('the two legacy administration routes still resolve, into the Datos section', async ({
     page,
   }) => {
