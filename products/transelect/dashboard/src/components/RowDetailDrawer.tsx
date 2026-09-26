@@ -18,22 +18,31 @@
  * Choosing another row of the same PMF re-targets the panel to that row,
  * without another request and without closing it.
  *
- * The AEF section is row-level on purpose. The workbook records AEF, the
- * requester and the three dates per área de corta, and most PMFs that have
- * one AEF row also have rows without one; so a blank here says "this row has
- * no value", the rows table shows which rows do, and nothing is borrowed
- * across rows. When the published workbook had no AEF columns at all, the
- * panel says that instead of implying every row is blank.
+ * AEF has two explicitly separate readings: the server-resolved PMF summary
+ * (with source rows and conflicts) and the selected row's original cells.
+ * Nothing is borrowed into a blank row. Older versions without AEF columns
+ * say so instead of implying a row has missing data.
  */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
+  EMPTY_FILTERS,
+  type AefPmf,
+  type AefPmfField,
   type ResumenRow,
   type TranselecPmfDetail,
+  getAef,
   getPmfDetail,
 } from '../api'
-import { cell, formatInteger, formatNumber } from '../format'
-import { aefInSource, chronologyFlagsOf, chronologyLabel, hasAefTracking } from '../lib/aef'
+import { cell, formatDate, formatInteger, formatNumber } from '../format'
+import {
+  AEF_FIELDS,
+  AEF_FIELD_LABELS,
+  aefInSource,
+  chronologyFlagsOf,
+  chronologyLabel,
+  hasAefTracking,
+} from '../lib/aef'
 import { classifyFailure, type FailureView } from '../lib/apiState'
 import { Drawer } from '../ui/Drawer'
 import { AlertBanner, LoadingBlock } from './StateViews'
@@ -46,6 +55,72 @@ function Fact({ label, children, wide = false }: { label: string; children: Reac
       <dt>{label}</dt>
       <dd>{children}</dd>
     </div>
+  )
+}
+
+function AefPmfValue({ field }: { field: AefPmfField }) {
+  if (field.status === 'blank') return <>Sin dato en este PMF</>
+  if (field.status === 'conflict') {
+    return (
+      <>
+        <strong>Valores distintos; requiere revisión</strong>
+        <ul className="variant-list">
+          {field.variants.map((variant) => (
+            <li key={variant.source_rows.join('-')}>
+              {variant.value} · {variant.source_rows.length === 1 ? 'fila' : 'filas'}{' '}
+              {variant.source_rows.join(', ')}
+            </li>
+          ))}
+        </ul>
+      </>
+    )
+  }
+  return (
+    <>
+      {field.value_kind === 'date' && field.value
+        ? formatDate(field.value)
+        : field.value}
+      {field.value_kind === 'raw_text' && ' · texto sin fecha interpretada'}
+      <span className="source-row">
+        {' '}· {field.source_rows.length === 1 ? 'fila' : 'filas'}{' '}
+        {field.source_rows.join(', ')}
+      </span>
+    </>
+  )
+}
+
+function PmfAefSection({
+  pmf,
+  loading,
+  failed,
+}: {
+  pmf: AefPmf | null
+  loading: boolean
+  failed: boolean
+}) {
+  return (
+    <section className="drawer-section" data-testid="drawer-pmf-aef">
+      <h3>Seguimiento AEF del PMF</h3>
+      {loading ? (
+        <p className="hint">Cargando los datos de todas las filas del PMF…</p>
+      ) : failed ? (
+        <p className="hint">No se pudo cargar el resumen AEF de este PMF.</p>
+      ) : pmf ? (
+        <dl className="facts">
+          {AEF_FIELDS.map((key) => (
+            <Fact key={key} label={AEF_FIELD_LABELS[key]} wide>
+              <AefPmfValue field={pmf.fields[key]} />
+            </Fact>
+          ))}
+        </dl>
+      ) : (
+        <p className="hint">Este PMF no tiene seguimiento AEF registrado.</p>
+      )}
+      <p className="hint">
+        Valores del PMF calculados a partir de todas sus filas; cada valor indica su fila de
+        origen. Las celdas vacías de otras filas siguen vacías.
+      </p>
+    </section>
   )
 }
 
@@ -76,7 +151,7 @@ function AefSection({
 
   return (
     <section className="drawer-section" data-testid="drawer-aef">
-      <h3>Seguimiento AEF</h3>
+      <h3>AEF de esta fila de origen</h3>
       {chronologyFlagsOf(row).length > 0 && (
         <AlertBanner tone="warn" title="Fechas a revisar en la planilla">
           {chronologyFlagsOf(row).map(chronologyLabel).join('; ')}. Se muestran tal como vienen en
@@ -127,6 +202,9 @@ export function RowDetailDrawer({
   const [detail, setDetail] = useState<TranselecPmfDetail | null>(null)
   const [failure, setFailure] = useState<FailureView | null>(null)
   const [loading, setLoading] = useState(true)
+  const [pmfAef, setPmfAef] = useState<AefPmf | null>(null)
+  const [pmfAefLoading, setPmfAefLoading] = useState(sourceHasAef !== false)
+  const [pmfAefFailed, setPmfAefFailed] = useState(false)
 
   // A different row chosen behind the panel replaces the one shown here.
   // Adjusted during render rather than in an effect, so the panel never
@@ -153,6 +231,28 @@ export function RowDetailDrawer({
       cancelled = true
     }
   }, [row.pmf])
+
+  useEffect(() => {
+    if (sourceHasAef === false) {
+      setPmfAef(null)
+      setPmfAefLoading(false)
+      setPmfAefFailed(false)
+      return
+    }
+    let cancelled = false
+    setPmfAef(null)
+    setPmfAefLoading(true)
+    setPmfAefFailed(false)
+    void getAef({ ...EMPTY_FILTERS, q: row.pmf }).then((result) => {
+      if (cancelled) return
+      if (result.ok) setPmfAef(result.data.pmfs.find((entry) => entry.pmf === row.pmf) ?? null)
+      else setPmfAefFailed(true)
+      setPmfAefLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [row.pmf, sourceHasAef])
 
   const rows = detail
     ? [...detail.rows].sort((a, b) => a.source_row_number - b.source_row_number)
@@ -219,6 +319,9 @@ export function RowDetailDrawer({
           </dl>
         </section>
 
+        {sourceHasAef !== false && (
+          <PmfAefSection pmf={pmfAef} loading={pmfAefLoading} failed={pmfAefFailed} />
+        )}
         <AefSection row={current} detail={detail} sourceHasAef={sourceHasAef} />
 
         <section className="drawer-section" aria-labelledby="drawer-rows">
