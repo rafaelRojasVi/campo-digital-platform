@@ -1,63 +1,51 @@
 # Transelec dashboard
 
-Private, authenticated, database-backed rebuild of Javier's two HTML
-dashboards, implementing the 46 `TR-FUNC-*` rows of the
-[functional parity matrix](../docs/audit/2026-09-02-functional-parity-matrix-v1.md)
-against the platform's real Transelec APIs.
+Private, authenticated dashboard for Campo Digital's Transelec workbooks. It reads the published version through the platform API and separates plan status, detailed exploration, pending work, AEF tracking, data quality and operator actions.
+
+The [functional parity matrix](../docs/audit/2026-09-02-functional-parity-matrix-v1.md) records the original dashboard requirements. The [2026-09-26 usability note](../docs/design/2026-09-26-dashboard-usability-pass.md) records the current interface changes and open business questions.
 
 ## Routes
 
 | Route | Audience | Purpose |
 |---|---|---|
-| `/transelec` | `VIEWER`+ | Main dashboard: KPIs, charts, status hero, owner-status table, pending zone, executive report, filtered detail table, quality panel, real provenance footer |
-| `/transelec/importar` | `OPERATOR`/`ADMIN` | Upload → validate/project → publish. Replaces the source file's client-side XLSX refresh (TR-FUNC-040) end to end |
-| `/transelec/versiones` | `OPERATOR`/`ADMIN` | Version history and restore, with an explicit confirmation before the mutation fires |
+| `/transelec` | viewer+ | PMF status and work overview |
+| `/transelec/explorador` | viewer+ | Search, filters, row detail and CSV export |
+| `/transelec/pendientes` | viewer+ | Priority queue and 90-day consultation |
+| `/transelec/seguimiento-aef` | viewer+ | AEF tracking by PMF with source rows |
+| `/transelec/calidad` | viewer+ | Data-quality findings, reforestation limits and report |
+| `/transelec/datos` | operator/admin | Import, versions and (admin only) access management |
+| `/transelec/importar`, `/transelec/versiones`, `/transelec/accesos` | role-gated | Direct links to the corresponding Datos panes |
 
-## Data
+## Data and access
 
-Every rendered value comes from the real API. There is no fixture module, no
-demo data, and no client-side workbook parsing in this application — the
-ADR-008 synthetic Transelec demo is a separate app on a separate branch.
+The production dashboard reads authenticated `/api/transelec/*` endpoints. Test fixtures and stubbed API responses are used only by tests. Upload, validation, publication and restore are separate operations; validating a workbook does not publish it. The source workbook stays outside Git. The importer's canonical reading rules are in [Source Contract V2](../docs/source-contract-v2.md).
 
-Reads are `GET /api/transelec/{summary,pmfs,pending,owner-status,report,
-export.csv,imports,imports/active,uploads/recent}`; mutations are
-`POST /api/transelec/{uploads,imports/…/validate-and-project,
-imports/…/publish,imports/…/restore}`.
-
-The CSRF token required by every mutation is fetched at runtime from
-`GET /api/auth/csrf` and kept only in memory — it is never compiled into the
-bundle and never stored in a cookie.
+The CSRF token for mutations is fetched from `GET /api/auth/csrf` and kept in memory. The browser uses the same-origin `/api/*` path and the existing session cookie. The API enforces product roles.
 
 ## Local development
 
-```bash
-# 1. platform API (repository root)
-make platform-local
+From the repository root, use `make transelec-dev` for the complete local stack. For separate processes:
 
-# 2. this app
+```bash
+make platform-local
 cd products/transelect/dashboard
-npm install
-npm run dev            # http://127.0.0.1:5200/transelec
+npm ci
+npm run dev
 ```
 
-`/api/*` is proxied to `127.0.0.1:8000` (override with
-`CAMPO_PLATFORM_API_PORT`); the app itself listens on `TRANSELEC_DASHBOARD_PORT`
-(default `5200`). Sign in through the portal's dev login, or `POST
-/api/auth/dev-login` with `dev-admin` (Transelec `ADMIN`) or `dev-viewer`
-(Transelec `VIEWER`) while `APP_ENV=development`.
+The Vite port is configured by `TRANSELEC_DASHBOARD_PORT` (default `5200`); `/api/*` proxies to `CAMPO_PLATFORM_API_PORT` (default `8000`). Dev sign-in is available only with `APP_ENV=development`.
 
-## Tests
+## Checks
 
 ```bash
-npm test          # vitest component/unit tests
-npm run test:e2e  # Playwright acceptance tests (stubbed API routes)
+cd products/transelect/dashboard
+npm test
+npm run test:e2e
 npm run lint
 npx tsc -b
+npm run build
 ```
 
 ## Brand assets
 
-Both brand marks are generic placeholders (TR-FUNC-041 / TR-OPEN-06). The
-base64 logo payloads embedded in the source HTML files are deliberately not
-reused; Javier / Campo Digital must authorize those specific assets before
-any real logo ships here.
+The header bundles a resized copy of Campo Digital's white logo from its [official website](https://www.campodigital.cl/wp-content/uploads/2019/11/logo-campo-blanco-home-1-02.png). It is served from `src/assets/campo-digital-logo.png`, not hotlinked. Transelec remains readable text in the brand link. The logo from the historical source HTML has not been reused.
