@@ -5,7 +5,7 @@ Estas mejoras están preparadas en el PR #59. Aún no están publicadas en Railw
 ## Qué cambia en el panel
 
 - En **Pendientes** y en la cola del **Resumen**, se puede abrir el detalle de un plan directamente desde su fila. Si no hay filtros activos, ya no aparecen botones para quitar filtros que no hacen nada.
-- El detalle muestra primero la tramitación y el seguimiento AEF, y permite pasar entre las filas del mismo plan. Siempre indica de qué fila de la planilla viene el dato. Si una fila no tiene AEF, sigue vacía aunque otra fila del plan lo tenga.
+- El detalle muestra primero la tramitación y un resumen AEF del plan, con cada valor y la fila de la planilla que lo aporta. Si hay valores contradictorios, los muestra sin elegir uno. Más abajo distingue los datos de la fila seleccionada y permite pasar a otra fila del mismo plan. Una fila sin AEF sigue vacía aunque otra fila del plan lo tenga.
 - **Calidad** explica primero qué se encontró, cuántos planes, predios o filas afecta y qué conviene revisar. Quien necesite auditar la cifra puede abrir «Cómo se calcula» y ver las columnas y reglas exactas.
 - La tabla por tipo de propietario explica por qué sus estados pueden diferir de los del resumen y presenta ambas cuentas de predios. No se cambió ninguna regla ni se decidió cuál cifra es la oficial.
 - La cabecera usa el logo que Campo Digital publica en su sitio web, guardado dentro del panel para que no dependa de cargar ese sitio.
