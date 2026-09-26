@@ -970,8 +970,8 @@ def test_export_csv_field_set_and_bom_and_delimiter(
     assert "PMF" in header
     assert "Predio Ref" in header  # Actualizable's addition
     assert "Estado" not in header  # raw Estado excluded, per Actualizable
-    assert "Carpeta (col. E)" in header
-    assert "Carpeta (col. AC)" in header
+    assert "Carpeta PMF" in header
+    assert "Carpeta normalizada" in header
     assert "Observación auxiliar" in header
     data_rows = list(reader)
     assert len(data_rows) == 7

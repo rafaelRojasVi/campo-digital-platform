@@ -18,7 +18,7 @@
  */
 
 import type { ApiResult, ResumenRow, TranselecFilterState, TranselecRowsPage } from '../api'
-import { listRows } from '../api'
+import { MULTISELECT_FIELDS, listRows } from '../api'
 
 export type PageFetcher = (
   filters: TranselecFilterState,
@@ -59,44 +59,21 @@ export async function collectAllRows(
   return { ok: true, rows, truncated: true }
 }
 
-export interface DerivedFilterOptions {
-  estado_resumido: string[]
-  empresa: string[]
-  pas: string[]
-  sector: string[]
-  tipo_propietario: string[]
-}
+export type DerivedFilterOptions = Record<(typeof OPTION_FIELDS)[number], string[]>
 
-const OPTION_FIELDS = [
-  'estado_resumido',
-  'empresa',
-  'pas',
-  'sector',
-  'tipo_propietario',
-] as const
+const OPTION_FIELDS = MULTISELECT_FIELDS
 
 /** Distinct, non-blank, Spanish-collated values per filterable field. */
 export function deriveFilterOptions(rows: readonly ResumenRow[]): DerivedFilterOptions {
-  const sets: Record<(typeof OPTION_FIELDS)[number], Set<string>> = {
-    estado_resumido: new Set(),
-    empresa: new Set(),
-    pas: new Set(),
-    sector: new Set(),
-    tipo_propietario: new Set(),
-  }
-
-  for (const row of rows) {
-    for (const field of OPTION_FIELDS) {
-      const value = (row[field] ?? '').trim()
-      if (value !== '') sets[field].add(value)
-    }
-  }
-
-  return {
-    estado_resumido: [...sets.estado_resumido].sort((a, b) => a.localeCompare(b, 'es')),
-    empresa: [...sets.empresa].sort((a, b) => a.localeCompare(b, 'es')),
-    pas: [...sets.pas].sort((a, b) => a.localeCompare(b, 'es')),
-    sector: [...sets.sector].sort((a, b) => a.localeCompare(b, 'es')),
-    tipo_propietario: [...sets.tipo_propietario].sort((a, b) => a.localeCompare(b, 'es')),
-  }
+  const options = Object.fromEntries(
+    OPTION_FIELDS.map((field) => {
+      const values = new Set<string>()
+      for (const row of rows) {
+        const value = (row[field] ?? '').trim()
+        if (value !== '') values.add(value)
+      }
+      return [field, [...values].sort((a, b) => a.localeCompare(b, 'es'))]
+    }),
+  )
+  return options as DerivedFilterOptions
 }

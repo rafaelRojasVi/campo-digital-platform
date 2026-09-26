@@ -124,6 +124,12 @@ export function makeRow(overrides: Partial<ResumenRow> = {}): ResumenRow {
     predio_group_key: 'MP001-123-4-7',
     tramite: null,
     sector: 'Norte',
+    aef: null,
+    quien_solicita: null,
+    fecha_solicitud: null,
+    fecha_corta: null,
+    fecha_termino: null,
+    chronology_flags: [],
     ...overrides,
   }
 }
@@ -190,6 +196,16 @@ export function makeActiveImport(
     published_at: '2026-09-02T21:10:00+00:00',
     published_by_app_user_id: 3,
     published_by_display_name: 'Dev Admin',
+    warning_count: 0,
+    source_fields: [
+      'aef',
+      'quien_solicita',
+      'fecha_solicitud',
+      'fecha_corta',
+      'fecha_termino',
+      'pmf',
+      'estado_resumido',
+    ],
     ...overrides,
   }
 }

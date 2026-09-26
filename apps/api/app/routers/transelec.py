@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import datetime as dt
 import logging
 import tempfile
 import uuid
@@ -35,6 +36,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import Connection, Engine, text
 from sqlalchemy.engine import Row
@@ -56,6 +58,12 @@ from app.transelec_publication import (
     activate_import,
     read_active_import_id,
 )
+from transelec_ingestion.aef_view import (
+    AefInputRow,
+    PmfAefRecord,
+    build_aef_summary,
+    row_chronology_flags,
+)
 from transelec_ingestion.csv_export import render_transelec_export_csv
 from transelec_ingestion.import_projection import (
     PARSER_VERSION,
@@ -67,9 +75,10 @@ from transelec_ingestion.import_projection import (
 )
 from transelec_ingestion.owner_status_view import OwnerStatusInputRow, build_owner_status
 from transelec_ingestion.pending_view import PendingInputRow, build_pending
+from transelec_ingestion.resumen_layout import AEF_TRACKING_FIELDS, PmfFieldValue
 from transelec_ingestion.status_rollups import RolledRow, estado_resumido_first_row
 from transelec_ingestion.summary_view import SummaryInputRow, build_summary
-from transelec_ingestion.xlsx_contract import TranselecWorkbookError
+from transelec_ingestion.xlsx_contract import RESUMEN_COLUMNS, TranselecWorkbookError
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +92,16 @@ _RUN_NOT_FOUND = "No se encontró la carga solicitada."
 _IMPORT_NOT_FOUND = "No se encontró la versión solicitada."
 _SOURCE_UNAVAILABLE = "El archivo cargado ya no está disponible. Vuelva a cargarlo."
 _CONTRACT_VIOLATION = "La planilla no cumple el contrato de origen esperado. Contacte a soporte."
+_LAYOUT_NEEDS_REVIEW = (
+    "La planilla necesita revisión antes de importarse. Revise las observaciones indicadas "
+    "(filas y columnas). La versión activa no cambió."
+)
 _PROJECTION_FAILED = "No se pudo verificar la importación. La versión activa no cambió."
 _PUBLISH_FAILED = "No se pudo publicar la versión. La versión activa no cambió."
+_WARNINGS_NOT_ACKNOWLEDGED = (
+    "Esta versión tiene advertencias de importación. Revíselas y confirme que desea publicarla. "
+    "La versión activa no cambió."
+)
 _NO_ACTIVE_IMPORT = "No hay una versión publicada de Transelec."
 _PMF_NOT_FOUND = "No se encontró el PMF solicitado en la versión activa."
 _INVALID_CURSOR = "Cursor de paginación inválido."
@@ -174,6 +191,10 @@ class ValidateAndProjectResponse(BaseModel):
     surface_total: float
     validated_at: str
     is_active: bool
+    # What the layout resolver matched, ignored and flagged. None only for an
+    # import validated under contract V1, which kept no report.
+    warning_count: int
+    mapping_report: dict[str, Any] | None
 
 
 class ActivationResponse(BaseModel):
@@ -213,6 +234,8 @@ def _projection_response(
         surface_total=result.surface_total,
         validated_at=result.validated_at.isoformat(),
         is_active=is_active,
+        warning_count=result.warning_count,
+        mapping_report=result.mapping_report,
     )
 
 
@@ -297,8 +320,13 @@ def validate_and_project_import(
     connection: Annotated[Connection, Depends(get_db_connection)],
     store: Annotated[ObjectStore, Depends(get_object_store)],
     engine: Annotated[Engine, Depends(get_database_engine)],
-) -> ValidateAndProjectResponse:
-    """Step B: hard-gate contract validation, row projection, invariant check.
+) -> ValidateAndProjectResponse | JSONResponse:
+    """Step B: layout resolution, row projection, invariant check.
+
+    A blocking layout issue answers 422 with the full layout report (every
+    matched/ignored column and every issue with row/column references) and
+    persists nothing. Warnings do not block: the import is created with its
+    report, and the operator reviews it before publishing.
 
     Commits its own transaction and activates nothing. A committed result is
     a validated version the dashboard does not yet serve; publishing it is a
@@ -373,6 +401,15 @@ def validate_and_project_import(
                                 result.distinct_provisional_predio_ids
                             ),
                             "surface_total": result.surface_total,
+                            "parser_version": PARSER_VERSION,
+                            "warning_count": result.warning_count,
+                            "warning_codes": sorted(
+                                {
+                                    issue["code"]
+                                    for issue in (result.mapping_report or {}).get("issues", [])
+                                    if issue["severity"] == "warning"
+                                }
+                            ),
                         },
                     )
         except Exception as exc:
@@ -380,6 +417,7 @@ def validate_and_project_import(
             # transelec_import row, no transelec_resumen_row rows, and
             # transelec_dashboard_state untouched.
             is_contract_violation = isinstance(exc, TranselecWorkbookError)
+            layout_report = exc.report if isinstance(exc, TranselecWorkbookError) else None
             detail = _safe_failure_detail(exc)
             logger.warning(
                 "Transelec validate-and-project failed for ingestion_run_id=%s: %s",
@@ -396,8 +434,18 @@ def validate_and_project_import(
                     "source_snapshot_id": run.source_snapshot_id,
                     "reason": "contract_violation" if is_contract_violation else "projection_error",
                     "detail": detail,
+                    "parser_version": PARSER_VERSION,
                 },
             )
+            if layout_report is not None:
+                # The operator needs every row/column reference to fix the
+                # workbook, not only the first. The report is structural by
+                # construction (headers, letters, row numbers, counts) and
+                # never quotes a business cell value.
+                return JSONResponse(
+                    status_code=422,
+                    content={"detail": _LAYOUT_NEEDS_REVIEW, "report": layout_report.to_dict()},
+                )
             raise HTTPException(
                 status_code=422 if is_contract_violation else 500,
                 detail=_CONTRACT_VIOLATION if is_contract_violation else _PROJECTION_FAILED,
@@ -415,6 +463,7 @@ def _activate(
     engine: Engine,
     event_type: ActivationEventType,
     audit_event_type: str,
+    extra_audit_metadata: dict[str, object] | None = None,
 ) -> ActivationResponse:
     """Run Step C/D: one short transaction that atomically flips the active version."""
 
@@ -437,6 +486,7 @@ def _activate(
                     "event_type": event_type,
                     "previous_import_id": result.previous_import_id,
                     "publish_event_id": result.publish_event_id,
+                    **(extra_audit_metadata or {}),
                 },
             )
     except Exception as exc:
@@ -479,13 +529,28 @@ def _activate(
 def publish_import(
     import_id: int,
     user: Annotated[AppUser, Depends(get_current_app_user)],
+    connection: Annotated[Connection, Depends(get_db_connection)],
     engine: Annotated[Engine, Depends(get_database_engine)],
+    acknowledge_warnings: Annotated[bool, Query()] = False,
 ) -> ActivationResponse:
     """Step C: make an already-validated import the version the dashboard serves.
 
     Never automatic. A successful validate-and-project does not reach this
     code path; an operator has to call it deliberately.
+
+    An import validated with warnings is published only when the caller
+    states it reviewed them (``acknowledge_warnings=true``); otherwise 409.
+    The dashboard's acknowledgement checkbox is a convenience, this is the
+    control. An unknown import falls through to the activation's own 404.
     """
+
+    warning_count = connection.execute(
+        text("SELECT warning_count FROM platform.transelec_import WHERE id = :import_id"),
+        {"import_id": import_id},
+    ).scalar_one_or_none()
+
+    if warning_count and not acknowledge_warnings:
+        raise HTTPException(status_code=409, detail=_WARNINGS_NOT_ACKNOWLEDGED)
 
     return _activate(
         import_id,
@@ -493,6 +558,10 @@ def publish_import(
         engine=engine,
         event_type="publish",
         audit_event_type="import.published",
+        extra_audit_metadata={
+            "warning_count": warning_count or 0,
+            "warnings_acknowledged": bool(warning_count) and acknowledge_warnings,
+        },
     )
 
 
@@ -536,15 +605,20 @@ def restore_import(
 # pending_priority_legacy, owner_stage_legacy). TR-OPEN-01 stays open.
 # ---------------------------------------------------------------------------
 
-# The full A:AD contract field list, positionally validated against
-# xlsx_contract.RESUMEN_COLUMNS at import time (see import_projection.py) —
-# reused here, never re-declared, so a future contract change cannot make
-# the filter/search/export field lists silently drift from the schema.
+# The full contract field list, checked against resumen_layout.FIELD_SPECS at
+# import time (see import_projection.py) — reused here, never re-declared, so
+# a future contract change cannot make the filter/search/export field lists
+# silently drift from the schema.
 _CONTRACT_FIELDS: tuple[str, ...] = tuple(spec.column for spec in RESUMEN_ROW_PROJECTION)
 
 # Every persisted transelec_resumen_row column this router selects for a
 # "full row" read (list/detail/pending/export). Order matches the contract.
-_RESUMEN_ROW_COLUMNS: tuple[str, ...] = ("source_row_number", *_CONTRACT_FIELDS, "predio_group_key")
+_RESUMEN_ROW_COLUMNS: tuple[str, ...] = (
+    "source_row_number",
+    *_CONTRACT_FIELDS,
+    "predio_group_key",
+    "source_text_dates",
+)
 
 # TR-FUNC-017-022: the 5 AND'd multi-selects, OR'd within each.
 _MULTISELECT_FIELDS: tuple[str, ...] = (
@@ -553,6 +627,11 @@ _MULTISELECT_FIELDS: tuple[str, ...] = (
     "pas",
     "sector",
     "tipo_propietario",
+    # Contract V2's AEF tracking block. Same semantics as the five above:
+    # OR within one field's values, AND across fields; a row with a blank
+    # value never matches a selected value.
+    "aef",
+    "quien_solicita",
 )
 
 
@@ -570,6 +649,8 @@ class TranselecFilters(BaseModel):
     pas: list[str] = Field(default_factory=list)
     sector: list[str] = Field(default_factory=list)
     tipo_propietario: list[str] = Field(default_factory=list)
+    aef: list[str] = Field(default_factory=list)
+    quien_solicita: list[str] = Field(default_factory=list)
     q: str | None = None
 
 
@@ -579,6 +660,8 @@ def _transelec_filters(
     pas: Annotated[list[str] | None, Query()] = None,
     sector: Annotated[list[str] | None, Query()] = None,
     tipo_propietario: Annotated[list[str] | None, Query()] = None,
+    aef: Annotated[list[str] | None, Query()] = None,
+    quien_solicita: Annotated[list[str] | None, Query()] = None,
     q: Annotated[str | None, Query()] = None,
 ) -> TranselecFilters:
     # `None`, not `[]`, as the literal parameter default: an empty list is
@@ -590,6 +673,8 @@ def _transelec_filters(
         pas=pas or [],
         sector=sector or [],
         tipo_propietario=tipo_propietario or [],
+        aef=aef or [],
+        quien_solicita=quien_solicita or [],
         q=q,
     )
 
@@ -723,9 +808,23 @@ def _to_summary_input_row(row: Row[Any]) -> SummaryInputRow:
     )
 
 
+class SourceTextDateView(BaseModel):
+    """Raw text found in a date column (see resumen_layout.TextDateEvidence)."""
+
+    raw: str
+    resolution: Literal["parsed_spanish_long", "multiple_dates", "placeholder", "unrecognized"]
+    parsed: str | None
+
+
 class ResumenRowView(BaseModel):
-    """One full ``transelec_resumen_row`` — all 30 A:AD contract fields plus
-    the derived ``predio_group_key`` and the 1-indexed ``source_row_number``.
+    """One full ``transelec_resumen_row`` — every contract field (the 30 V1
+    fields plus the five V2 AEF tracking fields), the derived
+    ``predio_group_key``, the 1-indexed ``source_row_number``, and the
+    row's AEF date-order inconsistencies (``chronology_flags``, reported
+    as found and never corrected), and ``source_text_dates``: for each date
+    field whose cell held text, that raw text and how it was classified.
+    A date field is NULL unless the cell was an Excel date or a single
+    unambiguous written-out Spanish date; the raw text is never dropped.
 
     Deliberately not trimmed to any particular HTML table's column subset:
     neither ratified document enumerates the exact 11/12/7/9-column sets the
@@ -766,6 +865,30 @@ class ResumenRowView(BaseModel):
     predio_group_key: str
     tramite: str | None
     sector: str | None
+    aef: str | None
+    quien_solicita: str | None
+    fecha_solicitud: str | None
+    fecha_corta: str | None
+    fecha_termino: str | None
+    chronology_flags: list[str]
+    source_text_dates: dict[str, SourceTextDateView] = Field(default_factory=dict)
+
+
+def _iso(value: Any) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _to_aef_input_row(row: Row[Any]) -> AefInputRow:
+    return AefInputRow(
+        source_row_number=row.source_row_number,
+        pmf=row.pmf,
+        aef=row.aef,
+        quien_solicita=row.quien_solicita,
+        fecha_solicitud=row.fecha_solicitud,
+        fecha_corta=row.fecha_corta,
+        fecha_termino=row.fecha_termino,
+        text_dates=row.source_text_dates or {},
+    )
 
 
 def _resumen_row_view(row: Row[Any]) -> ResumenRowView:
@@ -802,6 +925,16 @@ def _resumen_row_view(row: Row[Any]) -> ResumenRowView:
         predio_group_key=row.predio_group_key,
         tramite=row.tramite,
         sector=row.sector,
+        aef=row.aef,
+        quien_solicita=row.quien_solicita,
+        fecha_solicitud=_iso(row.fecha_solicitud),
+        fecha_corta=_iso(row.fecha_corta),
+        fecha_termino=_iso(row.fecha_termino),
+        chronology_flags=list(row_chronology_flags(_to_aef_input_row(row))),
+        source_text_dates={
+            name: SourceTextDateView(**evidence)
+            for name, evidence in (row.source_text_dates or {}).items()
+        },
     )
 
 
@@ -1093,6 +1226,193 @@ def get_pmf_detail(
         basis_estado_resumido="estado_resumido_first_row",
         estado_resumido=status,
         rows=[_resumen_row_view(row) for row in rows],
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /aef — contract V2's AEF tracking block, per PMF with its source rows
+# ---------------------------------------------------------------------------
+
+
+class LabelCountView(BaseModel):
+    label: str | None
+    count: int
+
+
+class AefValueVariantView(BaseModel):
+    value: str
+    source_rows: list[int]
+
+
+class AefPmfFieldView(BaseModel):
+    """One tracking field resolved for a PMF.
+
+    ``status`` "value": every non-blank row agrees, ``value`` came from
+    ``source_rows``. "blank": no row has a value. "conflict": rows disagree;
+    ``value`` is None and ``variants`` lists each value with its rows.
+    ``value_kind`` "raw_text" marks text from a date column that was not
+    resolved to a date and is shown as written.
+    """
+
+    status: Literal["value", "blank", "conflict"]
+    value: str | None
+    value_kind: Literal["text", "date", "raw_text"] | None
+    source_rows: list[int]
+    variants: list[AefValueVariantView]
+
+
+class AefPmfView(BaseModel):
+    pmf: str
+    total_rows: int
+    rows_with_any_tracking: int
+    rows_with_aef: int
+    source_row_numbers: list[int]
+    has_conflict: bool
+    chronology_flags: list[str]
+    fields: dict[str, AefPmfFieldView]
+
+
+class TranselecAefResponse(BaseModel):
+    """AEF tracking for the filtered scope of the active version.
+
+    ``basis`` "pmf_from_source_rows": each field is resolved per PMF from
+    the rows that carry it, naming those rows; rows are never rewritten and
+    a conflict is reported, not decided. PMF shown are those with a row in
+    the filtered scope; their values consider all of the PMF's rows in the
+    version. The ``rows_*`` counts and ``rows`` are row-level, over the
+    filtered scope.
+
+    ``source_fields`` lists which of the five tracking columns the published
+    workbook actually had, so "the column did not exist" (an older layout)
+    is distinguishable from "the column exists and these rows are blank".
+    """
+
+    basis: Literal["pmf_from_source_rows"]
+    source_fields: list[str]
+    row_count: int
+    pmf_count: int
+    rows_with_any_tracking: int
+    rows_with_aef: int
+    rows_with_quien_solicita: int
+    rows_with_fecha_solicitud: int
+    rows_with_fecha_corta: int
+    rows_with_fecha_termino: int
+    rows_with_chronology_warning: int
+    pmf_with_tracking: int
+    pmf_with_aef: int
+    pmf_with_conflict: int
+    pmf_conflicts_by_field: dict[str, int]
+    pmf_with_chronology_warning: int
+    por_aef: list[LabelCountView]
+    por_solicitante: list[LabelCountView]
+    pmf_por_aef: list[LabelCountView]
+    pmf_por_solicitante: list[LabelCountView]
+    pmfs: list[AefPmfView]
+    rows: list[ResumenRowView]
+
+
+def _aef_value_text(value: Any) -> str:
+    return value.isoformat() if isinstance(value, dt.date) else str(value)
+
+
+def _aef_field_view(name: str, resolved: PmfFieldValue) -> AefPmfFieldView:
+    value_kind: Literal["text", "date", "raw_text"] | None = None
+    if resolved.status == "value":
+        if isinstance(resolved.value, dt.date):
+            value_kind = "date"
+        elif name.startswith("fecha_"):
+            value_kind = "raw_text"
+        else:
+            value_kind = "text"
+    return AefPmfFieldView(
+        status=resolved.status,
+        value=_aef_value_text(resolved.value) if resolved.status == "value" else None,
+        value_kind=value_kind,
+        source_rows=list(resolved.source_rows),
+        variants=[
+            AefValueVariantView(
+                value=_aef_value_text(variant.value), source_rows=list(variant.source_rows)
+            )
+            for variant in resolved.variants
+        ],
+    )
+
+
+def _aef_pmf_view(record: PmfAefRecord) -> AefPmfView:
+    return AefPmfView(
+        pmf=record.pmf,
+        total_rows=record.total_rows,
+        rows_with_any_tracking=record.rows_with_any_tracking,
+        rows_with_aef=record.rows_with_aef,
+        source_row_numbers=list(record.source_row_numbers),
+        has_conflict=record.has_conflict,
+        chronology_flags=list(record.chronology_flags),
+        fields={name: _aef_field_view(name, record.fields[name]) for name in AEF_TRACKING_FIELDS},
+    )
+
+
+def _label_views(entries: Any) -> list[LabelCountView]:
+    return [LabelCountView(label=entry.label, count=entry.count) for entry in entries]
+
+
+@router.get(
+    "/aef",
+    response_model=TranselecAefResponse,
+    dependencies=[Depends(require_transelec_grant(Action.VIEW))],
+)
+def get_aef(
+    connection: Annotated[Connection, Depends(get_db_connection)],
+    filters: Annotated[TranselecFilters, Depends(_transelec_filters)],
+) -> TranselecAefResponse:
+    import_id = _require_active_import_id(connection)
+    rows = _fetch_filtered_rows(connection, import_id=import_id, filters=filters)
+    # PMF-level values use every row of each PMF in scope, not only the rows
+    # the filter kept: a PMF's AEF must not change with an unrelated filter.
+    pmf_rows = (
+        _fetch_filtered_rows(connection, import_id=import_id, filters=TranselecFilters())
+        if filters != TranselecFilters()
+        else rows
+    )
+    summary = build_aef_summary(
+        [_to_aef_input_row(row) for row in rows],
+        pmf_rows=[_to_aef_input_row(row) for row in pmf_rows],
+    )
+
+    imp = connection.execute(
+        text(
+            """
+            SELECT schema_contract_version, mapping_report
+            FROM platform.transelec_import WHERE id = :import_id
+            """
+        ),
+        {"import_id": import_id},
+    ).one()
+    present = set(_source_fields(imp.schema_contract_version, imp.mapping_report))
+
+    tracked = set(summary.tracked_row_numbers)
+    return TranselecAefResponse(
+        basis="pmf_from_source_rows",
+        source_fields=[name for name in AEF_TRACKING_FIELDS if name in present],
+        row_count=summary.row_count,
+        pmf_count=summary.pmf_count,
+        rows_with_any_tracking=summary.rows_with_any_tracking,
+        rows_with_aef=summary.rows_with_aef,
+        rows_with_quien_solicita=summary.rows_with_quien_solicita,
+        rows_with_fecha_solicitud=summary.rows_with_fecha_solicitud,
+        rows_with_fecha_corta=summary.rows_with_fecha_corta,
+        rows_with_fecha_termino=summary.rows_with_fecha_termino,
+        rows_with_chronology_warning=summary.rows_with_chronology_warning,
+        pmf_with_tracking=summary.pmf_with_tracking,
+        pmf_with_aef=summary.pmf_with_aef,
+        pmf_with_conflict=summary.pmf_with_conflict,
+        pmf_conflicts_by_field=summary.pmf_conflicts_by_field,
+        pmf_with_chronology_warning=summary.pmf_with_chronology_warning,
+        por_aef=_label_views(summary.por_aef),
+        por_solicitante=_label_views(summary.por_solicitante),
+        pmf_por_aef=_label_views(summary.pmf_por_aef),
+        pmf_por_solicitante=_label_views(summary.pmf_por_solicitante),
+        pmfs=[_aef_pmf_view(record) for record in summary.pmfs],
+        rows=[_resumen_row_view(row) for row in rows if row.source_row_number in tracked],
     )
 
 
@@ -1479,6 +1799,28 @@ class TranselecActiveImportResponse(BaseModel):
     published_at: str
     published_by_app_user_id: int
     published_by_display_name: str
+    warning_count: int
+    # The contract fields the source layout actually carried. A field absent
+    # here had no column in the workbook, which is different from a column
+    # whose cells are blank — the dashboard must not present the two alike.
+    source_fields: list[str]
+
+
+def _source_fields(
+    schema_contract_version: str, mapping_report: dict[str, Any] | None
+) -> list[str]:
+    """Fields the source layout carried for one import.
+
+    Contract V1 imports kept no report, but V1 accepted a workbook only if it
+    had exactly the 30 legacy columns, so those — and only those — were
+    present. A V2 import states its mapped fields in its report.
+    """
+
+    if mapping_report is None:
+        if schema_contract_version == "transelec-resumen-v1":
+            return [name for _, name in RESUMEN_COLUMNS]
+        return []
+    return [entry["field"] for entry in mapping_report.get("fields", []) if entry.get("column")]
 
 
 @router.get(
@@ -1505,7 +1847,7 @@ def get_active_import(
             """
             SELECT i.id, i.source_snapshot_id, i.schema_contract_version, i.parser_version,
                    i.business_rows, i.distinct_pmf, i.distinct_provisional_predio_ids,
-                   i.surface_total, i.validated_at,
+                   i.surface_total, i.validated_at, i.warning_count, i.mapping_report,
                    s.content_sha256, s.byte_size
             FROM platform.transelec_import AS i
             JOIN platform.source_snapshot AS s ON s.id = i.source_snapshot_id
@@ -1544,6 +1886,57 @@ def get_active_import(
         published_at=publish_event.occurred_at.isoformat(),
         published_by_app_user_id=publish_event.actor_user_id,
         published_by_display_name=publish_event.display_name,
+        warning_count=imp.warning_count,
+        source_fields=_source_fields(imp.schema_contract_version, imp.mapping_report),
+    )
+
+
+class TranselecImportReportResponse(BaseModel):
+    import_id: int
+    schema_contract_version: str
+    parser_version: str
+    validated_at: str
+    warning_count: int
+    source_fields: list[str]
+    mapping_report: dict[str, Any] | None
+
+
+@router.get(
+    "/imports/{import_id}/report",
+    response_model=TranselecImportReportResponse,
+    dependencies=[Depends(require_transelec_grant(Action.PROCESS))],
+)
+def get_import_report(
+    import_id: int,
+    connection: Annotated[Connection, Depends(get_db_connection)],
+) -> TranselecImportReportResponse:
+    """The persisted layout report of one import, for review before (or
+    after) publishing. Operator-only, like the import flow that produced it.
+    """
+
+    imp = connection.execute(
+        text(
+            """
+            SELECT id, schema_contract_version, parser_version, validated_at,
+                   warning_count, mapping_report
+            FROM platform.transelec_import
+            WHERE id = :import_id
+            """
+        ),
+        {"import_id": import_id},
+    ).one_or_none()
+
+    if imp is None:
+        raise HTTPException(status_code=404, detail=_IMPORT_NOT_FOUND)
+
+    return TranselecImportReportResponse(
+        import_id=imp.id,
+        schema_contract_version=imp.schema_contract_version,
+        parser_version=imp.parser_version,
+        validated_at=imp.validated_at.isoformat(),
+        warning_count=imp.warning_count,
+        source_fields=_source_fields(imp.schema_contract_version, imp.mapping_report),
+        mapping_report=imp.mapping_report,
     )
 
 

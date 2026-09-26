@@ -20,6 +20,8 @@ const options = {
   pas: ['PAS 148'],
   sector: ['Norte', 'Sur'],
   tipo_propietario: ['Particular', 'Servidumbre firmada'],
+  aef: ['Presentado'],
+  quien_solicita: ['Persona A'],
 }
 
 const base = {

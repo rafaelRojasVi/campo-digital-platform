@@ -22,6 +22,9 @@ EXPECTED_TRANSELEC_IMPORT_COLUMNS = {
     "validated_by_app_user_id",
     "validated_at",
     "created_at",
+    # 0009: contract V2's persisted layout report.
+    "mapping_report",
+    "warning_count",
 }
 
 EXPECTED_TRANSELEC_RESUMEN_ROW_COLUMNS = {
@@ -59,6 +62,14 @@ EXPECTED_TRANSELEC_RESUMEN_ROW_COLUMNS = {
     "predio_group_key",
     "tramite",
     "sector",
+    # 0009: contract V2's AEF tracking block.
+    "aef",
+    "quien_solicita",
+    "fecha_solicitud",
+    "fecha_corta",
+    "fecha_termino",
+    # 0009: raw text found in date columns, with its classification.
+    "source_text_dates",
 }
 
 EXPECTED_TRANSELEC_PUBLISH_EVENT_COLUMNS = {

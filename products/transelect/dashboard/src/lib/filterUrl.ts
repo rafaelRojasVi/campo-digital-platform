@@ -77,6 +77,8 @@ export const FIELD_LABELS: Record<(typeof MULTISELECT_FIELDS)[number], string> =
   pas: 'PAS',
   sector: 'Sector',
   tipo_propietario: 'Tipo de propietario',
+  aef: 'AEF',
+  quien_solicita: 'Quién solicita',
 }
 
 /**

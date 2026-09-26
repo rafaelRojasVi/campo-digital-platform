@@ -19,16 +19,10 @@
  * all write the same empty filter state to the URL.
  */
 import type { RefObject } from 'react'
-import type { TranselecFilterState } from '../api'
+import type { MultiselectField, TranselecFilterState } from '../api'
 import { MultiSelectField } from './MultiSelectField'
 
-export interface FilterOptions {
-  estado_resumido: string[]
-  empresa: string[]
-  pas: string[]
-  sector: string[]
-  tipo_propietario: string[]
-}
+export type FilterOptions = Record<MultiselectField, string[]>
 
 export const EMPTY_FILTER_OPTIONS: FilterOptions = {
   estado_resumido: [],
@@ -36,6 +30,8 @@ export const EMPTY_FILTER_OPTIONS: FilterOptions = {
   pas: [],
   sector: [],
   tipo_propietario: [],
+  aef: [],
+  quien_solicita: [],
 }
 
 export function FilterPanel({
@@ -87,6 +83,23 @@ export function FilterPanel({
           options={options.tipo_propietario}
           selected={filters.tipo_propietario}
           onChange={(next) => onChange('tipo_propietario', next)}
+        />
+        {/*
+          The AEF tracking fields are row-level: only the rows that carry a
+          value match. A PMF whose other rows are blank is not included by
+          association.
+        */}
+        <MultiSelectField
+          label="AEF"
+          options={options.aef}
+          selected={filters.aef}
+          onChange={(next) => onChange('aef', next)}
+        />
+        <MultiSelectField
+          label="Quién solicita"
+          options={options.quien_solicita}
+          selected={filters.quien_solicita}
+          onChange={(next) => onChange('quien_solicita', next)}
         />
       </div>
       {optionsLoading && (

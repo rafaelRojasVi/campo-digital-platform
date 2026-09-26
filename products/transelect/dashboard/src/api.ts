@@ -26,7 +26,14 @@
 // Result envelope
 // ---------------------------------------------------------------------------
 
-export type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; error: string }
+/**
+ * `payload` carries the parsed JSON body of a failed response when it had
+ * one. Only structured failures use it — today, the import layout review a
+ * 422 from validate-and-project returns. `error` stays the display string.
+ */
+export type ApiResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; status: number; error: string; payload?: unknown }
 
 export const NETWORK_ERROR = 'No se pudo contactar la plataforma.'
 
@@ -134,7 +141,38 @@ export interface TranselecSummary {
   calidad_pmf_estado_resumido_conflictivo: EstadoResumidoConflict[]
 }
 
-/** All 30 A:AD contract fields plus the two derived/technical columns. */
+/**
+ * Chronology inconsistencies the API found between one row's AEF dates.
+ * Reported as found: the dates themselves are never corrected.
+ */
+export type ChronologyFlag =
+  | 'cronologia_corta_antes_de_solicitud'
+  | 'cronologia_termino_antes_de_corta'
+  | 'cronologia_termino_antes_de_solicitud'
+
+export type TextDateResolution =
+  | 'parsed_spanish_long'
+  | 'multiple_dates'
+  | 'placeholder'
+  | 'unrecognized'
+
+/**
+ * Raw text found in a date column. `parsed` is set only when the whole cell
+ * was one written-out Spanish date; otherwise the row has no date for that
+ * field and `raw` is the only record of what the workbook said.
+ */
+export interface SourceTextDate {
+  raw: string
+  resolution: TextDateResolution
+  parsed: string | null
+}
+
+/**
+ * Every contract field (the 30 V1 fields plus the five V2 AEF tracking
+ * fields) and the derived/technical columns. Values are the row's own: a
+ * blank on one row never inherits a sibling row's value (PMF-level AEF
+ * values are resolved separately, in `TranselecAef.pmfs`).
+ */
 export interface ResumenRow {
   source_row_number: number
   predio_ref: string | null
@@ -168,6 +206,14 @@ export interface ResumenRow {
   predio_group_key: string
   tramite: string | null
   sector: string | null
+  aef: string | null
+  quien_solicita: string | null
+  fecha_solicitud: string | null
+  fecha_corta: string | null
+  fecha_termino: string | null
+  chronology_flags: ChronologyFlag[]
+  /** Per date field whose cell held text; absent or `{}` when none did. */
+  source_text_dates?: Record<string, SourceTextDate>
 }
 
 export interface TranselecRowsPage {
@@ -256,6 +302,152 @@ export interface TranselecActiveImport {
   published_at: string
   published_by_app_user_id: number
   published_by_display_name: string | null
+  warning_count: number
+  /**
+   * Contract fields the published workbook actually had a column for. A
+   * field missing here is "not in this version's source", which the UI must
+   * not present as "blank in these rows".
+   */
+  source_fields: string[]
+}
+
+export interface LabelCount {
+  label: string | null
+  count: number
+}
+
+export interface AefValueVariant {
+  value: string
+  source_rows: number[]
+}
+
+/**
+ * One tracking field resolved for a PMF from the rows that carry it.
+ * `value`: all non-blank rows agree and `source_rows` supplied it.
+ * `blank`: no row has a value. `conflict`: rows disagree — no value is
+ * chosen, and `variants` lists each one with its rows.
+ */
+export interface AefPmfField {
+  status: 'value' | 'blank' | 'conflict'
+  value: string | null
+  /** `raw_text`: text from a date column that was not read as a date. */
+  value_kind: 'text' | 'date' | 'raw_text' | null
+  source_rows: number[]
+  variants: AefValueVariant[]
+}
+
+export interface AefPmf {
+  pmf: string
+  total_rows: number
+  rows_with_any_tracking: number
+  rows_with_aef: number
+  source_row_numbers: number[]
+  has_conflict: boolean
+  chronology_flags: ChronologyFlag[]
+  fields: Record<'aef' | 'quien_solicita' | 'fecha_solicitud' | 'fecha_corta' | 'fecha_termino', AefPmfField>
+}
+
+export interface TranselecAef {
+  basis: 'pmf_from_source_rows'
+  source_fields: string[]
+  row_count: number
+  pmf_count: number
+  rows_with_any_tracking: number
+  rows_with_aef: number
+  rows_with_quien_solicita: number
+  rows_with_fecha_solicitud: number
+  rows_with_fecha_corta: number
+  rows_with_fecha_termino: number
+  rows_with_chronology_warning: number
+  pmf_with_tracking: number
+  pmf_with_aef: number
+  pmf_with_conflict: number
+  pmf_conflicts_by_field: Record<string, number>
+  pmf_with_chronology_warning: number
+  por_aef: LabelCount[]
+  por_solicitante: LabelCount[]
+  pmf_por_aef: LabelCount[]
+  pmf_por_solicitante: LabelCount[]
+  /** PMF with any tracking value, in source order; values use all their rows. */
+  pmfs: AefPmf[]
+  /** Row-level detail: the in-scope rows that carry a tracking value. */
+  rows: ResumenRow[]
+}
+
+// ---------------------------------------------------------------------------
+// Import layout review — contract V2 (transelec_ingestion.resumen_layout)
+// ---------------------------------------------------------------------------
+
+export type LayoutSeverity = 'error' | 'warning' | 'info'
+
+export interface LayoutIssue {
+  code: string
+  severity: LayoutSeverity
+  /** Spanish, structural: headers, column letters, row numbers, counts. */
+  message: string
+  field: string | null
+  columns: string[]
+  /** Worksheet row numbers, capped; `row_count` is the true total. */
+  rows: number[]
+  row_count: number
+}
+
+export type LayoutColumnStatus =
+  | 'mapped'
+  | 'duplicate_ignored'
+  | 'unrecognized_ignored'
+  | 'unlabeled_data_ignored'
+  | 'separator'
+
+export interface LayoutColumn {
+  column: string
+  header: string | null
+  status: LayoutColumnStatus
+  field: string | null
+  note: string | null
+}
+
+export interface LayoutField {
+  field: string
+  header: string
+  tier: 'identity' | 'required' | 'expected' | 'optional'
+  column: string | null
+  filled_rows: number
+}
+
+export interface LayoutReport {
+  parser_version: string
+  sheet_name: string
+  header_row: number | null
+  business_rows: number
+  columns: LayoutColumn[]
+  fields: LayoutField[]
+  auxiliary_regions: {
+    first_column: string
+    last_column: string
+    column_count: number
+    reason: string
+  }[]
+  issues: LayoutIssue[]
+  counts: Record<LayoutSeverity, number>
+}
+
+export interface TranselecImportReport {
+  import_id: number
+  schema_contract_version: string
+  parser_version: string
+  validated_at: string
+  warning_count: number
+  source_fields: string[]
+  mapping_report: LayoutReport | null
+}
+
+/** The layout report a refused validate-and-project (422) carries, if any. */
+export function layoutReportFromFailure(payload: unknown): LayoutReport | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const report = (payload as { report?: unknown }).report
+  if (typeof report !== 'object' || report === null) return null
+  return Array.isArray((report as LayoutReport).issues) ? (report as LayoutReport) : null
 }
 
 export interface TranselecRecentRun {
@@ -296,6 +488,9 @@ export interface ValidateAndProjectResult {
   surface_total: number
   validated_at: string
   is_active: boolean
+  warning_count: number
+  /** Null only for an import validated under contract V1 (no report kept). */
+  mapping_report: LayoutReport | null
 }
 
 export interface ActivationResult {
@@ -320,6 +515,8 @@ export interface TranselecFilterState {
   pas: string[]
   sector: string[]
   tipo_propietario: string[]
+  aef: string[]
+  quien_solicita: string[]
 }
 
 export const EMPTY_FILTERS: TranselecFilterState = {
@@ -329,6 +526,8 @@ export const EMPTY_FILTERS: TranselecFilterState = {
   pas: [],
   sector: [],
   tipo_propietario: [],
+  aef: [],
+  quien_solicita: [],
 }
 
 export const MULTISELECT_FIELDS = [
@@ -337,6 +536,8 @@ export const MULTISELECT_FIELDS = [
   'pas',
   'sector',
   'tipo_propietario',
+  'aef',
+  'quien_solicita',
 ] as const
 
 export type MultiselectField = (typeof MULTISELECT_FIELDS)[number]
@@ -449,13 +650,19 @@ async function send(path: string, init: RequestInit | undefined): Promise<Respon
 }
 
 async function readError(response: Response): Promise<string> {
+  return (await readFailure(response)).error
+}
+
+async function readFailure(response: Response): Promise<{ error: string; payload?: unknown }> {
+  const fallback = response.statusText || `HTTP ${response.status}`
   try {
     const body = (await response.json()) as { detail?: unknown }
-    if (typeof body.detail === 'string' && body.detail) return body.detail
+    const error = typeof body.detail === 'string' && body.detail ? body.detail : fallback
+    return { error, payload: body }
   } catch {
-    // no JSON body on this error response; fall through to the status text
+    // no JSON body on this error response; fall back to the status text
+    return { error: fallback }
   }
-  return response.statusText || `HTTP ${response.status}`
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
@@ -473,7 +680,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
     }
 
     if (!response.ok) {
-      return { ok: false, status: response.status, error: await readError(response) }
+      const failure = await readFailure(response)
+      return failure.payload === undefined
+        ? { ok: false, status: response.status, error: failure.error }
+        : { ok: false, status: response.status, error: failure.error, payload: failure.payload }
     }
 
     if (response.status === 204) return { ok: true, data: undefined as T }
@@ -652,6 +862,14 @@ export function getReport(filters: TranselecFilterState): Promise<ApiResult<Tran
   return request<TranselecReport>(withParams('/api/transelec/report', filterParams(filters)))
 }
 
+export function getAef(filters: TranselecFilterState): Promise<ApiResult<TranselecAef>> {
+  return request<TranselecAef>(withParams('/api/transelec/aef', filterParams(filters)))
+}
+
+export function getImportReport(importId: number): Promise<ApiResult<TranselecImportReport>> {
+  return request<TranselecImportReport>(`/api/transelec/imports/${importId}/report`)
+}
+
 export function getActiveImport(): Promise<ApiResult<TranselecActiveImport>> {
   return request<TranselecActiveImport>('/api/transelec/imports/active')
 }
@@ -699,8 +917,19 @@ export function validateAndProject(
   )
 }
 
-export function publishImport(importId: number): Promise<ApiResult<ActivationResult>> {
-  return request<ActivationResult>(`/api/transelec/imports/${importId}/publish`, { method: 'POST' })
+/**
+ * Publish an import. `acknowledgeWarnings` states the operator reviewed the
+ * import's layout warnings; the server refuses (409) to publish an import
+ * with warnings without it.
+ */
+export function publishImport(
+  importId: number,
+  options: { acknowledgeWarnings?: boolean } = {},
+): Promise<ApiResult<ActivationResult>> {
+  const query = options.acknowledgeWarnings ? '?acknowledge_warnings=true' : ''
+  return request<ActivationResult>(`/api/transelec/imports/${importId}/publish${query}`, {
+    method: 'POST',
+  })
 }
 
 export function restoreImport(importId: number): Promise<ApiResult<ActivationResult>> {

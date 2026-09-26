@@ -51,10 +51,13 @@ interface ExplorerData {
 export function ExploradorPage({
   filterController,
   activeImportId,
+  sourceFields = null,
 }: {
   filterController: FilterController
   /** Filter option lists are rebuilt when the published version changes. */
   activeImportId: number | null
+  /** Contract fields the published workbook had; null while unknown. */
+  sourceFields?: readonly string[] | null
 }) {
   const { filters, draftQuery, setQuery, setField, replaceFilters, reset } = filterController
   const key = JSON.stringify(filters)
@@ -324,7 +327,13 @@ export function ExploradorPage({
         )}
       </section>
 
-      {openRow && <RowDetailDrawer row={openRow} onClose={() => setOpenRow(null)} />}
+      {openRow && (
+        <RowDetailDrawer
+          row={openRow}
+          onClose={() => setOpenRow(null)}
+          sourceFields={sourceFields}
+        />
+      )}
     </div>
   )
 }

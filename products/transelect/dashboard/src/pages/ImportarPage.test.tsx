@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ImportarPage } from './ImportarPage'
 import { ROUTES, RouterProvider } from '../router'
-import type { ValidateAndProjectResult } from '../api'
+import type { LayoutReport, ValidateAndProjectResult } from '../api'
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>()
@@ -63,6 +63,8 @@ function validated(overrides: Partial<ValidateAndProjectResult> = {}) {
       surface_total: 32.5,
       validated_at: '2026-09-02T21:09:40+00:00',
       is_active: false,
+      warning_count: 0,
+      mapping_report: null,
       ...overrides,
     },
   }
@@ -159,7 +161,7 @@ describe('ImportarPage (TR-FUNC-040, redesigned)', () => {
     await userEvent.click(screen.getByTestId('confirm-accept'))
 
     await waitFor(() => expect(screen.getByTestId('publish-result')).toBeInTheDocument())
-    expect(publishImport).toHaveBeenCalledWith(83)
+    expect(publishImport).toHaveBeenCalledWith(83, { acknowledgeWarnings: false })
     expect(screen.getByText(/Reemplaza a la versión #12/)).toBeInTheDocument()
     expect(onChanged).toHaveBeenCalledTimes(1)
   })
@@ -306,4 +308,128 @@ describe('ImportarPage (TR-FUNC-040, redesigned)', () => {
     // The technical detail stays in the audit log, never on screen.
     expect(screen.queryByText(/schema mismatch/)).not.toBeInTheDocument()
   })
+
+  it('shows what was matched and requires acknowledging warnings before publishing', async () => {
+    vi.mocked(uploadWorkbook).mockResolvedValue(uploadOk)
+    vi.mocked(listRecentUploads).mockResolvedValue(runsOk)
+    vi.mocked(validateAndProject).mockResolvedValue(
+      validated({ warning_count: 1, mapping_report: reviewReport() }),
+    )
+
+    renderPage()
+    await selectAndSubmit()
+    await waitFor(() => expect(screen.getByTestId('layout-review')).toBeInTheDocument())
+
+    expect(screen.getByTestId('layout-warnings')).toHaveTextContent(
+      'Fila 315: «Fecha corta» es anterior a «Fecha solicitud».',
+    )
+    expect(screen.getByTestId('layout-warnings')).toHaveTextContent('Columnas C, D · Fila 315')
+    expect(screen.getByTestId('layout-mapped')).toHaveTextContent('carpeta_normalizada')
+    expect(screen.getByTestId('layout-ignored')).toHaveTextContent('AK–BB')
+
+    expect(screen.getByTestId('publish-open')).toBeDisabled()
+    await userEvent.click(screen.getByTestId('warnings-ack'))
+    expect(screen.getByTestId('publish-open')).toBeEnabled()
+    await userEvent.click(screen.getByTestId('publish-open'))
+    expect(screen.getByRole('dialog')).toHaveTextContent('1 advertencia revisada')
+    expect(publishImport).not.toHaveBeenCalled()
+
+    vi.mocked(publishImport).mockResolvedValue({
+      ok: false,
+      status: 500,
+      error: 'x',
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Publicar la importación #83' }))
+    expect(publishImport).toHaveBeenCalledWith(83, { acknowledgeWarnings: true })
+  })
+
+  it('shows every blocking issue with its references when the workbook is refused', async () => {
+    const refused = reviewReport({
+      business_rows: 0,
+      issues: [
+        {
+          code: 'carpeta_ambigua',
+          severity: 'error',
+          message: 'La columna L se llama «Carpeta», pero su posición no permite distinguir…',
+          field: null,
+          columns: ['L'],
+          rows: [],
+          row_count: 0,
+        },
+        {
+          code: 'encabezado_duplicado_conflictivo',
+          severity: 'error',
+          message: 'El campo «Estado» aparece en varias columnas con valores distintos.',
+          field: 'estado',
+          columns: ['M', 'AJ'],
+          rows: [3, 4],
+          row_count: 60,
+        },
+      ],
+    })
+    vi.mocked(uploadWorkbook).mockResolvedValue(uploadOk)
+    vi.mocked(listRecentUploads).mockResolvedValue(runsOk)
+    vi.mocked(validateAndProject).mockResolvedValue({
+      ok: false,
+      status: 422,
+      error: 'La planilla necesita revisión antes de importarse.',
+      payload: { detail: 'La planilla necesita revisión antes de importarse.', report: refused },
+    })
+
+    renderPage()
+    await selectAndSubmit()
+    await waitFor(() => expect(screen.getByTestId('import-failure')).toBeInTheDocument())
+
+    const errors = screen.getByTestId('layout-errors')
+    expect(errors).toHaveTextContent('Columna L')
+    expect(errors).toHaveTextContent('Columnas M, AJ · Filas 3, 4 y 58 más')
+    expect(screen.queryByTestId('publish-open')).not.toBeInTheDocument()
+  })
 })
+
+function reviewReport(overrides: Partial<LayoutReport> = {}): LayoutReport {
+  return {
+    parser_version: 'transelec_ingestion.resumen_layout@2',
+    sheet_name: 'Resumen',
+    header_row: 1,
+    business_rows: 7,
+    columns: [
+      { column: 'A', header: 'AEF', status: 'mapped', field: 'aef', note: null },
+      {
+        column: 'AH',
+        header: 'Carpeta',
+        status: 'mapped',
+        field: 'carpeta_normalizada',
+        note: '«Carpeta» junto a «Tramite»/«Sector»: carpeta normalizada.',
+      },
+      { column: 'AJ', header: null, status: 'separator', field: null, note: 'Columna vacía.' },
+    ],
+    fields: [
+      { field: 'aef', header: 'AEF', tier: 'optional', column: 'A', filled_rows: 2 },
+      {
+        field: 'carpeta_normalizada',
+        header: 'Carpeta',
+        tier: 'expected',
+        column: 'AH',
+        filled_rows: 7,
+      },
+    ],
+    auxiliary_regions: [
+      { first_column: 'AK', last_column: 'BB', column_count: 18, reason: 'Región auxiliar.' },
+    ],
+    issues: [
+      {
+        code: 'cronologia_corta_antes_de_solicitud',
+        severity: 'warning',
+        message:
+          'Fila 315: «Fecha corta» es anterior a «Fecha solicitud». Se conservan las fechas tal como vienen; revise la planilla.',
+        field: 'fecha_corta',
+        columns: ['C', 'D'],
+        rows: [315],
+        row_count: 1,
+      },
+    ],
+    counts: { error: 0, warning: 1, info: 0 },
+    ...overrides,
+  }
+}

@@ -2,12 +2,17 @@
  * TR-FUNC-039 — "Detalle filtrado", the row-grain table.
  *
  * Actualizable's 12-column set, with one deliberate correction: its single
- * `Carpeta` column is shown as the two positionally-distinct source columns
- * it silently collapsed. The workbook has two different columns both named
- * `Carpeta` (E, 1:1 with PMF; AC, a coarser grouping), and both HTML files
- * keep only whichever one survived a JavaScript object-literal key collision.
- * TR-OPEN-02 is still open, so this table does not choose either — it labels
- * and shows both, exactly as the ratified CSV export does.
+ * `Carpeta` column is shown as the two distinct source columns it silently
+ * collapsed. The workbook has two different columns both named `Carpeta` —
+ * one beside `PMF` (1:1 with it) and one between `Tramite` and `Sector` (a
+ * coarser grouping) — and both HTML files keep only whichever one survived a
+ * JavaScript object-literal key collision. TR-OPEN-02 is still open, so this
+ * table does not choose either — it labels and shows both. The labels name
+ * the columns by their neighbours rather than by letter: the 09-Sept-2026
+ * layout moved them from E/AC to J/AH.
+ *
+ * Contract V2 adds an `AEF` column. It is a row-level value: a blank cell is
+ * shown as blank on its own row, never borrowed from another row of the PMF.
  *
  * Pagination is real, server-side and cursor-based. The source's hidden
  * `slice(0, 1000)` cap is not reproduced: the row count shown is the API's
@@ -20,6 +25,7 @@
  */
 import type { ResumenRow } from '../api'
 import { cell, formatNumber } from '../format'
+import { chronologyFlagsOf, chronologyLabel } from '../lib/aef'
 import { StatusPill } from './StatusPill'
 
 export function RowsTable({
@@ -40,8 +46,8 @@ export function RowsTable({
           <tr>
             <th scope="col">PMF</th>
             <th scope="col">Predio de reforestación</th>
-            <th scope="col">Carpeta (col. E)</th>
-            <th scope="col">Carpeta (col. AC)</th>
+            <th scope="col">Carpeta PMF</th>
+            <th scope="col">Carpeta normalizada</th>
             <th scope="col">Rol</th>
             <th scope="col">Predio</th>
             <th scope="col">Área corta</th>
@@ -49,6 +55,7 @@ export function RowsTable({
               Sup. ha
             </th>
             <th scope="col">Estado resumido</th>
+            <th scope="col">AEF</th>
             <th scope="col">N.º ingreso</th>
             <th scope="col">Empresa</th>
             <th scope="col">Propietario</th>
@@ -83,6 +90,20 @@ export function RowsTable({
               <td>
                 <StatusPill value={row.estado_resumido} />
               </td>
+              <td>
+                {cell(row.aef) || <span className="aef-empty">—</span>}
+                {chronologyFlagsOf(row).length > 0 && (
+                  <>
+                    {' '}
+                    <span
+                      className="flag"
+                      title={chronologyFlagsOf(row).map(chronologyLabel).join('; ')}
+                    >
+                      Revisar fechas
+                    </span>
+                  </>
+                )}
+              </td>
               <td>{cell(row.numero_ingreso)}</td>
               <td>{cell(row.empresa)}</td>
               <td>{cell(row.tipo_propietario)}</td>
@@ -91,7 +112,7 @@ export function RowsTable({
           ))}
           {rows.length === 0 && !loading && (
             <tr>
-              <td colSpan={13} className="empty">
+              <td colSpan={14} className="empty">
                 No hay registros para los filtros aplicados. Quite un filtro o limpie la búsqueda
                 para ampliar el alcance.
               </td>

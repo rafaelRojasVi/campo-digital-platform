@@ -16,6 +16,7 @@ import { useFilters } from './lib/useFilters'
 import { CalidadPage } from './pages/CalidadPage'
 import { DatosPage } from './pages/DatosPage'
 import { ExploradorPage } from './pages/ExploradorPage'
+import { AefPage } from './pages/AefPage'
 import { PendientesPage } from './pages/PendientesPage'
 import { ResumenPage } from './pages/ResumenPage'
 import { ROUTES, RouterProvider, isAdminRoute, resolveRoute, useRouter } from './router'
@@ -163,10 +164,18 @@ function Shell() {
           <ExploradorPage
             filterController={filterController}
             activeImportId={activeImport?.import_id ?? null}
+            sourceFields={activeImport?.source_fields ?? null}
           />
         )
       case ROUTES.pendientes:
         return <PendientesPage filterController={filterController} />
+      case ROUTES.aef:
+        return (
+          <AefPage
+            filterController={filterController}
+            sourceFields={activeImport?.source_fields ?? null}
+          />
+        )
       case ROUTES.calidad:
         return <CalidadPage filterController={filterController} />
       case ROUTES.datos:

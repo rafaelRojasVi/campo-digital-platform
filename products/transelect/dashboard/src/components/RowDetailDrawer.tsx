@@ -11,6 +11,13 @@
  * The row that was clicked is shown immediately from data the table already
  * holds, and the PMF's sibling rows arrive when the request resolves, so the
  * panel is never blank while it loads.
+ *
+ * The AEF section is row-level on purpose. The workbook records AEF, the
+ * requester and the three dates per área de corta, and most PMFs that have
+ * one AEF row also have rows without one; so a blank here says "this row has
+ * no value", the sibling table shows which rows do, and nothing is borrowed
+ * across rows. When the published workbook had no AEF columns at all, the
+ * panel says that instead of implying every row is blank.
  */
 import { useEffect, useState } from 'react'
 import {
@@ -18,13 +25,92 @@ import {
   type TranselecPmfDetail,
   getPmfDetail,
 } from '../api'
-import { cell, formatDate, formatInteger, formatNumber } from '../format'
+import { cell, formatInteger, formatNumber } from '../format'
+import { aefInSource, chronologyFlagsOf, chronologyLabel, hasAefTracking } from '../lib/aef'
 import { classifyFailure, type FailureView } from '../lib/apiState'
 import { Drawer } from '../ui/Drawer'
 import { AlertBanner, LoadingBlock } from './StateViews'
+import { SourceDate } from './SourceDate'
 import { StatusPill } from './StatusPill'
 
-export function RowDetailDrawer({ row, onClose }: { row: ResumenRow; onClose: () => void }) {
+function AefSection({
+  row,
+  detail,
+  sourceHasAef,
+}: {
+  row: ResumenRow
+  detail: TranselecPmfDetail | null
+  sourceHasAef: boolean | null
+}) {
+  if (sourceHasAef === false) {
+    return (
+      <section className="stack-tight" data-testid="drawer-aef">
+        <h3>Seguimiento AEF</h3>
+        <p className="hint">
+          La planilla publicada no incluye las columnas de seguimiento AEF, por lo que no hay
+          información AEF para ninguna fila de esta versión.
+        </p>
+      </section>
+    )
+  }
+
+  const tracked = detail?.rows.filter(hasAefTracking) ?? []
+  const rowTracked = hasAefTracking(row)
+  const missing = 'Sin registro en esta fila'
+
+  return (
+    <section className="stack-tight" data-testid="drawer-aef">
+      <h3>Seguimiento AEF</h3>
+      {chronologyFlagsOf(row).length > 0 && (
+        <AlertBanner tone="warn" title="Fechas a revisar en la planilla">
+          {chronologyFlagsOf(row).map(chronologyLabel).join('; ')}. Se muestran tal como vienen en
+          la fila {formatInteger(row.source_row_number)}; no se corrigen.
+        </AlertBanner>
+      )}
+      <dl className="defs">
+        <dt>AEF</dt>
+        <dd>{cell(row.aef, missing)}</dd>
+        <dt>Quién solicita</dt>
+        <dd>{cell(row.quien_solicita, missing)}</dd>
+        <dt>Fecha solicitud</dt>
+        <dd>
+          <SourceDate row={row} field="fecha_solicitud" missing={missing} />
+        </dd>
+        <dt>Fecha corta</dt>
+        <dd>
+          <SourceDate row={row} field="fecha_corta" missing={missing} />
+        </dd>
+        <dt>Fecha término</dt>
+        <dd>
+          <SourceDate row={row} field="fecha_termino" missing={missing} />
+        </dd>
+      </dl>
+      {detail && (
+        <p className="hint" data-testid="drawer-aef-coverage">
+          {formatInteger(tracked.length)} de {formatInteger(detail.row_count)} filas de{' '}
+          {detail.pmf} tienen registro AEF.
+          {!rowTracked &&
+            tracked.length > 0 &&
+            ` El seguimiento de este PMF está en ${tracked.length === 1 ? 'la fila' : 'las filas'} ${tracked
+              .map((entry) => entry.source_row_number)
+              .join(', ')}; esta fila no lo repite y se muestra vacía, como en la planilla.`}
+        </p>
+      )}
+    </section>
+  )
+}
+
+export function RowDetailDrawer({
+  row,
+  onClose,
+  sourceFields,
+}: {
+  row: ResumenRow
+  onClose: () => void
+  /** The published version's source fields; null/undefined while unknown. */
+  sourceFields?: readonly string[] | null
+}) {
+  const sourceHasAef = aefInSource(sourceFields)
   const [detail, setDetail] = useState<TranselecPmfDetail | null>(null)
   const [failure, setFailure] = useState<FailureView | null>(null)
   const [loading, setLoading] = useState(true)
@@ -80,9 +166,9 @@ export function RowDetailDrawer({ row, onClose }: { row: ResumenRow; onClose: ()
             {formatNumber(row.superficie_corta)} ha de un total de{' '}
             {formatNumber(row.superficie_total_corta)} ha
           </dd>
-          <dt>Carpeta (E)</dt>
+          <dt>Carpeta PMF</dt>
           <dd>{cell(row.carpeta_source, 'Sin información')}</dd>
-          <dt>Carpeta (AC)</dt>
+          <dt>Carpeta normalizada</dt>
           <dd>{cell(row.carpeta_normalizada, 'Sin información')}</dd>
           <dt>PAS</dt>
           <dd>{cell(row.pas, 'Sin información')}</dd>
@@ -93,9 +179,13 @@ export function RowDetailDrawer({ row, onClose }: { row: ResumenRow; onClose: ()
           <dt>N.º ingreso</dt>
           <dd>{cell(row.numero_ingreso, 'Sin ingreso')}</dd>
           <dt>Fecha ingreso</dt>
-          <dd>{formatDate(row.fecha_ingreso) || 'Sin fecha'}</dd>
+          <dd>
+            <SourceDate row={row} field="fecha_ingreso" missing="Sin fecha" />
+          </dd>
           <dt>90 días</dt>
-          <dd>{formatDate(row.fecha_90_dias) || 'Sin fecha'}</dd>
+          <dd>
+            <SourceDate row={row} field="fecha_90_dias" missing="Sin fecha" />
+          </dd>
           <dt>Empresa</dt>
           <dd>{cell(row.empresa, 'Sin información')}</dd>
           <dt>Propietario</dt>
@@ -105,6 +195,8 @@ export function RowDetailDrawer({ row, onClose }: { row: ResumenRow; onClose: ()
           <dt>ID predial</dt>
           <dd>{cell(row.id_predio_unico, 'Sin identificador')}</dd>
         </dl>
+
+        <AefSection row={row} detail={detail} sourceHasAef={sourceHasAef} />
 
         {loading && <LoadingBlock label="Buscando las demás filas de este PMF…" lines={2} />}
         {failure && <AlertBanner title={failure.title}>{failure.message}</AlertBanner>}
@@ -129,6 +221,7 @@ export function RowDetailDrawer({ row, onClose }: { row: ResumenRow; onClose: ()
                         Sup. ha
                       </th>
                       <th scope="col">Estado</th>
+                      {sourceHasAef !== false && <th scope="col">AEF</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -141,6 +234,9 @@ export function RowDetailDrawer({ row, onClose }: { row: ResumenRow; onClose: ()
                         <td>
                           <StatusPill value={entry.estado_resumido} />
                         </td>
+                        {sourceHasAef !== false && (
+                          <td>{cell(entry.aef) || <span className="aef-empty">—</span>}</td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

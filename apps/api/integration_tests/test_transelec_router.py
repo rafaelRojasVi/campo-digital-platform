@@ -40,7 +40,11 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import DataError
 
 from transelec_ingestion import import_projection
-from transelec_ingestion.xlsx_contract import EXPECTED_RESUMEN_HEADERS, RESUMEN_COLUMNS
+from transelec_ingestion.xlsx_contract import (
+    CURRENT_RESUMEN_COLUMNS,
+    EXPECTED_RESUMEN_HEADERS,
+    RESUMEN_COLUMNS,
+)
 
 _platform_sessions = PlatformSessionStore()
 
@@ -323,7 +327,7 @@ def test_full_lifecycle_upload_validate_publish_restore(
     assert _active_import_id(integration_engine) is None
 
     published = client.post(
-        f"/transelec/imports/{first_import_id}/publish",
+        f"/transelec/imports/{first_import_id}/publish?acknowledge_warnings=true",
         headers={"Origin": _SAME_ORIGIN},
     )
     assert published.status_code == 200, published.text
@@ -343,7 +347,10 @@ def test_full_lifecycle_upload_validate_publish_restore(
     assert second.json()["is_active"] is False
     assert _active_import_id(integration_engine) == first_import_id
 
-    client.post(f"/transelec/imports/{second_import_id}/publish", headers={"Origin": _SAME_ORIGIN})
+    client.post(
+        f"/transelec/imports/{second_import_id}/publish?acknowledge_warnings=true",
+        headers={"Origin": _SAME_ORIGIN},
+    )
     assert _active_import_id(integration_engine) == second_import_id
 
     restored = client.post(
@@ -408,7 +415,10 @@ def test_reuploading_the_active_version_reports_already_current(
 
     _, first = _upload_and_validate(client, integration_engine, content)
     import_id = first.json()["import_id"]
-    client.post(f"/transelec/imports/{import_id}/publish", headers={"Origin": _SAME_ORIGIN})
+    client.post(
+        f"/transelec/imports/{import_id}/publish?acknowledge_warnings=true",
+        headers={"Origin": _SAME_ORIGIN},
+    )
 
     _, again = _upload_and_validate(client, integration_engine, content)
 
@@ -457,7 +467,8 @@ def test_invariant_failure_mid_step_b_rolls_back_and_leaves_the_active_version_u
     _, first = _upload_and_validate(client, integration_engine, _valid_workbook(tmp_path))
     published_import_id = first.json()["import_id"]
     client.post(
-        f"/transelec/imports/{published_import_id}/publish", headers={"Origin": _SAME_ORIGIN}
+        f"/transelec/imports/{published_import_id}/publish?acknowledge_warnings=true",
+        headers={"Origin": _SAME_ORIGIN},
     )
 
     active_before = _active_import_id(integration_engine)
@@ -514,7 +525,10 @@ def test_contract_violation_is_rejected_and_leaves_the_active_version_unchanged(
 
     _, first = _upload_and_validate(client, integration_engine, _valid_workbook(tmp_path))
     import_id = first.json()["import_id"]
-    client.post(f"/transelec/imports/{import_id}/publish", headers={"Origin": _SAME_ORIGIN})
+    client.post(
+        f"/transelec/imports/{import_id}/publish?acknowledge_warnings=true",
+        headers={"Origin": _SAME_ORIGIN},
+    )
     active_before = _active_import_id(integration_engine)
 
     _, rejected = _upload_and_validate(
@@ -540,11 +554,18 @@ def test_client_facing_errors_never_leak_technical_detail(
     _, rejected = _upload_and_validate(
         client, integration_engine, _contract_violating_workbook(tmp_path)
     )
-    detail = rejected.json()["detail"]
+    body = rejected.json()
+    detail = body["detail"]
 
-    assert detail == "La planilla no cumple el contrato de origen esperado. Contacte a soporte."
-    for leak in ("Traceback", "/tmp", ".xlsx", "Resumen schema mismatch", "PMF renombrado"):
-        assert leak not in detail
+    assert detail == (
+        "La planilla necesita revisión antes de importarse. Revise las observaciones indicadas "
+        "(filas y columnas). La versión activa no cambió."
+    )
+    # The structured review report is for the operator; it is structural and
+    # must carry neither technical detail nor anything from the file system.
+    assert [issue["code"] for issue in body["report"]["issues"]] == ["encabezado_no_encontrado"]
+    for leak in ("Traceback", "/tmp", ".xlsx", "Resumen layout:"):
+        assert leak not in rejected.text
 
     # The technical detail is preserved in the audit ledger instead.
     with integration_engine.connect() as connection:
@@ -556,7 +577,8 @@ def test_client_facing_errors_never_leak_technical_detail(
         ).scalar_one()
 
     assert metadata["reason"] == "contract_violation"
-    assert "Resumen schema mismatch" in metadata["detail"]
+    assert "encabezado_no_encontrado" in metadata["detail"]
+    assert metadata["parser_version"].startswith("transelec_ingestion.resumen_layout@")
 
 
 def test_a_database_failure_never_writes_row_content_to_the_audit_ledger_or_the_log(
@@ -740,7 +762,8 @@ def test_operator_with_a_transelec_grant_can_run_the_whole_lifecycle(
     import_id = validated.json()["import_id"]
 
     published = client.post(
-        f"/transelec/imports/{import_id}/publish", headers={"Origin": _SAME_ORIGIN}
+        f"/transelec/imports/{import_id}/publish?acknowledge_warnings=true",
+        headers={"Origin": _SAME_ORIGIN},
     )
     restored = client.post(
         f"/transelec/imports/{import_id}/restore", headers={"Origin": _SAME_ORIGIN}
@@ -759,7 +782,7 @@ def test_admin_can_run_the_whole_lifecycle(
     assert validated.status_code == 200, validated.text
 
     published = client.post(
-        f"/transelec/imports/{validated.json()['import_id']}/publish",
+        f"/transelec/imports/{validated.json()['import_id']}/publish?acknowledge_warnings=true",
         headers={"Origin": _SAME_ORIGIN},
     )
 
@@ -841,3 +864,409 @@ def test_mutation_without_a_session_is_unauthenticated(
     response = _post_mutation(client, path, kind, tmp_path)
 
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Contract V2: recognized layout, AEF tracking block, review report
+# ---------------------------------------------------------------------------
+
+_CURRENT_HEADERS = tuple(header for header, _ in CURRENT_RESUMEN_COLUMNS)
+
+
+def _current_row(**overrides: Any) -> list[Any]:
+    values: dict[str, Any] = {field_name: None for _, field_name in CURRENT_RESUMEN_COLUMNS}
+    values.update(
+        {
+            "pmf": "MP001",
+            "rol": "123-45",
+            "numero_predio": "7",
+            "estado": "Aprobado",
+            "estado_resumido": "Aprobado",
+            "id_predio_unico": "MP001-123-45-7",
+            "carpeta_source": "COLUMNA-J",
+            "carpeta_normalizada": "COLUMNA-AH",
+            "superficie_corta": 1.25,
+        }
+    )
+    values.update(overrides)
+    return [values[field_name] for _, field_name in CURRENT_RESUMEN_COLUMNS]
+
+
+def _aef_workbook(tmp_path: Path) -> bytes:
+    """09-Sept layout: each PMF's AEF data on one of its rows, other rows
+    blank (as in the real workbook); MP002's dates are out of order."""
+
+    return _workbook_bytes(
+        tmp_path,
+        "aef.xlsx",
+        [
+            _current_row(
+                aef="Presentado",
+                quien_solicita="Persona A",
+                fecha_solicitud=dt.date(2026, 7, 3),
+                fecha_corta=dt.date(2026, 7, 9),
+                fecha_termino=dt.date(2026, 9, 1),
+            ),
+            _current_row(
+                pmf="MP002",
+                id_predio_unico="MP002-2",
+                aef="Solicitado, se puede cortar",
+                fecha_solicitud=dt.date(2026, 8, 20),
+                fecha_corta=dt.date(2026, 8, 19),
+                fecha_termino=dt.date(2026, 9, 1),
+            ),
+            _current_row(numero_predio="8", id_predio_unico="MP001-123-45-8"),
+            _current_row(pmf="MP002", id_predio_unico="MP002-1"),
+        ],
+        headers=_CURRENT_HEADERS,
+    )
+
+
+def _aef_conflict_workbook(tmp_path: Path) -> bytes:
+    """Synthetic: MP001 has two different non-blank AEF values; text dates."""
+
+    return _workbook_bytes(
+        tmp_path,
+        "aef-conflict.xlsx",
+        [
+            _current_row(aef="Presentado", fecha_ingreso="13 de noviembre de 2024"),
+            _current_row(numero_predio="8", id_predio_unico="MP001-123-45-8"),
+            _current_row(
+                numero_predio="9",
+                id_predio_unico="MP001-123-45-9",
+                aef="Solicitado, se puede cortar",
+                fecha_ingreso="20-12-2024 09-06-26",
+            ),
+            _current_row(pmf="MP002", id_predio_unico="MP002-1", fecha_ingreso="-"),
+        ],
+        headers=_CURRENT_HEADERS,
+    )
+
+
+def test_v2_workbook_imports_with_its_review_report_and_is_not_published(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    _login(client, "dev-admin")
+
+    _, response = _upload_and_validate(client, integration_engine, _aef_workbook(tmp_path))
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "validated"
+    assert body["is_active"] is False
+    assert _active_import_id(integration_engine) is None
+    assert body["schema_contract_version"] == "transelec-resumen-v2"
+    assert body["warning_count"] == 1
+    report = body["mapping_report"]
+    assert report["header_row"] == 1
+    warning = next(i for i in report["issues"] if i["severity"] == "warning")
+    assert (warning["code"], warning["rows"], warning["columns"]) == (
+        "cronologia_corta_antes_de_solicitud",
+        [3],
+        ["C", "D"],
+    )
+    mapped = {c["field"]: c["column"] for c in report["columns"] if c["status"] == "mapped"}
+    assert (mapped["aef"], mapped["carpeta_source"], mapped["carpeta_normalizada"]) == (
+        "A",
+        "J",
+        "AH",
+    )
+
+    with integration_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT source_row_number, aef, quien_solicita, fecha_corta, carpeta_source "
+                "FROM platform.transelec_resumen_row WHERE import_id = :id "
+                "ORDER BY source_row_number"
+            ),
+            {"id": body["import_id"]},
+        ).all()
+        stored = connection.execute(
+            text("SELECT warning_count, mapping_report FROM platform.transelec_import")
+        ).one()
+        audit = connection.execute(
+            text(
+                "SELECT metadata FROM platform.audit_event "
+                "WHERE event_type = 'import.validated' ORDER BY id DESC LIMIT 1"
+            )
+        ).scalar_one()
+
+    assert [(r.source_row_number, r.aef, r.quien_solicita) for r in rows] == [
+        (2, "Presentado", "Persona A"),
+        (3, "Solicitado, se puede cortar", None),
+        (4, None, None),
+        (5, None, None),
+    ]
+    # The inverted date is stored as the source had it.
+    assert rows[1].fecha_corta == dt.date(2026, 8, 19)
+    assert rows[0].carpeta_source == "COLUMNA-J"
+    assert stored.warning_count == 1
+    assert stored.mapping_report["issues"] == report["issues"]
+    assert audit["warning_codes"] == ["cronologia_corta_antes_de_solicitud"]
+
+    # Re-validating identical content returns the persisted report unchanged.
+    _, again = _upload_and_validate(client, integration_engine, _aef_workbook(tmp_path))
+    assert again.json()["status"] == "already_imported"
+    assert again.json()["mapping_report"] == report
+
+
+def test_ambiguous_or_conflicting_layout_is_refused_with_references_and_no_values(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    _login(client, "dev-admin")
+    secret = "VALOR-PRIVADO-9"
+    headers = (*_CURRENT_HEADERS, "Estado resumido")
+    content = _workbook_bytes(
+        tmp_path,
+        "conflict.xlsx",
+        [
+            [*_current_row(), "Aprobado"],
+            [*_current_row(pmf="MP002", estado_resumido=secret), "En tramite"],
+        ],
+        headers=headers,
+    )
+
+    _, rejected = _upload_and_validate(client, integration_engine, content)
+
+    assert rejected.status_code == 422
+    issue = next(i for i in rejected.json()["report"]["issues"] if i["severity"] == "error")
+    assert (issue["code"], issue["columns"], issue["rows"]) == (
+        "encabezado_duplicado_conflictivo",
+        ["M", "AJ"],
+        [3],
+    )
+    assert secret not in rejected.text
+
+    with integration_engine.connect() as connection:
+        imports = connection.execute(
+            text("SELECT count(*) FROM platform.transelec_import")
+        ).scalar_one()
+        metadata = connection.execute(
+            text(
+                "SELECT metadata FROM platform.audit_event "
+                "WHERE event_type = 'import.validation.failed' ORDER BY id DESC LIMIT 1"
+            )
+        ).scalar_one()
+
+    assert imports == 0
+    assert "encabezado_duplicado_conflictivo" in metadata["detail"]
+    assert secret not in str(metadata)
+
+
+def test_import_report_requires_an_operator_grant(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    _login(client, "dev-admin")
+    _, response = _upload_and_validate(client, integration_engine, _aef_workbook(tmp_path))
+    import_id = response.json()["import_id"]
+
+    report = client.get(f"/transelec/imports/{import_id}/report")
+    assert report.status_code == 200
+    assert report.json()["warning_count"] == 1
+    assert "aef" in report.json()["source_fields"]
+    assert client.get("/transelec/imports/999999/report").status_code == 404
+
+    _login(client, "dev-viewer")
+    assert client.get(f"/transelec/imports/{import_id}/report").status_code == 403
+
+
+def test_aef_reads_after_explicit_publish(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    _login(client, "dev-admin")
+    _, response = _upload_and_validate(client, integration_engine, _aef_workbook(tmp_path))
+    import_id = response.json()["import_id"]
+    assert client.get("/transelec/aef").status_code == 404  # nothing published yet
+    client.post(
+        f"/transelec/imports/{import_id}/publish?acknowledge_warnings=true",
+        headers={"Origin": _SAME_ORIGIN},
+    )
+
+    aef = client.get("/transelec/aef").json()
+    assert aef["source_fields"] == [
+        "aef",
+        "quien_solicita",
+        "fecha_solicitud",
+        "fecha_corta",
+        "fecha_termino",
+    ]
+    assert aef["basis"] == "pmf_from_source_rows"
+    # Row level: only the rows that carry values, nothing filled down.
+    assert (aef["row_count"], aef["rows_with_aef"], aef["rows_with_quien_solicita"]) == (4, 2, 1)
+    assert [row["source_row_number"] for row in aef["rows"]] == [2, 3]
+    assert aef["rows"][1]["chronology_flags"] == ["cronologia_corta_antes_de_solicitud"]
+    assert aef["rows_with_chronology_warning"] == 1
+    # PMF level: each value names the row that supplied it.
+    assert (aef["pmf_with_tracking"], aef["pmf_with_aef"], aef["pmf_with_conflict"]) == (2, 2, 0)
+    by_pmf = {entry["pmf"]: entry for entry in aef["pmfs"]}
+    mp001 = by_pmf["MP001"]
+    assert (mp001["total_rows"], mp001["source_row_numbers"]) == (2, [2, 4])
+    assert mp001["fields"]["aef"] == {
+        "status": "value",
+        "value": "Presentado",
+        "value_kind": "text",
+        "source_rows": [2],
+        "variants": [{"value": "Presentado", "source_rows": [2]}],
+    }
+    assert mp001["fields"]["fecha_termino"]["value"] == "2026-09-01"
+    assert mp001["fields"]["fecha_termino"]["value_kind"] == "date"
+    assert by_pmf["MP002"]["chronology_flags"] == ["cronologia_corta_antes_de_solicitud"]
+    assert by_pmf["MP002"]["fields"]["quien_solicita"]["status"] == "blank"
+    assert aef["pmf_por_aef"] == [
+        {"label": "Presentado", "count": 1},
+        {"label": "Solicitado, se puede cortar", "count": 1},
+    ]
+
+    filtered = client.get("/transelec/pmfs", params={"aef": "Presentado"}).json()
+    assert [row["source_row_number"] for row in filtered["items"]] == [2]
+    assert filtered["items"][0]["fecha_termino"] == "2026-09-01"
+    by_requester = client.get("/transelec/aef", params={"quien_solicita": "Persona A"}).json()
+    assert by_requester["row_count"] == 1
+    # A filter that keeps only MP001's blank row still shows MP001's values,
+    # from all of its rows.
+    blank_row = client.get("/transelec/aef", params={"q": "MP001-123-45-8"}).json()
+    assert (blank_row["row_count"], blank_row["rows_with_aef"]) == (1, 0)
+    assert [(p["pmf"], p["fields"]["aef"]["source_rows"]) for p in blank_row["pmfs"]] == [
+        ("MP001", [2])
+    ]
+
+    active = client.get("/transelec/imports/active").json()
+    assert active["warning_count"] == 1
+    assert "fecha_termino" in active["source_fields"]
+
+
+def test_pmf_conflicts_and_text_dates_are_reviewed_not_resolved(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    _login(client, "dev-admin")
+    _, response = _upload_and_validate(client, integration_engine, _aef_conflict_workbook(tmp_path))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    issues = {
+        (issue["code"], issue["field"]): (issue["severity"], issue["rows"])
+        for issue in body["mapping_report"]["issues"]
+        if issue["code"] == "aef_conflicto_pmf" or issue["code"].startswith("fecha_")
+    }
+    assert issues == {
+        ("aef_conflicto_pmf", "aef"): ("warning", [2, 4]),
+        ("fecha_texto_interpretada", "fecha_ingreso"): ("info", [2]),
+        ("fecha_texto_multiple", "fecha_ingreso"): ("warning", [4]),
+        ("fecha_texto_guion", "fecha_ingreso"): ("warning", [5]),
+    }
+    assert body["warning_count"] == 3
+
+    # Publishing still requires the explicit acknowledgement.
+    refused = client.post(
+        f"/transelec/imports/{body['import_id']}/publish", headers={"Origin": _SAME_ORIGIN}
+    )
+    assert refused.status_code == 409
+    client.post(
+        f"/transelec/imports/{body['import_id']}/publish?acknowledge_warnings=true",
+        headers={"Origin": _SAME_ORIGIN},
+    )
+
+    aef = client.get("/transelec/aef").json()
+    (mp001,) = aef["pmfs"]
+    assert mp001["has_conflict"] is True
+    assert mp001["fields"]["aef"]["status"] == "conflict"
+    assert mp001["fields"]["aef"]["value"] is None
+    assert mp001["fields"]["aef"]["variants"] == [
+        {"value": "Presentado", "source_rows": [2]},
+        {"value": "Solicitado, se puede cortar", "source_rows": [4]},
+    ]
+    assert (aef["pmf_with_conflict"], aef["pmf_conflicts_by_field"]["aef"]) == (1, 1)
+    # Each row keeps its own value.
+    assert [(r["source_row_number"], r["aef"]) for r in aef["rows"]] == [
+        (2, "Presentado"),
+        (4, "Solicitado, se puede cortar"),
+    ]
+
+    rows = {row["source_row_number"]: row for row in client.get("/transelec/pmfs").json()["items"]}
+    assert rows[2]["fecha_ingreso"] == "2024-11-13"
+    assert rows[2]["source_text_dates"]["fecha_ingreso"] == {
+        "raw": "13 de noviembre de 2024",
+        "resolution": "parsed_spanish_long",
+        "parsed": "2024-11-13",
+    }
+    assert rows[4]["fecha_ingreso"] is None
+    assert rows[4]["source_text_dates"]["fecha_ingreso"]["raw"] == "20-12-2024 09-06-26"
+    assert rows[5]["source_text_dates"]["fecha_ingreso"]["resolution"] == "placeholder"
+    assert rows[3]["source_text_dates"] == {}
+
+
+def test_legacy_layout_reports_the_aef_columns_as_absent(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    _login(client, "dev-admin")
+    _, response = _upload_and_validate(client, integration_engine, _valid_workbook(tmp_path))
+    client.post(
+        f"/transelec/imports/{response.json()['import_id']}/publish?acknowledge_warnings=true",
+        headers={"Origin": _SAME_ORIGIN},
+    )
+
+    aef = client.get("/transelec/aef").json()
+    assert aef["source_fields"] == []
+    assert aef["rows_with_any_tracking"] == 0
+    assert "aef" not in client.get("/transelec/imports/active").json()["source_fields"]
+
+
+def test_an_import_made_under_contract_v1_reports_exactly_the_legacy_fields(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    """Production already holds V1 imports, which kept no report. V1 accepted
+    only the exact 30-column layout, so those fields — and no AEF field —
+    were present."""
+
+    _login(client, "dev-admin")
+    _, response = _upload_and_validate(client, integration_engine, _valid_workbook(tmp_path))
+    import_id = response.json()["import_id"]
+    with integration_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE platform.transelec_import SET schema_contract_version = "
+                "'transelec-resumen-v1', mapping_report = NULL, warning_count = 0"
+            )
+        )
+    client.post(
+        f"/transelec/imports/{import_id}/publish?acknowledge_warnings=true",
+        headers={"Origin": _SAME_ORIGIN},
+    )
+
+    active = client.get("/transelec/imports/active").json()
+    assert active["source_fields"] == [name for _, name in RESUMEN_COLUMNS]
+    assert client.get("/transelec/aef").json()["source_fields"] == []
+    assert client.get(f"/transelec/imports/{import_id}/report").json()["mapping_report"] is None
+
+
+def test_publishing_an_import_with_warnings_requires_an_explicit_acknowledgement(
+    client: TestClient, integration_engine: Engine, tmp_path: Path
+) -> None:
+    """The dashboard's checkbox is a convenience; the API is the control."""
+
+    _login(client, "dev-admin")
+    _, response = _upload_and_validate(client, integration_engine, _aef_workbook(tmp_path))
+    import_id = response.json()["import_id"]
+    assert response.json()["warning_count"] == 1
+
+    refused = client.post(
+        f"/transelec/imports/{import_id}/publish", headers={"Origin": _SAME_ORIGIN}
+    )
+    assert refused.status_code == 409
+    assert _active_import_id(integration_engine) is None
+
+    accepted = client.post(
+        f"/transelec/imports/{import_id}/publish",
+        params={"acknowledge_warnings": "true"},
+        headers={"Origin": _SAME_ORIGIN},
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert _active_import_id(integration_engine) == import_id
+
+    with integration_engine.connect() as connection:
+        metadata = connection.execute(
+            text(
+                "SELECT metadata FROM platform.audit_event "
+                "WHERE event_type = 'import.published' ORDER BY id DESC LIMIT 1"
+            )
+        ).scalar_one()
+    assert (metadata["warning_count"], metadata["warnings_acknowledged"]) == (1, True)
