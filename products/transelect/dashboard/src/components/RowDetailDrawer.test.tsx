@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RowDetailDrawer } from './RowDetailDrawer'
 import { makeRow } from '../test/factories'
-import type { AefPmf, TranselecAef } from '../api'
+import type { AefPmf, AefPmfField, TranselecAef } from '../api'
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>()
@@ -13,7 +13,9 @@ const { getPmfDetail, getAef } = await import('../api')
 
 const tracked = makeRow({ source_row_number: 2, pmf: 'BN001', aef: 'Presentado' })
 const untracked = makeRow({ source_row_number: 3, pmf: 'BN001' })
-const blank = { status: 'blank', value: null, value_kind: null, source_rows: [], variants: [] } as const
+const blank: AefPmfField = {
+  status: 'blank', value: null, value_kind: null, source_rows: [], variants: [],
+}
 const pmfTracking: AefPmf = {
   pmf: 'BN001',
   total_rows: 2,
@@ -43,7 +45,7 @@ describe('RowDetailDrawer — AEF section', () => {
     vi.mocked(getAef).mockReset()
     vi.mocked(getAef).mockResolvedValue({
       ok: true,
-      data: { pmfs: [pmfTracking] } as TranselecAef,
+      data: { pmfs: [pmfTracking] } as unknown as TranselecAef,
     })
     vi.mocked(getPmfDetail).mockResolvedValue({
       ok: true,
@@ -106,7 +108,7 @@ describe('RowDetailDrawer — AEF section', () => {
             },
           },
         }],
-      } as TranselecAef,
+      } as unknown as TranselecAef,
     })
     render(<RowDetailDrawer row={untracked} onClose={() => {}} sourceFields={['aef', 'pmf']} />)
     await waitFor(() =>
