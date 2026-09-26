@@ -26,6 +26,7 @@ with no grant gets a session and a 403.
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from typing import Annotated
 
@@ -50,6 +51,11 @@ from app.session_store import PlatformSessionStore
 from app.token_crypto import TokenDecryptionError, decrypt_token, encrypt_token
 
 router = APIRouter(prefix="/auth/google", tags=["auth"])
+
+# Rejected sign-ins are logged (reason only: no email, code, state or token)
+# so a failed real login is visible in the platform logs, not just as a
+# bare 400/401 access-log line.
+logger = logging.getLogger(__name__)
 
 GOOGLE_IDENTITY_KIND = "google"
 
@@ -113,11 +119,13 @@ def google_callback(
 
     encryption_key = _require_encryption_key(settings)
     if flow_cookie is None:
+        logger.warning("Google sign-in rejected: flow cookie missing or expired")
         raise HTTPException(status_code=400, detail="Missing or expired sign-in state.")
 
     try:
         flow_state = decrypt_token(flow_cookie.encode("utf-8"), key=encryption_key)
     except TokenDecryptionError as exc:
+        logger.warning("Google sign-in rejected: flow cookie could not be decrypted")
         raise HTTPException(status_code=400, detail="Sign-in state could not be verified.") from exc
 
     callback_params = {key: str(value) for key, value in request.query_params.items()}
@@ -125,6 +133,7 @@ def google_callback(
     try:
         sign_in = client.complete(flow_state, callback_params, _redirect_uri(settings))
     except GoogleSignInError as exc:
+        logger.warning("Google sign-in rejected: %r", str(exc))
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
     user = resolve_or_create_app_user(

@@ -240,6 +240,28 @@ def test_callback_returns_401_and_no_session_when_the_sign_in_is_not_trusted(
     assert response.cookies.get(SESSION_COOKIE_NAME) is None
 
 
+def test_a_rejected_sign_in_is_logged_with_its_reason_and_no_identity(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A failed real login must be visible in the platform logs on the day
+    it happens, without writing the account, code or state into them."""
+
+    _use(FakeGoogleOidcClient(sign_in=_sign_in()))
+    flow_cookie = _login_and_get_flow_cookie(client)
+    _use(FakeGoogleOidcClient(error=GoogleSignInError("hd claim missing")))
+    client.cookies.set(_FLOW_COOKIE_NAME, flow_cookie)
+
+    with caplog.at_level("WARNING", logger="app.routers.google_auth"):
+        client.get("/auth/google/callback", params={"state": "fixed-state", "code": "secret-code"})
+        client.cookies.delete(_FLOW_COOKIE_NAME)
+        client.get("/auth/google/callback", params={"state": "fixed-state", "code": "abc"})
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("hd claim missing" in message for message in messages)
+    assert any("flow cookie missing" in message for message in messages)
+    assert not any("secret-code" in message or "fixed-state" in message for message in messages)
+
+
 # ---------------------------------------------------------------------------
 # /auth/google/callback -- the identity and the session
 # ---------------------------------------------------------------------------
