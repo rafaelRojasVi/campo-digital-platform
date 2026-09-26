@@ -229,6 +229,8 @@ TRANSELEC_SPA_PAGE_PATHS = frozenset(
         "transelec",
         "transelec/explorador",
         "transelec/pendientes",
+        # Not "transelec/aef": that is the read API's own path.
+        "transelec/seguimiento-aef",
         "transelec/calidad",
         "transelec/datos",
         "transelec/importar",

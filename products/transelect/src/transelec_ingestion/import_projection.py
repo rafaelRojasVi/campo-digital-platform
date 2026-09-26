@@ -7,10 +7,13 @@ projection, verifies structural invariants against the rows it just wrote,
 and returns. Making an import the one the dashboard serves is a separate,
 explicit mutation (Step C/D, ``app.transelec_publication``).
 
-The source contract (``xlsx_contract.load_transelec_workbook``) is reused
-unchanged and treated here as a **hard gate**: a violation raises, and it
-raises before any statement is issued, so a rejected workbook cannot leave a
-partial write behind. Upload-time inspection
+The source contract (``xlsx_contract.load_transelec_workbook``, backed by
+``resumen_layout``) is treated here as a **hard gate for blocking issues
+only**: an ``error`` in the layout report raises, and it raises before any
+statement is issued, so a rejected workbook cannot leave a partial write
+behind. ``warning`` and ``info`` issues do not block; the full report is
+persisted on the import row so the operator can review it before the
+separate, explicit publish step. Upload-time inspection
 (``app.inspection.transelec_inspector``) keeps its evidence-only behavior —
 gating happens at this Transelec-specific step, not by changing the shared
 multi-product upload boundary.
@@ -27,6 +30,7 @@ contract must still pass.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,17 +38,19 @@ from typing import Any, Literal
 
 from sqlalchemy import Connection, text
 
+from transelec_ingestion.resumen_layout import FIELD_SPECS
+from transelec_ingestion.resumen_layout import PARSER_VERSION as _LAYOUT_PARSER_VERSION
 from transelec_ingestion.xlsx_contract import (
-    RESUMEN_COLUMNS,
     ResumenSourceRow,
     load_transelec_workbook,
 )
 
-SCHEMA_CONTRACT_VERSION = "transelec-resumen-v1"
+SCHEMA_CONTRACT_VERSION = "transelec-resumen-v2"
 
-# Bumped whenever this projection's parsing/coercion behavior changes in a
-# way that could produce different column values from identical bytes.
-PARSER_VERSION = "transelec_ingestion.xlsx_contract@1"
+# Bumped whenever parsing/coercion behavior changes in a way that could
+# produce different column values from identical bytes. Owned by the layout
+# resolver, which is where that behavior now lives.
+PARSER_VERSION = _LAYOUT_PARSER_VERSION
 
 # Relative tolerance for comparing a Python float sum against PostgreSQL's
 # SUM() of the same double-precision values: both are IEEE 754 doubles, but
@@ -65,19 +71,25 @@ class ImportInvariantError(ImportProjectionError):
 
 @dataclass(frozen=True, slots=True)
 class ColumnProjection:
-    """How one A:AD contract field maps onto one persisted column."""
+    """How one recognized ``Resumen`` field maps onto one persisted column."""
 
     contract_field: str
     column: str
     kind: _ColumnKind
 
 
-# Positional, one entry per A:AD field, in the contract's own order. Column
-# identity is positional because the worksheet contains two columns both
-# labelled "Carpeta" — the single most important schema lesson from the
-# workbook audit — so this table is validated against RESUMEN_COLUMNS at
-# import time rather than trusting header text anywhere.
+# One entry per recognized field, in resumen_layout.FIELD_SPECS order. The
+# worksheet's two "Carpeta" columns are resolved to distinct fields by the
+# layout resolver's explicit neighbour rule before they reach this table, and
+# the table is checked against FIELD_SPECS at import time.
 RESUMEN_ROW_PROJECTION: tuple[ColumnProjection, ...] = (
+    # AEF tracking block (09-Sept-2026 layout, columns A:E). Row-level source
+    # values: a value on one row says nothing about the PMF's other rows.
+    ColumnProjection("aef", "aef", "text"),
+    ColumnProjection("quien_solicita", "quien_solicita", "text"),
+    ColumnProjection("fecha_solicitud", "fecha_solicitud", "date"),
+    ColumnProjection("fecha_corta", "fecha_corta", "date"),
+    ColumnProjection("fecha_termino", "fecha_termino", "date"),
     ColumnProjection("predio_ref", "predio_ref", "text"),
     ColumnProjection("rol_ref", "rol_ref", "text"),
     ColumnProjection("area_ref", "area_ref", "text"),
@@ -120,11 +132,11 @@ _ROW_COLUMNS: tuple[str, ...] = (
     tuple(spec.column for spec in RESUMEN_ROW_PROJECTION) + _DERIVED_COLUMNS
 )
 
-if tuple(spec.contract_field for spec in RESUMEN_ROW_PROJECTION) != tuple(
-    field_name for _, field_name in RESUMEN_COLUMNS
+if tuple((spec.contract_field, spec.kind) for spec in RESUMEN_ROW_PROJECTION) != tuple(
+    (spec.name, spec.kind) for spec in FIELD_SPECS
 ):  # pragma: no cover - a contract change must break loudly at import time
     raise RuntimeError(
-        "RESUMEN_ROW_PROJECTION no longer matches xlsx_contract.RESUMEN_COLUMNS; "
+        "RESUMEN_ROW_PROJECTION no longer matches resumen_layout.FIELD_SPECS; "
         "the source contract changed and this projection must be revised."
     )
 
@@ -146,6 +158,8 @@ class ValidatedWorkbook:
     distinct_pmf: int
     distinct_provisional_predio_ids: int
     surface_total: float
+    mapping_report: dict[str, Any]
+    warning_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,6 +175,9 @@ class ImportProjectionResult:
     surface_total: float
     validated_at: dt.datetime
     already_existed: bool
+    # None for an import validated before contract V2, which kept no report.
+    mapping_report: dict[str, Any] | None
+    warning_count: int
 
 
 def _text(value: Any) -> str | None:
@@ -273,12 +290,13 @@ def _project_row(source_row: ResumenSourceRow) -> ProjectedRow:
 
 
 def read_validated_workbook(workbook_path: str | Path) -> ValidatedWorkbook:
-    """Apply the source contract as a hard gate and project every row.
+    """Resolve the layout, gate on blocking issues, and project every row.
 
-    Raises ``TranselecWorkbookError`` on any contract violation — a renamed,
-    removed, or reordered column inside A:AD, a non-blank AE separator, a
-    missing ``Resumen`` worksheet, or a worksheet with no PMF-bearing row.
-    Touches no database.
+    Raises ``TranselecWorkbookError`` (carrying the full layout report) on
+    any blocking issue — no ``Resumen`` worksheet, no recognizable header,
+    a missing identity/required column, an ambiguous ``Carpeta``, duplicate
+    headers with conflicting values, or no PMF-bearing row. Touches no
+    database.
     """
 
     workbook = load_transelec_workbook(workbook_path)
@@ -304,6 +322,8 @@ def read_validated_workbook(workbook_path: str | Path) -> ValidatedWorkbook:
             for row in rows
             if row.columns["superficie_corta"] is not None
         ),
+        mapping_report=workbook.layout.to_dict(),
+        warning_count=workbook.layout.count("warning"),
     )
 
 
@@ -322,7 +342,7 @@ def find_existing_import(
             """
             SELECT id, source_snapshot_id, ingestion_run_id, business_rows,
                    distinct_pmf, distinct_provisional_predio_ids, surface_total,
-                   validated_at
+                   validated_at, mapping_report, warning_count
             FROM platform.transelec_import
             WHERE source_snapshot_id = :source_snapshot_id
             """
@@ -343,6 +363,8 @@ def find_existing_import(
         surface_total=float(row.surface_total),
         validated_at=row.validated_at,
         already_existed=True,
+        mapping_report=row.mapping_report,
+        warning_count=row.warning_count,
     )
 
 
@@ -362,13 +384,14 @@ def _insert_import(
                 source_snapshot_id, ingestion_run_id, schema_contract_version,
                 parser_version, business_rows, distinct_pmf,
                 distinct_provisional_predio_ids, surface_total,
-                validated_by_app_user_id, validated_at
+                validated_by_app_user_id, validated_at, mapping_report, warning_count
             )
             VALUES (
                 :source_snapshot_id, :ingestion_run_id, :schema_contract_version,
                 :parser_version, :business_rows, :distinct_pmf,
                 :distinct_provisional_predio_ids, :surface_total,
-                :validated_by_app_user_id, :validated_at
+                :validated_by_app_user_id, :validated_at,
+                CAST(:mapping_report AS jsonb), :warning_count
             )
             RETURNING id
             """
@@ -384,6 +407,8 @@ def _insert_import(
             "surface_total": validated.surface_total,
             "validated_by_app_user_id": validated_by_app_user_id,
             "validated_at": validated_at,
+            "mapping_report": json.dumps(validated.mapping_report, ensure_ascii=False),
+            "warning_count": validated.warning_count,
         },
     ).scalar_one()
 
@@ -548,4 +573,6 @@ def validate_and_project(
         surface_total=validated.surface_total,
         validated_at=resolved_validated_at,
         already_existed=False,
+        mapping_report=validated.mapping_report,
+        warning_count=validated.warning_count,
     )

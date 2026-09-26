@@ -29,6 +29,7 @@ from transelec_ingestion.import_projection import (
     validate_and_project,
 )
 from transelec_ingestion.xlsx_contract import (
+    CURRENT_RESUMEN_COLUMNS,
     EXPECTED_RESUMEN_HEADERS,
     RESUMEN_COLUMNS,
     TranselecWorkbookError,
@@ -98,31 +99,44 @@ class _ForbiddenConnection:
 
 
 # --------------------------------------------------------------------------
-# Contract gate: a violation raises and nothing is written
+# Contract gate: a blocking issue raises and nothing is written
 # --------------------------------------------------------------------------
 
 
-def test_renamed_column_inside_a_to_ad_is_rejected(tmp_path: Path) -> None:
+def test_renamed_required_column_is_rejected(tmp_path: Path) -> None:
     headers = list(EXPECTED_RESUMEN_HEADERS)
     headers[7] = "Estado resumido nuevo"
     path = _write_workbook(tmp_path / "renamed.xlsx", headers=tuple(headers), rows=[_source_row()])
 
-    with pytest.raises(TranselecWorkbookError, match="Resumen schema mismatch"):
+    with pytest.raises(
+        TranselecWorkbookError, match="columna_esencial_ausente field=estado_resumido"
+    ) as caught:
         read_validated_workbook(path)
 
-
-def test_reordered_column_inside_a_to_ad_is_rejected(tmp_path: Path) -> None:
-    headers = list(EXPECTED_RESUMEN_HEADERS)
-    headers[14], headers[15] = headers[15], headers[14]
-    path = _write_workbook(
-        tmp_path / "reordered.xlsx", headers=tuple(headers), rows=[_source_row()]
+    assert caught.value.report is not None
+    assert any(
+        issue.code == "columna_no_reconocida" and issue.columns == ("H",)
+        for issue in caught.value.report.issues
     )
 
-    with pytest.raises(TranselecWorkbookError, match="Resumen schema mismatch"):
-        read_validated_workbook(path)
+
+def test_reordered_columns_are_mapped_by_header(tmp_path: Path) -> None:
+    """Contract V2 binds by recognized header, so swapping two columns moves
+    the values with their headers instead of rejecting the workbook."""
+
+    headers = list(EXPECTED_RESUMEN_HEADERS)
+    headers[14], headers[15] = headers[15], headers[14]
+    row = _source_row(rol="ROL-9", numero_predio="PRED-4")
+    row[14], row[15] = row[15], row[14]
+    path = _write_workbook(tmp_path / "reordered.xlsx", headers=tuple(headers), rows=[row])
+
+    validated = read_validated_workbook(path)
+
+    assert validated.rows[0].columns["rol"] == "ROL-9"
+    assert validated.rows[0].columns["numero_predio"] == "PRED-4"
 
 
-def test_non_blank_separator_column_ae_is_rejected(tmp_path: Path) -> None:
+def test_unlabeled_data_beside_the_table_is_ignored_with_a_warning(tmp_path: Path) -> None:
     row = _source_row()
     row.append("no deberia estar aqui")
     path = _write_workbook(
@@ -131,21 +145,28 @@ def test_non_blank_separator_column_ae_is_rejected(tmp_path: Path) -> None:
         rows=[row],
     )
 
-    with pytest.raises(TranselecWorkbookError, match="contract separator"):
-        read_validated_workbook(path)
+    validated = read_validated_workbook(path)
+
+    issues = [
+        issue for issue in validated.mapping_report["issues"] if issue["severity"] == "warning"
+    ]
+    assert [(issue["code"], issue["columns"], issue["rows"]) for issue in issues] == [
+        ("columna_sin_encabezado", ["AE"], [2])
+    ]
+    assert "no deberia estar aqui" not in validated.rows[0].columns.values()
 
 
 def test_worksheet_without_any_pmf_row_is_rejected(tmp_path: Path) -> None:
     path = _write_workbook(tmp_path / "no-business-rows.xlsx", rows=[_source_row(pmf=None)])
 
-    with pytest.raises(TranselecWorkbookError, match="no business rows with PMF"):
+    with pytest.raises(TranselecWorkbookError, match="sin_filas_con_pmf"):
         read_validated_workbook(path)
 
 
 def test_missing_resumen_worksheet_is_rejected(tmp_path: Path) -> None:
     path = _write_workbook(tmp_path / "wrong-sheet.xlsx", sheet_name="Otro", rows=[_source_row()])
 
-    with pytest.raises(TranselecWorkbookError, match='Required worksheet "Resumen" is missing'):
+    with pytest.raises(TranselecWorkbookError, match="hoja_resumen_ausente"):
         read_validated_workbook(path)
 
 
@@ -175,11 +196,17 @@ def test_contract_violation_never_touches_the_database(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------
 
 
-def test_projection_covers_exactly_the_thirty_contract_fields() -> None:
-    assert len(RESUMEN_ROW_PROJECTION) == 30
+def test_projection_covers_every_contract_field() -> None:
+    """The 30 legacy fields plus the five AEF tracking fields, in the
+    resolver's registry order."""
+
+    assert len(RESUMEN_ROW_PROJECTION) == 35
     assert tuple(spec.contract_field for spec in RESUMEN_ROW_PROJECTION) == tuple(
-        field_name for _, field_name in RESUMEN_COLUMNS
+        field_name for _, field_name in CURRENT_RESUMEN_COLUMNS
     )
+    assert {field_name for _, field_name in RESUMEN_COLUMNS} <= {
+        spec.contract_field for spec in RESUMEN_ROW_PROJECTION
+    }
 
 
 def test_all_thirty_fields_are_projected_positionally(tmp_path: Path) -> None:
@@ -420,5 +447,5 @@ def test_a_single_row_workbook_is_structurally_valid(tmp_path: Path) -> None:
 
 
 def test_contract_and_parser_versions_are_stable_identifiers() -> None:
-    assert SCHEMA_CONTRACT_VERSION == "transelec-resumen-v1"
-    assert PARSER_VERSION.startswith("transelec_ingestion.xlsx_contract@")
+    assert SCHEMA_CONTRACT_VERSION == "transelec-resumen-v2"
+    assert PARSER_VERSION.startswith("transelec_ingestion.resumen_layout@")
