@@ -14,13 +14,13 @@ Implemented on PR #59 (`feat/transelec-dashboard-ux-pass`), targeting the Railwa
 ## Decisions and implementation
 
 - Pendientes and the Resumen work queue open the existing PMF detail drawer. An unfiltered Pendientes page has no redundant reset action. Keyboard activation, Escape, focus return and mobile presentation are covered by the dashboard interaction checks.
-- The drawer presents tramitación and AEF near the top, distinguishes PMF-level context from the selected source row, and permits switching among the PMF's rows. Blank source cells remain blank. The source row number stays visible.
+- The drawer presents tramitación and AEF near the top. It requests the existing `GET /transelec/aef` projection for the exact PMF to show resolved values, source rows and conflicts, then labels the selected source row's own cells separately. It permits switching among the PMF's rows. Blank source cells remain blank; no client-side field resolution is invented. The source row number stays visible.
 - Calidad leads with what was found, its affected unit (PMF, predio or source row), and what to review. A closed **Cómo se calcula** disclosure retains exact source fields and internal rule IDs for audit. The owner-status comparison displays the two existing API result sets under the same filters; it does not derive a new official status.
 - The dashboard bundles a resized copy of the official Campo Digital logo instead of fetching it from the public website at runtime. The Transelec name remains text and the brand link has an accessible name.
 - `.claude/skills/transelec-workbook/SKILL.md` provides an intake procedure and `CLAUDE.md` routes planilla tasks to it. The canonical parsing rules remain in [Source Contract V2](../source-contract-v2.md). The private structural inspector uses the importer's recognizer and writes its report outside the repository.
 
 ## Verification and limits
 
-The author reported 228 Vitest tests, 107 Playwright tests, typecheck and build passing locally on the PR head. Two early browser runs each had one timeout; the cause was not established. GitHub CI is the merge gate. Screenshots were made with synthetic data in a local scratchpad and are not committed to the PR.
+The author reported 228 Vitest tests, 107 Playwright tests, typecheck and build passing locally on the PR head. Two early browser runs each had one timeout; the cause was not established. GitHub CI is the merge gate. PR #59 adds a Transelec dashboard job for lint, unit tests, typecheck/build and browser tests; its outcome must be checked on the final head. Screenshots were made with synthetic data in a local scratchpad and are not committed to the PR.
 
 The UI does not decide which owner-status rule is official, what AEF means, whether AEF is per PMF or area of cutting, which status to choose when a PMF's rows disagree, or whether the pending-stage label **Rechazado** is correct for every case in that bucket. These are [questions for Campo Digital](../es/2026-09-26-panel-usabilidad.md).
