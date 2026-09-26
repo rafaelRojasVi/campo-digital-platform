@@ -1,10 +1,11 @@
 /**
  * Display vocabulary for the AEF tracking block (contract V2).
  *
- * The five fields are row-level source values. Nothing here derives a
- * PMF-level AEF state, fills a blank from a sibling row, or interprets what
- * an AEF value means beyond its literal text — the source does not establish
- * that, so the dashboard does not either.
+ * On a row, the five fields are that row's source values. PMF-level values
+ * are resolved by the server (`TranselecAef.pmfs`) with the rows that
+ * supplied them; nothing here fills a blank row from a sibling row, or
+ * interprets what an AEF value means beyond its literal text — the source
+ * does not establish that, so the dashboard does not either.
  */
 import type { ChronologyFlag, ResumenRow } from '../api'
 

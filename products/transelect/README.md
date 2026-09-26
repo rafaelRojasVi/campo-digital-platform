@@ -36,10 +36,15 @@ Source files remain outside Git.
   column and issue (with row/column references) in a report;
 - blocks on missing identity/required columns, ambiguous mappings and
   conflicting duplicate columns; warns on data it cannot read as typed, on
-  AEF date-order inconsistencies and on rows without PMF;
+  AEF date-order inconsistencies, on PMF whose rows carry different AEF
+  tracking values and on rows without PMF;
+- reads a text date only when it is one written-out Spanish date, and keeps
+  the raw text of every text cell in a date column;
 - treats `ID_Predo_Unico` only as a provisional source-derived predio identity.
 
-No PMF-level status or AEF aggregation rule has been inferred.
+AEF tracking values are presented per PMF with the source rows that supplied
+them; rows are never rewritten, and a PMF whose rows disagree is flagged, not
+resolved. No PMF-level status rule has been inferred.
 
 ## Dashboard
 

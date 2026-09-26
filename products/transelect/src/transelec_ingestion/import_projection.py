@@ -126,7 +126,10 @@ RESUMEN_ROW_PROJECTION: tuple[ColumnProjection, ...] = (
     ColumnProjection("sector", "sector", "text"),
 )
 
-_DERIVED_COLUMNS = ("predio_group_key",)
+# ``source_text_dates``: per date field whose cell held text, that raw text
+# and its classification (resumen_layout.TextDateEvidence), or NULL.
+_DERIVED_COLUMNS = ("predio_group_key", "source_text_dates")
+_JSONB_COLUMNS = frozenset({"source_text_dates"})
 
 _ROW_COLUMNS: tuple[str, ...] = (
     tuple(spec.column for spec in RESUMEN_ROW_PROJECTION) + _DERIVED_COLUMNS
@@ -279,6 +282,21 @@ def _project_row(source_row: ResumenSourceRow) -> ProjectedRow:
     for spec in RESUMEN_ROW_PROJECTION:
         columns[spec.column] = _COERCERS[spec.kind](source_row.values[spec.contract_field])
 
+    # A date column whose cell held text: the unambiguous single date read
+    # from it (if any) becomes the column value, and the raw text is kept
+    # verbatim beside it so nothing unresolved is lost.
+    for name, evidence in source_row.text_dates.items():
+        if evidence.parsed is not None:
+            columns[name] = evidence.parsed
+    columns["source_text_dates"] = (
+        json.dumps(
+            {name: evidence.to_dict() for name, evidence in sorted(source_row.text_dates.items())},
+            ensure_ascii=False,
+        )
+        if source_row.text_dates
+        else None
+    )
+
     columns["predio_group_key"] = resolve_predio_group_key(
         id_predio_unico=columns["id_predio_unico"],
         pmf=columns["pmf"],
@@ -418,7 +436,10 @@ def _insert_rows(connection: Connection, *, import_id: int, validated: Validated
     # source contract — never from caller input or workbook content. Every
     # value is a bound parameter.
     columns = ("import_id", "source_row_number", *_ROW_COLUMNS)
-    placeholders = ", ".join(f":{column}" for column in columns)
+    placeholders = ", ".join(
+        f"CAST(:{column} AS jsonb)" if column in _JSONB_COLUMNS else f":{column}"
+        for column in columns
+    )
     statement = text(
         f"INSERT INTO platform.transelec_resumen_row ({', '.join(columns)}) VALUES ({placeholders})"
     )

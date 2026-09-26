@@ -17,14 +17,18 @@ ingreso, N Ingreso, Empresa, ID_Predo_Unico, Sector, Observación auxiliar``
 adjustments (not re-derived here — the corrected audit doc already decided
 both):
 
-1. **``Carpeta`` is split into its two positionally-distinct source
-   fields**, ``carpeta_source`` (column E) and ``carpeta_normalizada``
-   (column AC), each its own labeled column — Actualizable's single
-   ``Carpeta`` export value has *ambiguous* provenance (a JS object-key
-   collision silently picks one of the two source columns, and which one
-   was never independently confirmed), so exporting both, positionally,
-   is more faithful than guessing which one Javier's export happens to
-   keep.
+1. **``Carpeta`` is split into its two distinct source fields**,
+   ``carpeta_source`` (the ``Carpeta`` beside ``PMF``) and
+   ``carpeta_normalizada`` (the ``Carpeta`` beside ``Tramite``/``Sector``),
+   each its own labeled column — Actualizable's single ``Carpeta`` export
+   value has *ambiguous* provenance (a JS object-key collision silently
+   picks one of the two source columns, and which one was never
+   independently confirmed), so exporting both is more faithful than
+   guessing which one Javier's export happens to keep. The headers name
+   what each field is (``Carpeta PMF`` / ``Carpeta normalizada``, as the
+   dashboard labels them), not a column letter: the letters were E/AC in
+   the 14-Aug-2026 layout and J/AH in the 09-Sept-2026 one, and contract V2
+   binds these fields by header and neighbour, not by position.
 2. **``Observación auxiliar`` ships as an always-empty reserved column.**
    The audit confirms this field is sourced from the ``Pendientes`` sheet
    (per the source HTML's own footer text), not from any ``Resumen`` A:AD
@@ -41,6 +45,12 @@ Net result: **18 columns, not a literal 17** — the corrected matrix's
 TR-FUNC-037 row documents why. This is still a single named constant, so a
 future correction (e.g. Javier confirming a preference between the two
 ``Carpeta`` columns) is a one-place change.
+
+A date column (``Fecha de ingreso``) exports the date when there is one.
+When the source cell held text that was not resolved to a date (several
+dates, ``-``, a numeric day/month form), the export writes that raw text
+instead of leaving the cell blank, so the export never loses what the
+workbook said. The raw text is kept on the row (``source_text_dates``).
 
 CSV formula-injection hardening is a **separate, mandatory, security**
 requirement, independent of the field-set question above: any cell value
@@ -73,12 +83,12 @@ _OBSERVACION_AUXILIAR_RESERVED_COLUMN = "_observacion_auxiliar_reserved_v1"
 # (destination column name, Spanish CSV header) — see the module docstring
 # for the rationale behind each inclusion/exclusion/split. Order here is the
 # order columns are written in the exported file, matching Actualizable's
-# own export order with Carpeta split into its two positional source fields.
+# own export order with Carpeta split into its two distinct source fields.
 EXPORT_FIELDS_V1: tuple[tuple[str, str], ...] = (
     ("pmf", "PMF"),
     ("predio_ref", "Predio Ref"),
-    ("carpeta_source", "Carpeta (col. E)"),
-    ("carpeta_normalizada", "Carpeta (col. AC)"),
+    ("carpeta_source", "Carpeta PMF"),
+    ("carpeta_normalizada", "Carpeta normalizada"),
     ("pas", "PAS"),
     ("estado_resumido", "Estado resumido"),
     ("tipo_rechazo", "Tipo de rechazo"),
@@ -138,7 +148,12 @@ def _render_row_cell(row: Mapping[str, Any], column: str) -> str:
         # "this column is never populated," not merely "no real
         # transelec_resumen_row column happens to be named this."
         return ""
-    return _render_cell(row.get(column))
+    value = row.get(column)
+    if value is None:
+        evidence = (row.get("source_text_dates") or {}).get(column)
+        if evidence and evidence.get("parsed") is None:
+            return neutralize_formula_injection(str(evidence.get("raw") or ""))
+    return _render_cell(value)
 
 
 def render_transelec_export_csv(rows: Sequence[Mapping[str, Any]]) -> bytes:

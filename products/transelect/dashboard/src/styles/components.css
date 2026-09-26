@@ -1396,3 +1396,22 @@
 .aef-empty {
   color: var(--ink-3);
 }
+
+.source-row {
+  display: block;
+  color: var(--ink-3);
+  font-size: var(--t-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.variant-list {
+  margin: var(--s-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.raw-text {
+  font-family: var(--font-mono);
+  font-size: var(--t-small);
+  white-space: pre-wrap;
+}

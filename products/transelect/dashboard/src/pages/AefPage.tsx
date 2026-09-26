@@ -2,17 +2,17 @@
  * `/transelec/seguimiento-aef` — the AEF tracking block, as its own reading section.
  *
  * The 09-Sept-2026 workbook added five columns to `Resumen`: `AEF`, `Quien
- * solicita`, `Fecha solicitud`, `Fecha corta` and `Fecha termino`. They are
- * recorded per row (per área de corta), and sparsely: in that workbook 23 of
- * 729 rows carry an AEF value and 19 a requester, and PMFs with an AEF row
- * usually also have rows without one.
+ * solicita`, `Fecha solicitud`, `Fecha corta` and `Fecha termino`. In that
+ * workbook every AEF value sits on its PMF's first row and the PMF's other
+ * rows are blank, so the fields read as describing the PMF.
  *
- * So this page counts rows, never PMFs-by-association:
+ * This page therefore shows them per PMF, without rewriting any row:
  *
- *  - every figure is "N of M rows", and PMF coverage is shown as an explicit
- *    per-PMF ratio with partial coverage called out;
- *  - a blank value is shown as blank on its own row; nothing is filled down
- *    or borrowed from a sibling row;
+ *  - each PMF-level value names the source row(s) that supplied it;
+ *  - when two rows of one PMF carry different values, the page says so and
+ *    lists each value with its rows — it never picks one;
+ *  - the rows themselves are shown below exactly as the workbook has them:
+ *    a blank row stays blank, nothing is filled down;
  *  - AEF values are grouped by their literal spelling only — the source does
  *    not define what each value means, so neither does this page;
  *  - date-order inconsistencies are flagged for review, and the dates are
@@ -23,12 +23,12 @@
  * source never described.
  */
 import { useCallback, useState } from 'react'
-import { type ResumenRow, type TranselecAef, getAef } from '../api'
+import { type AefPmf, type AefPmfField, type ResumenRow, type TranselecAef, getAef } from '../api'
 import { RowDetailDrawer } from '../components/RowDetailDrawer'
 import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
 import { StatusPill } from '../components/StatusPill'
 import { cell, formatDate, formatInteger } from '../format'
-import { chronologyFlagsOf, chronologyLabel } from '../lib/aef'
+import { AEF_FIELDS, AEF_FIELD_LABELS, chronologyFlagsOf, chronologyLabel } from '../lib/aef'
 import { activeFilterChips, withoutChip } from '../lib/filterUrl'
 import { useReads, type FilterController } from '../lib/useFilters'
 import { Link, ROUTES } from '../router'
@@ -36,6 +36,56 @@ import { Chip, SectionHeader, StatStrip } from '../ui/Primitives'
 
 function ofTotal(part: number, total: number): string {
   return `${formatInteger(part)} de ${formatInteger(total)}`
+}
+
+function rowsLabel(rows: readonly number[]): string {
+  return `${rows.length === 1 ? 'fila' : 'filas'} ${rows.join(', ')}`
+}
+
+function displayValue(value: string, kind: AefPmfField['value_kind']): string {
+  return kind === 'date' ? formatDate(value) : value
+}
+
+function PmfFieldCell({ field, blankLabel }: { field: AefPmfField; blankLabel: string }) {
+  if (field.status === 'blank') return <span className="aef-empty">{blankLabel}</span>
+  if (field.status === 'conflict') {
+    return (
+      <div data-status="conflict">
+        <span className="flag">Valores distintos</span>
+        <ul className="variant-list">
+          {field.variants.map((variant) => (
+            <li key={variant.source_rows.join('-')}>
+              {/^\d{4}-\d{2}-\d{2}$/.test(variant.value)
+                ? formatDate(variant.value)
+                : variant.value}
+              <span className="source-row">{rowsLabel(variant.source_rows)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+  return (
+    <div data-status="value">
+      {field.value_kind === 'raw_text' ? (
+        <>
+          <span className="raw-text">{field.value}</span>{' '}
+          <span className="flag">Texto sin fecha</span>
+        </>
+      ) : (
+        displayValue(field.value ?? '', field.value_kind)
+      )}
+      <span className="source-row">{rowsLabel(field.source_rows)}</span>
+    </div>
+  )
+}
+
+const BLANK_LABELS: Record<(typeof AEF_FIELDS)[number], string> = {
+  aef: 'Sin AEF',
+  quien_solicita: 'Sin solicitante',
+  fecha_solicitud: '—',
+  fecha_corta: '—',
+  fecha_termino: '—',
 }
 
 function CountTable({
@@ -46,7 +96,7 @@ function CountTable({
 }: {
   caption: string
   blankLabel: string
-  entries: TranselecAef['por_aef']
+  entries: TranselecAef['pmf_por_aef']
   testId: string
 }) {
   return (
@@ -58,7 +108,7 @@ function CountTable({
             <tr>
               <th scope="col">Valor en la planilla</th>
               <th scope="col" className="numeric">
-                Filas
+                PMF
               </th>
             </tr>
           </thead>
@@ -72,6 +122,52 @@ function CountTable({
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+function PmfTable({ pmfs }: { pmfs: AefPmf[] }) {
+  return (
+    <div className="tablewrap">
+      <table className="rows-table" data-testid="aef-pmfs">
+        <thead>
+          <tr>
+            <th scope="col">PMF</th>
+            <th scope="col" className="numeric">
+              Filas
+            </th>
+            {AEF_FIELDS.map((field) => (
+              <th scope="col" key={field}>
+                {AEF_FIELD_LABELS[field]}
+              </th>
+            ))}
+            <th scope="col">Revisión</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pmfs.map((entry) => (
+            <tr key={entry.pmf} data-testid={`aef-pmf-${entry.pmf}`}>
+              <td>
+                <b>{entry.pmf}</b>
+              </td>
+              <td className="numeric">{formatInteger(entry.total_rows)}</td>
+              {AEF_FIELDS.map((field) => (
+                <td key={field}>
+                  <PmfFieldCell field={entry.fields[field]} blankLabel={BLANK_LABELS[field]} />
+                </td>
+              ))}
+              <td>
+                {entry.has_conflict && <span className="flag">Conflicto entre filas</span>}
+                {entry.chronology_flags.map((flag) => (
+                  <span className="flag" key={flag}>
+                    {chronologyLabel(flag)}
+                  </span>
+                ))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -136,8 +232,8 @@ export function AefPage({
     <div className="page enter" aria-busy={loading}>
       <SectionHeader
         title="Seguimiento AEF"
-        basis="por fila"
-        meta="AEF, solicitante y fechas tal como vienen en cada fila de la hoja «Resumen»."
+        basis="por PMF"
+        meta="AEF, solicitante y fechas de cada PMF, con la fila de la hoja «Resumen» de la que viene cada valor."
       />
 
       {chips.length > 0 && (
@@ -155,186 +251,178 @@ export function AefPage({
         </div>
       )}
 
-      <AlertBanner tone="info" title="Registro por fila, no por PMF">
-        La planilla registra el AEF en cada área de corta. Una fila sin AEF se muestra vacía: el
-        valor de otra fila del mismo PMF no se le aplica.
+      <AlertBanner tone="info" title="Valores por PMF, con su fila de origen">
+        La planilla escribe el AEF una vez por PMF, en una de sus filas. Aquí se muestra como valor
+        del PMF indicando esa fila; las demás filas no se modifican y siguen vacías en el detalle
+        por fila. Si dos filas de un PMF tienen valores distintos, se marca para revisión y no se
+        elige ninguno.
+        {chips.length > 0 &&
+          ' Los PMF mostrados tienen alguna fila en el alcance filtrado; sus valores consideran todas sus filas.'}
         {missingColumns > 0 &&
           ` La planilla publicada no incluye ${missingColumns === 1 ? 'una' : missingColumns} de las cinco columnas de seguimiento.`}
       </AlertBanner>
+
+      {data.pmf_with_conflict > 0 && (
+        <AlertBanner tone="warn" title="Valores distintos dentro de un PMF">
+          {formatInteger(data.pmf_with_conflict)}{' '}
+          {data.pmf_with_conflict === 1 ? 'PMF tiene' : 'PMF tienen'} valores distintos en sus
+          filas. Revise las filas indicadas en la planilla.
+        </AlertBanner>
+      )}
 
       <StatStrip
         testId="aef-kpis"
         items={[
           {
-            id: 'aef-rows',
-            label: 'Filas con AEF',
-            value: ofTotal(data.rows_with_aef, data.row_count),
-            sub: 'filas del alcance',
-          },
-          {
             id: 'aef-pmf',
-            label: 'PMF con alguna fila con AEF',
+            label: 'PMF con AEF',
             value: ofTotal(data.pmf_with_aef, data.pmf_count),
-            sub: `${formatInteger(data.pmf_with_partial_aef)} con AEF solo en parte de sus filas`,
+            sub: 'PMF del alcance',
           },
           {
-            id: 'aef-requester',
-            label: 'Filas con solicitante',
-            value: ofTotal(data.rows_with_quien_solicita, data.rows_with_any_tracking),
-            sub: 'de las filas con seguimiento',
+            id: 'aef-tracking',
+            label: 'PMF con seguimiento',
+            value: formatInteger(data.pmf_with_tracking),
+            sub: `${formatInteger(data.rows_with_any_tracking)} ${data.rows_with_any_tracking === 1 ? 'fila' : 'filas'} con algún valor`,
+          },
+          {
+            id: 'aef-conflicts',
+            label: 'PMF con conflicto',
+            value: formatInteger(data.pmf_with_conflict),
+            sub: 'valores distintos entre filas',
           },
           {
             id: 'aef-chronology',
             label: 'Fechas a revisar',
-            value: formatInteger(data.rows_with_chronology_warning),
-            sub: 'filas con fechas en orden inconsistente',
+            value: formatInteger(data.pmf_with_chronology_warning),
+            sub: 'PMF con fechas en orden inconsistente',
           },
         ]}
       />
 
-      {data.rows.length === 0 ? (
+      {data.pmfs.length === 0 ? (
         <section className="ruled" style={{ marginTop: 'var(--s-6)' }}>
           <p className="empty" data-testid="aef-empty">
-            No hay filas con seguimiento AEF en el alcance seleccionado.
+            No hay PMF con seguimiento AEF en el alcance seleccionado.
             {chips.length > 0 && ' Quite un filtro para ampliar el alcance.'}
           </p>
         </section>
       ) : (
         <>
-          <section className="ruled" aria-labelledby="aef-rows-title" style={{ marginTop: 'var(--s-6)' }}>
+          <section className="ruled" aria-labelledby="aef-pmfs-title" style={{ marginTop: 'var(--s-6)' }}>
             <div className="table-toolbar">
               <div className="result-count">
-                <h2 id="aef-rows-title" className="eyebrow">
-                  Filas con seguimiento
+                <h2 id="aef-pmfs-title" className="eyebrow">
+                  Seguimiento por PMF
                 </h2>
-                <span data-testid="aef-rows-total">
-                  <b>{formatInteger(data.rows_with_any_tracking)}</b> filas
+                <span data-testid="aef-pmfs-total">
+                  <b>{formatInteger(data.pmfs.length)}</b> PMF
                 </span>
               </div>
             </div>
-            <div className="tablewrap">
-              <table className="rows-table">
-                <thead>
-                  <tr>
-                    <th scope="col" className="numeric">
-                      Fila
-                    </th>
-                    <th scope="col">PMF</th>
-                    <th scope="col">Área corta</th>
-                    <th scope="col">Estado resumido</th>
-                    <th scope="col">AEF</th>
-                    <th scope="col">Quién solicita</th>
-                    <th scope="col">Fecha solicitud</th>
-                    <th scope="col">Fecha corta</th>
-                    <th scope="col">Fecha término</th>
-                    <th scope="col">Revisión</th>
-                  </tr>
-                </thead>
-                <tbody data-testid="aef-rows">
-                  {data.rows.map((row) => (
-                    <tr
-                      key={row.source_row_number}
-                      tabIndex={0}
-                      data-testid={`aef-row-${row.source_row_number}`}
-                      onClick={() => setOpenRow(row)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault()
-                          setOpenRow(row)
-                        }
-                      }}
-                    >
-                      <td className="numeric">{row.source_row_number}</td>
-                      <td>
-                        <b>{row.pmf}</b>
-                      </td>
-                      <td>{cell(row.numero_area_corta)}</td>
-                      <td>
-                        <StatusPill value={row.estado_resumido} />
-                      </td>
-                      <td>{cell(row.aef) || <span className="aef-empty">Sin AEF</span>}</td>
-                      <td>
-                        {cell(row.quien_solicita) || (
-                          <span className="aef-empty">Sin solicitante</span>
-                        )}
-                      </td>
-                      <td>{formatDate(row.fecha_solicitud) || <span className="aef-empty">—</span>}</td>
-                      <td>{formatDate(row.fecha_corta) || <span className="aef-empty">—</span>}</td>
-                      <td>{formatDate(row.fecha_termino) || <span className="aef-empty">—</span>}</td>
-                      <td>
-                        {chronologyFlagsOf(row).map((flag) => (
-                          <span className="flag" key={flag}>
-                            {chronologyLabel(flag)}
-                          </span>
-                        ))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="hint">
-              Las fechas se muestran tal como vienen en la planilla; una fecha marcada para revisar
-              no se corrige aquí. Para verlas junto al resto de las filas, use el{' '}
-              <Link to={ROUTES.explorador}>Explorador</Link> con el filtro AEF.
-            </p>
+            <PmfTable pmfs={data.pmfs} />
           </section>
 
           <section className="ruled split-two" style={{ marginTop: 'var(--s-6)' }}>
             <CountTable
-              caption="Filas por valor de AEF"
+              caption="PMF por valor de AEF"
               blankLabel="Sin AEF"
-              entries={data.por_aef}
+              entries={data.pmf_por_aef}
               testId="aef-by-value"
             />
             <CountTable
-              caption="Filas por solicitante"
+              caption="PMF por solicitante"
               blankLabel="Sin solicitante"
-              entries={data.por_solicitante}
+              entries={data.pmf_por_solicitante}
               testId="aef-by-requester"
             />
           </section>
 
-          <section className="ruled stack-tight" style={{ marginTop: 'var(--s-6)' }}>
-            <h3>Cobertura por PMF</h3>
-            <p className="hint">
-              Cuántas filas de cada PMF tienen AEF. Una cobertura parcial significa que el PMF tiene
-              filas sin registro AEF en la planilla.
-            </p>
-            <div className="tablewrap short">
-              <table data-testid="aef-coverage">
-                <thead>
-                  <tr>
-                    <th scope="col">PMF</th>
-                    <th scope="col" className="numeric">
-                      Filas con AEF
-                    </th>
-                    <th scope="col" className="numeric">
-                      Filas del PMF
-                    </th>
-                    <th scope="col">Cobertura</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.pmf_coverage.map((entry) => (
-                    <tr key={entry.pmf}>
-                      <td>
-                        <b>{entry.pmf}</b>
-                      </td>
-                      <td className="numeric">{formatInteger(entry.rows_with_aef)}</td>
-                      <td className="numeric">{formatInteger(entry.total_rows)}</td>
-                      <td>
-                        {entry.rows_with_aef === entry.total_rows ? (
-                          'Todas las filas'
-                        ) : (
-                          <span className="flag">Parcial</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <section className="ruled" aria-labelledby="aef-rows-title" style={{ marginTop: 'var(--s-6)' }}>
+            <div className="table-toolbar">
+              <div className="result-count">
+                <h2 id="aef-rows-title" className="eyebrow">
+                  Detalle por fila
+                </h2>
+                <span data-testid="aef-rows-total">
+                  <b>{formatInteger(data.rows_with_any_tracking)}</b>{' '}
+                  {data.rows_with_any_tracking === 1 ? 'fila' : 'filas'} con algún valor de
+                  seguimiento
+                </span>
+              </div>
             </div>
+            {data.rows.length === 0 ? (
+              <p className="empty">
+                Ninguna fila del alcance filtrado tiene valores propios de seguimiento.
+              </p>
+            ) : (
+              <div className="tablewrap">
+                <table className="rows-table">
+                  <thead>
+                    <tr>
+                      <th scope="col" className="numeric">
+                        Fila
+                      </th>
+                      <th scope="col">PMF</th>
+                      <th scope="col">Área corta</th>
+                      <th scope="col">Estado resumido</th>
+                      <th scope="col">AEF</th>
+                      <th scope="col">Quién solicita</th>
+                      <th scope="col">Fecha solicitud</th>
+                      <th scope="col">Fecha corta</th>
+                      <th scope="col">Fecha término</th>
+                      <th scope="col">Revisión</th>
+                    </tr>
+                  </thead>
+                  <tbody data-testid="aef-rows">
+                    {data.rows.map((row) => (
+                      <tr
+                        key={row.source_row_number}
+                        tabIndex={0}
+                        data-testid={`aef-row-${row.source_row_number}`}
+                        onClick={() => setOpenRow(row)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            setOpenRow(row)
+                          }
+                        }}
+                      >
+                        <td className="numeric">{row.source_row_number}</td>
+                        <td>
+                          <b>{row.pmf}</b>
+                        </td>
+                        <td>{cell(row.numero_area_corta)}</td>
+                        <td>
+                          <StatusPill value={row.estado_resumido} />
+                        </td>
+                        <td>{cell(row.aef) || <span className="aef-empty">Sin AEF</span>}</td>
+                        <td>
+                          {cell(row.quien_solicita) || (
+                            <span className="aef-empty">Sin solicitante</span>
+                          )}
+                        </td>
+                        <td>{formatDate(row.fecha_solicitud) || <span className="aef-empty">—</span>}</td>
+                        <td>{formatDate(row.fecha_corta) || <span className="aef-empty">—</span>}</td>
+                        <td>{formatDate(row.fecha_termino) || <span className="aef-empty">—</span>}</td>
+                        <td>
+                          {chronologyFlagsOf(row).map((flag) => (
+                            <span className="flag" key={flag}>
+                              {chronologyLabel(flag)}
+                            </span>
+                          ))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="hint">
+              Cada fila muestra solo sus propios valores, tal como vienen en la planilla; una fecha
+              marcada para revisar no se corrige aquí. Para verlas junto al resto de las filas, use
+              el <Link to={ROUTES.explorador}>Explorador</Link> con el filtro AEF.
+            </p>
           </section>
         </>
       )}

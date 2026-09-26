@@ -13,6 +13,11 @@ header rather than by position (``transelec_ingestion.resumen_layout``).
   no value (or the source layout had no such column), never "not applicable
   to the PMF". Rows of imports made before this revision stay NULL, which is
   exactly what their source said.
+- ``platform.transelec_resumen_row.source_text_dates`` (JSONB, nullable)
+  keeps, per date field whose cell held text instead of an Excel date, the
+  raw text and how it was classified (a single Spanish written-out date that
+  was parsed; several dates; ``-``; or unrecognized). NULL when the row had
+  no such cell.
 - ``platform.transelec_import`` gains ``mapping_report`` (the resolver's
   column decisions, ignored regions and issues with row/column references)
   and ``warning_count``. ``mapping_report`` is NULL for imports validated
@@ -63,6 +68,11 @@ def upgrade() -> None:
     op.add_column(
         "transelec_resumen_row",
         sa.Column("fecha_termino", sa.Date(), nullable=True),
+        schema="platform",
+    )
+    op.add_column(
+        "transelec_resumen_row",
+        sa.Column("source_text_dates", postgresql.JSONB(), nullable=True),
         schema="platform",
     )
     op.create_index(
@@ -125,5 +135,12 @@ def downgrade() -> None:
         table_name="transelec_resumen_row",
         schema="platform",
     )
-    for column in ("fecha_termino", "fecha_corta", "fecha_solicitud", "quien_solicita", "aef"):
+    for column in (
+        "source_text_dates",
+        "fecha_termino",
+        "fecha_corta",
+        "fecha_solicitud",
+        "quien_solicita",
+        "aef",
+    ):
         op.drop_column("transelec_resumen_row", column, schema="platform")

@@ -8,9 +8,11 @@ bottom, which reads it from a local path and commits nothing from it.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import re
 import zipfile
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -23,8 +25,10 @@ from transelec_ingestion.resumen_layout import (
     ALIAS_INDEX,
     FIELD_SPECS,
     chronology_flags,
+    classify_text_date,
     column_letter,
     normalize_header,
+    resolve_pmf_field,
 )
 from transelec_ingestion.xlsx_contract import (
     CURRENT_RESUMEN_COLUMNS,
@@ -436,6 +440,198 @@ def test_text_in_a_date_column_is_reported_and_never_guessed(tmp_path: Path) -> 
         i for i in validated.mapping_report["issues"] if i["code"] == "fecha_no_reconocida"
     )
     assert (issue["severity"], issue["columns"], issue["rows"]) == ("warning", ["D"], [2])
+    # The unresolved text is kept on the row, not dropped.
+    assert json.loads(validated.rows[0].columns["source_text_dates"]) == {
+        "fecha_corta": {"raw": "09-08-2026", "resolution": "unrecognized", "parsed": None}
+    }
+
+
+@pytest.mark.parametrize(
+    ("raw", "resolution", "parsed"),
+    [
+        ("13 de noviembre de 2024", "parsed_spanish_long", dt.date(2024, 11, 13)),
+        ("8 de Noviembre de 2024", "parsed_spanish_long", dt.date(2024, 11, 8)),
+        ("  09 de DICIEMBRE de 2025 ", "parsed_spanish_long", dt.date(2025, 12, 9)),
+        ("1 de setiembre de 2025", "parsed_spanish_long", dt.date(2025, 9, 1)),
+        # Not a real calendar day: never "corrected" to a nearby one.
+        ("31 de febrero de 2025", "unrecognized", None),
+        ("13 de noviembre", "unrecognized", None),
+        ("13 de brumario de 2024", "unrecognized", None),
+        ("20-12-2024 09-06-26", "multiple_dates", None),
+        ("10-09-2025\n07-07-2026", "multiple_dates", None),
+        ("14-08-2025 \n05-01-2026", "multiple_dates", None),
+        ("13 de noviembre de 2024 y 20-12-2024", "multiple_dates", None),
+        ("-", "placeholder", None),
+        (" — ", "placeholder", None),
+        # Day/month order of a numeric form is not established: not parsed.
+        ("04-09-2025", "unrecognized", None),
+        ("pendiente", "unrecognized", None),
+    ],
+)
+def test_classify_text_date(raw: str, resolution: str, parsed: dt.date | None) -> None:
+    evidence = classify_text_date(raw)
+
+    assert (evidence.resolution, evidence.parsed) == (resolution, parsed)
+    assert evidence.raw == raw.strip()
+
+
+def test_text_dates_parse_only_single_spanish_dates_and_keep_raw_text(tmp_path: Path) -> None:
+    rows = [
+        _base_values(fecha_ingreso="13 de noviembre de 2024", fecha_90_dias="-"),
+        _base_values(fecha_ingreso="20-12-2024 09-06-26", fecha_90_dias=dt.date(2025, 3, 26)),
+        _base_values(fecha_ingreso="-", fecha_90_dias="26 de marzo de 2025"),
+        _base_values(fecha_ingreso=dt.date(2024, 11, 20)),
+    ]
+    path = _current_layout(tmp_path / "text-dates.xlsx", rows)
+
+    workbook = load_transelec_workbook(path)
+    validated = read_validated_workbook(path)
+
+    # The worksheet values are untouched; the classification sits beside them.
+    assert workbook.resumen_rows[0].values["fecha_ingreso"] == "13 de noviembre de 2024"
+    columns = [row.columns for row in validated.rows]
+    assert [c["fecha_ingreso"] for c in columns] == [
+        dt.date(2024, 11, 13),
+        None,
+        None,
+        dt.date(2024, 11, 20),
+    ]
+    assert [c["fecha_90_dias"] for c in columns] == [
+        None,
+        dt.date(2025, 3, 26),
+        dt.date(2025, 3, 26),
+        None,
+    ]
+    assert json.loads(columns[1]["source_text_dates"]) == {
+        "fecha_ingreso": {
+            "raw": "20-12-2024 09-06-26",
+            "resolution": "multiple_dates",
+            "parsed": None,
+        }
+    }
+    assert json.loads(columns[0]["source_text_dates"])["fecha_ingreso"] == {
+        "raw": "13 de noviembre de 2024",
+        "resolution": "parsed_spanish_long",
+        "parsed": "2024-11-13",
+    }
+    assert columns[3]["source_text_dates"] is None
+
+    issues = {
+        (issue["code"], issue["field"]): (issue["severity"], issue["rows"], issue["row_count"])
+        for issue in validated.mapping_report["issues"]
+        if issue["code"].startswith("fecha_")
+    }
+    assert issues == {
+        ("fecha_texto_interpretada", "fecha_ingreso"): ("info", [2], 1),
+        ("fecha_texto_interpretada", "fecha_90_dias"): ("info", [4], 1),
+        ("fecha_texto_multiple", "fecha_ingreso"): ("warning", [3], 1),
+        ("fecha_texto_guion", "fecha_ingreso"): ("warning", [4], 1),
+        ("fecha_texto_guion", "fecha_90_dias"): ("warning", [2], 1),
+    }
+
+
+def test_text_date_issues_list_every_affected_row(tmp_path: Path) -> None:
+    rows = [_base_values(fecha_ingreso="20-12-2024 09-06-26") for _ in range(60)]
+    path = _current_layout(tmp_path / "many-text-dates.xlsx", rows)
+
+    report = load_transelec_workbook(path).layout
+    issue = next(i for i in report.issues if i.code == "fecha_texto_multiple")
+
+    assert issue.row_count == 60
+    assert issue.rows == tuple(range(2, 62))
+
+
+def _aef_row(pmf: str, **values: Any) -> dict[str, Any]:
+    return _base_values(pmf=pmf, carpeta_source=f"001 TRAMO {pmf}", **values)
+
+
+def test_pmf_level_aef_values_do_not_conflict_when_only_the_first_row_has_them(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        _aef_row("MP001", aef="Presentado", quien_solicita="Persona A"),
+        _aef_row("MP001"),
+        _aef_row("MP001"),
+        # The same value repeated on a second row agrees; it is not a conflict.
+        _aef_row("MP002", aef="Presentado"),
+        _aef_row("MP002", aef=" Presentado "),
+    ]
+    path = _current_layout(tmp_path / "pmf-aef.xlsx", rows)
+
+    workbook = load_transelec_workbook(path)
+
+    assert not [i for i in workbook.layout.issues if i.code == "aef_conflicto_pmf"]
+    # Rows are never filled down.
+    assert [row.values["aef"] for row in workbook.resumen_rows] == [
+        "Presentado",
+        None,
+        None,
+        "Presentado",
+        " Presentado ",
+    ]
+
+
+def test_conflicting_pmf_level_values_are_flagged_not_chosen(tmp_path: Path) -> None:
+    rows = [
+        _aef_row("MP001", aef="Presentado", fecha_corta=dt.date(2026, 8, 1)),
+        _aef_row("MP001"),
+        _aef_row("MP001", aef="Solicitado, se puede cortar", fecha_corta=dt.date(2026, 8, 1)),
+        _aef_row("MP002", quien_solicita="Persona A"),
+        _aef_row("MP002", quien_solicita="persona a"),
+        _aef_row("MP003", fecha_termino=dt.date(2026, 9, 1)),
+        _aef_row("MP003", fecha_termino="-"),
+        _aef_row("MP004", aef="Presentado"),
+    ]
+    path = _current_layout(tmp_path / "pmf-conflict.xlsx", rows)
+
+    workbook = load_transelec_workbook(path)
+
+    conflicts = {
+        issue.field: (issue.severity, issue.columns, issue.rows, issue.row_count)
+        for issue in workbook.layout.issues
+        if issue.code == "aef_conflicto_pmf"
+    }
+    assert conflicts == {
+        "aef": ("warning", ("A",), (2, 4), 2),
+        # Case differs: not assumed to be the same person.
+        "quien_solicita": ("warning", ("B",), (5, 6), 2),
+        # A date and an unresolved "-" are not assumed to agree.
+        "fecha_termino": ("warning", ("E",), (7, 8), 2),
+    }
+    # Warnings are counted: publishing needs an explicit acknowledgement.
+    assert workbook.layout.count("warning") >= 3
+    assert workbook.resumen_rows[2].values["aef"] == "Solicitado, se puede cortar"
+
+
+@pytest.mark.parametrize(
+    ("entries", "status", "value", "rows", "variants"),
+    [
+        ([], "blank", None, (), ()),
+        ([(2, None), (3, "  ")], "blank", None, (), ()),
+        ([(2, "X"), (3, None)], "value", "X", (2,), 1),
+        ([(2, "X"), (3, None), (4, "X ")], "value", "X", (2, 4), 1),
+        ([(2, "X"), (3, "Y"), (4, "X")], "conflict", None, (2, 3, 4), 2),
+        (
+            [(2, dt.datetime(2026, 8, 1)), (3, dt.date(2026, 8, 1))],
+            "value",
+            dt.date(2026, 8, 1),
+            (2, 3),
+            1,
+        ),
+        ([(2, dt.date(2026, 8, 1)), (3, "2026-08-01")], "conflict", None, (2, 3), 2),
+    ],
+)
+def test_resolve_pmf_field(
+    entries: list[tuple[int, Any]],
+    status: str,
+    value: Any,
+    rows: tuple[int, ...],
+    variants: Any,
+) -> None:
+    resolved = resolve_pmf_field(entries)
+
+    assert (resolved.status, resolved.value, resolved.source_rows) == (status, value, rows)
+    assert len(resolved.variants) == (variants if isinstance(variants, int) else 0)
 
 
 def test_chronology_inconsistencies_are_warnings_and_dates_are_kept(tmp_path: Path) -> None:
@@ -687,6 +883,52 @@ def test_private_09_sept_2026_workbook() -> None:
         "cronologia_corta_antes_de_solicitud": (315,),
         "cronologia_termino_antes_de_corta": (375,),
     }
+
+    # Text in date columns: 67 single written-out Spanish dates are parsed,
+    # 116 cells with several dates and 4 dashes stay unresolved as raw text.
+    text_dates = Counter(
+        (name, evidence.resolution) for row in rows for name, evidence in row.text_dates.items()
+    )
+    assert text_dates == {
+        ("fecha_ingreso", "parsed_spanish_long"): 64,
+        ("fecha_90_dias", "parsed_spanish_long"): 3,
+        ("fecha_ingreso", "multiple_dates"): 58,
+        ("fecha_90_dias", "multiple_dates"): 58,
+        ("fecha_ingreso", "placeholder"): 2,
+        ("fecha_90_dias", "placeholder"): 2,
+    }
+    text_issue_rows = {
+        (issue.code, issue.field): issue.row_count
+        for issue in workbook.layout.issues
+        if issue.code.startswith("fecha_")
+    }
+    assert text_issue_rows == {
+        ("fecha_texto_interpretada", "fecha_ingreso"): 64,
+        ("fecha_texto_interpretada", "fecha_90_dias"): 3,
+        ("fecha_texto_multiple", "fecha_ingreso"): 58,
+        ("fecha_texto_multiple", "fecha_90_dias"): 58,
+        ("fecha_texto_guion", "fecha_ingreso"): 2,
+        ("fecha_texto_guion", "fecha_90_dias"): 2,
+    }
+    assert all(
+        len(issue.rows) == issue.row_count
+        for issue in workbook.layout.issues
+        if issue.code.startswith("fecha_texto")
+    )
+
+    # AEF block per PMF: each of the 23 AEF values is on its PMF's first row,
+    # no PMF has two different values in any tracking field, and 19 of those
+    # PMF have further rows that stay blank.
+    assert not [issue for issue in workbook.layout.issues if issue.code == "aef_conflicto_pmf"]
+    first_row: dict[str, int] = {}
+    pmf_rows: Counter[str] = Counter()
+    for row in rows:
+        first_row.setdefault(row.pmf, row.source_row_number)
+        pmf_rows[row.pmf] += 1
+    aef_rows = [row for row in rows if row.values["aef"]]
+    assert all(row.source_row_number == first_row[row.pmf] for row in aef_rows)
+    assert len({row.pmf for row in aef_rows}) == 23
+    assert sum(1 for row in aef_rows if pmf_rows[row.pmf] > 1) == 19
 
     # Regression against contract V1: every legacy field equals a positional
     # read of the same row shifted right by the five inserted columns.

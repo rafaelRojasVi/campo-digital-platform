@@ -5,13 +5,17 @@ test.beforeEach(async ({ page }) => {
   await stubPlatform(page)
 })
 
-test('the AEF section counts rows and flags the inverted date without changing it', async ({
+test('the AEF section shows PMF values with their row and flags the inverted date', async ({
   page,
 }) => {
   await page.goto('/transelec/seguimiento-aef')
 
   await expect(page.getByTestId('aef-kpis')).toBeVisible()
-  await expect(page.getByText('Registro por fila, no por PMF')).toBeVisible()
+  await expect(page.getByText('Valores por PMF, con su fila de origen')).toBeVisible()
+  const pmf = page.getByTestId('aef-pmf-PMF-002')
+  await expect(pmf).toContainText('Presentado')
+  await expect(pmf).toContainText('fila 2')
+  await expect(pmf).toContainText('Fecha corta anterior a la solicitud')
   const row = page.getByTestId('aef-row-2')
   await expect(row).toContainText('Presentado')
   await expect(row).toContainText('19-08-2026')

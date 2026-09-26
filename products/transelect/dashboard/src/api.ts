@@ -150,10 +150,28 @@ export type ChronologyFlag =
   | 'cronologia_termino_antes_de_corta'
   | 'cronologia_termino_antes_de_solicitud'
 
+export type TextDateResolution =
+  | 'parsed_spanish_long'
+  | 'multiple_dates'
+  | 'placeholder'
+  | 'unrecognized'
+
+/**
+ * Raw text found in a date column. `parsed` is set only when the whole cell
+ * was one written-out Spanish date; otherwise the row has no date for that
+ * field and `raw` is the only record of what the workbook said.
+ */
+export interface SourceTextDate {
+  raw: string
+  resolution: TextDateResolution
+  parsed: string | null
+}
+
 /**
  * Every contract field (the 30 V1 fields plus the five V2 AEF tracking
- * fields) and the derived/technical columns. AEF fields are row-level: a
- * blank on one row never inherits a sibling row's value.
+ * fields) and the derived/technical columns. Values are the row's own: a
+ * blank on one row never inherits a sibling row's value (PMF-level AEF
+ * values are resolved separately, in `TranselecAef.pmfs`).
  */
 export interface ResumenRow {
   source_row_number: number
@@ -194,6 +212,8 @@ export interface ResumenRow {
   fecha_corta: string | null
   fecha_termino: string | null
   chronology_flags: ChronologyFlag[]
+  /** Per date field whose cell held text; absent or `{}` when none did. */
+  source_text_dates?: Record<string, SourceTextDate>
 }
 
 export interface TranselecRowsPage {
@@ -296,15 +316,39 @@ export interface LabelCount {
   count: number
 }
 
-export interface AefPmfCoverage {
+export interface AefValueVariant {
+  value: string
+  source_rows: number[]
+}
+
+/**
+ * One tracking field resolved for a PMF from the rows that carry it.
+ * `value`: all non-blank rows agree and `source_rows` supplied it.
+ * `blank`: no row has a value. `conflict`: rows disagree — no value is
+ * chosen, and `variants` lists each one with its rows.
+ */
+export interface AefPmfField {
+  status: 'value' | 'blank' | 'conflict'
+  value: string | null
+  /** `raw_text`: text from a date column that was not read as a date. */
+  value_kind: 'text' | 'date' | 'raw_text' | null
+  source_rows: number[]
+  variants: AefValueVariant[]
+}
+
+export interface AefPmf {
   pmf: string
   total_rows: number
-  rows_with_aef: number
   rows_with_any_tracking: number
+  rows_with_aef: number
+  source_row_numbers: number[]
+  has_conflict: boolean
+  chronology_flags: ChronologyFlag[]
+  fields: Record<'aef' | 'quien_solicita' | 'fecha_solicitud' | 'fecha_corta' | 'fecha_termino', AefPmfField>
 }
 
 export interface TranselecAef {
-  basis: 'row_level_source_values'
+  basis: 'pmf_from_source_rows'
   source_fields: string[]
   row_count: number
   pmf_count: number
@@ -314,12 +358,19 @@ export interface TranselecAef {
   rows_with_fecha_solicitud: number
   rows_with_fecha_corta: number
   rows_with_fecha_termino: number
-  pmf_with_aef: number
-  pmf_with_partial_aef: number
   rows_with_chronology_warning: number
+  pmf_with_tracking: number
+  pmf_with_aef: number
+  pmf_with_conflict: number
+  pmf_conflicts_by_field: Record<string, number>
+  pmf_with_chronology_warning: number
   por_aef: LabelCount[]
   por_solicitante: LabelCount[]
-  pmf_coverage: AefPmfCoverage[]
+  pmf_por_aef: LabelCount[]
+  pmf_por_solicitante: LabelCount[]
+  /** PMF with any tracking value, in source order; values use all their rows. */
+  pmfs: AefPmf[]
+  /** Row-level detail: the in-scope rows that carry a tracking value. */
   rows: ResumenRow[]
 }
 

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import datetime as dt
 import logging
 import tempfile
 import uuid
@@ -57,7 +58,12 @@ from app.transelec_publication import (
     activate_import,
     read_active_import_id,
 )
-from transelec_ingestion.aef_view import AefInputRow, build_aef_summary, row_chronology_flags
+from transelec_ingestion.aef_view import (
+    AefInputRow,
+    PmfAefRecord,
+    build_aef_summary,
+    row_chronology_flags,
+)
 from transelec_ingestion.csv_export import render_transelec_export_csv
 from transelec_ingestion.import_projection import (
     PARSER_VERSION,
@@ -69,7 +75,7 @@ from transelec_ingestion.import_projection import (
 )
 from transelec_ingestion.owner_status_view import OwnerStatusInputRow, build_owner_status
 from transelec_ingestion.pending_view import PendingInputRow, build_pending
-from transelec_ingestion.resumen_layout import AEF_TRACKING_FIELDS
+from transelec_ingestion.resumen_layout import AEF_TRACKING_FIELDS, PmfFieldValue
 from transelec_ingestion.status_rollups import RolledRow, estado_resumido_first_row
 from transelec_ingestion.summary_view import SummaryInputRow, build_summary
 from transelec_ingestion.xlsx_contract import RESUMEN_COLUMNS, TranselecWorkbookError
@@ -607,7 +613,12 @@ _CONTRACT_FIELDS: tuple[str, ...] = tuple(spec.column for spec in RESUMEN_ROW_PR
 
 # Every persisted transelec_resumen_row column this router selects for a
 # "full row" read (list/detail/pending/export). Order matches the contract.
-_RESUMEN_ROW_COLUMNS: tuple[str, ...] = ("source_row_number", *_CONTRACT_FIELDS, "predio_group_key")
+_RESUMEN_ROW_COLUMNS: tuple[str, ...] = (
+    "source_row_number",
+    *_CONTRACT_FIELDS,
+    "predio_group_key",
+    "source_text_dates",
+)
 
 # TR-FUNC-017-022: the 5 AND'd multi-selects, OR'd within each.
 _MULTISELECT_FIELDS: tuple[str, ...] = (
@@ -797,12 +808,23 @@ def _to_summary_input_row(row: Row[Any]) -> SummaryInputRow:
     )
 
 
+class SourceTextDateView(BaseModel):
+    """Raw text found in a date column (see resumen_layout.TextDateEvidence)."""
+
+    raw: str
+    resolution: Literal["parsed_spanish_long", "multiple_dates", "placeholder", "unrecognized"]
+    parsed: str | None
+
+
 class ResumenRowView(BaseModel):
     """One full ``transelec_resumen_row`` — every contract field (the 30 V1
     fields plus the five V2 AEF tracking fields), the derived
     ``predio_group_key``, the 1-indexed ``source_row_number``, and the
     row's AEF date-order inconsistencies (``chronology_flags``, reported
-    as found and never corrected).
+    as found and never corrected), and ``source_text_dates``: for each date
+    field whose cell held text, that raw text and how it was classified.
+    A date field is NULL unless the cell was an Excel date or a single
+    unambiguous written-out Spanish date; the raw text is never dropped.
 
     Deliberately not trimmed to any particular HTML table's column subset:
     neither ratified document enumerates the exact 11/12/7/9-column sets the
@@ -849,6 +871,7 @@ class ResumenRowView(BaseModel):
     fecha_corta: str | None
     fecha_termino: str | None
     chronology_flags: list[str]
+    source_text_dates: dict[str, SourceTextDateView] = Field(default_factory=dict)
 
 
 def _iso(value: Any) -> str | None:
@@ -864,6 +887,7 @@ def _to_aef_input_row(row: Row[Any]) -> AefInputRow:
         fecha_solicitud=row.fecha_solicitud,
         fecha_corta=row.fecha_corta,
         fecha_termino=row.fecha_termino,
+        text_dates=row.source_text_dates or {},
     )
 
 
@@ -907,6 +931,10 @@ def _resumen_row_view(row: Row[Any]) -> ResumenRowView:
         fecha_corta=_iso(row.fecha_corta),
         fecha_termino=_iso(row.fecha_termino),
         chronology_flags=list(row_chronology_flags(_to_aef_input_row(row))),
+        source_text_dates={
+            name: SourceTextDateView(**evidence)
+            for name, evidence in (row.source_text_dates or {}).items()
+        },
     )
 
 
@@ -1202,7 +1230,7 @@ def get_pmf_detail(
 
 
 # ---------------------------------------------------------------------------
-# GET /aef — contract V2's AEF tracking block, row-level only
+# GET /aef — contract V2's AEF tracking block, per PMF with its source rows
 # ---------------------------------------------------------------------------
 
 
@@ -1211,24 +1239,55 @@ class LabelCountView(BaseModel):
     count: int
 
 
-class AefPmfCoverageView(BaseModel):
+class AefValueVariantView(BaseModel):
+    value: str
+    source_rows: list[int]
+
+
+class AefPmfFieldView(BaseModel):
+    """One tracking field resolved for a PMF.
+
+    ``status`` "value": every non-blank row agrees, ``value`` came from
+    ``source_rows``. "blank": no row has a value. "conflict": rows disagree;
+    ``value`` is None and ``variants`` lists each value with its rows.
+    ``value_kind`` "raw_text" marks text from a date column that was not
+    resolved to a date and is shown as written.
+    """
+
+    status: Literal["value", "blank", "conflict"]
+    value: str | None
+    value_kind: Literal["text", "date", "raw_text"] | None
+    source_rows: list[int]
+    variants: list[AefValueVariantView]
+
+
+class AefPmfView(BaseModel):
     pmf: str
     total_rows: int
-    rows_with_aef: int
     rows_with_any_tracking: int
+    rows_with_aef: int
+    source_row_numbers: list[int]
+    has_conflict: bool
+    chronology_flags: list[str]
+    fields: dict[str, AefPmfFieldView]
 
 
 class TranselecAefResponse(BaseModel):
-    """AEF tracking over the filtered rows of the active version.
+    """AEF tracking for the filtered scope of the active version.
+
+    ``basis`` "pmf_from_source_rows": each field is resolved per PMF from
+    the rows that carry it, naming those rows; rows are never rewritten and
+    a conflict is reported, not decided. PMF shown are those with a row in
+    the filtered scope; their values consider all of the PMF's rows in the
+    version. The ``rows_*`` counts and ``rows`` are row-level, over the
+    filtered scope.
 
     ``source_fields`` lists which of the five tracking columns the published
     workbook actually had, so "the column did not exist" (an older layout)
     is distinguishable from "the column exists and these rows are blank".
-    Every count is a row count or an explicit per-PMF coverage ratio; no
-    value is extended from a row to its PMF.
     """
 
-    basis: Literal["row_level_source_values"]
+    basis: Literal["pmf_from_source_rows"]
     source_fields: list[str]
     row_count: int
     pmf_count: int
@@ -1238,13 +1297,62 @@ class TranselecAefResponse(BaseModel):
     rows_with_fecha_solicitud: int
     rows_with_fecha_corta: int
     rows_with_fecha_termino: int
-    pmf_with_aef: int
-    pmf_with_partial_aef: int
     rows_with_chronology_warning: int
+    pmf_with_tracking: int
+    pmf_with_aef: int
+    pmf_with_conflict: int
+    pmf_conflicts_by_field: dict[str, int]
+    pmf_with_chronology_warning: int
     por_aef: list[LabelCountView]
     por_solicitante: list[LabelCountView]
-    pmf_coverage: list[AefPmfCoverageView]
+    pmf_por_aef: list[LabelCountView]
+    pmf_por_solicitante: list[LabelCountView]
+    pmfs: list[AefPmfView]
     rows: list[ResumenRowView]
+
+
+def _aef_value_text(value: Any) -> str:
+    return value.isoformat() if isinstance(value, dt.date) else str(value)
+
+
+def _aef_field_view(name: str, resolved: PmfFieldValue) -> AefPmfFieldView:
+    value_kind: Literal["text", "date", "raw_text"] | None = None
+    if resolved.status == "value":
+        if isinstance(resolved.value, dt.date):
+            value_kind = "date"
+        elif name.startswith("fecha_"):
+            value_kind = "raw_text"
+        else:
+            value_kind = "text"
+    return AefPmfFieldView(
+        status=resolved.status,
+        value=_aef_value_text(resolved.value) if resolved.status == "value" else None,
+        value_kind=value_kind,
+        source_rows=list(resolved.source_rows),
+        variants=[
+            AefValueVariantView(
+                value=_aef_value_text(variant.value), source_rows=list(variant.source_rows)
+            )
+            for variant in resolved.variants
+        ],
+    )
+
+
+def _aef_pmf_view(record: PmfAefRecord) -> AefPmfView:
+    return AefPmfView(
+        pmf=record.pmf,
+        total_rows=record.total_rows,
+        rows_with_any_tracking=record.rows_with_any_tracking,
+        rows_with_aef=record.rows_with_aef,
+        source_row_numbers=list(record.source_row_numbers),
+        has_conflict=record.has_conflict,
+        chronology_flags=list(record.chronology_flags),
+        fields={name: _aef_field_view(name, record.fields[name]) for name in AEF_TRACKING_FIELDS},
+    )
+
+
+def _label_views(entries: Any) -> list[LabelCountView]:
+    return [LabelCountView(label=entry.label, count=entry.count) for entry in entries]
 
 
 @router.get(
@@ -1258,7 +1366,17 @@ def get_aef(
 ) -> TranselecAefResponse:
     import_id = _require_active_import_id(connection)
     rows = _fetch_filtered_rows(connection, import_id=import_id, filters=filters)
-    summary = build_aef_summary([_to_aef_input_row(row) for row in rows])
+    # PMF-level values use every row of each PMF in scope, not only the rows
+    # the filter kept: a PMF's AEF must not change with an unrelated filter.
+    pmf_rows = (
+        _fetch_filtered_rows(connection, import_id=import_id, filters=TranselecFilters())
+        if filters != TranselecFilters()
+        else rows
+    )
+    summary = build_aef_summary(
+        [_to_aef_input_row(row) for row in rows],
+        pmf_rows=[_to_aef_input_row(row) for row in pmf_rows],
+    )
 
     imp = connection.execute(
         text(
@@ -1273,7 +1391,7 @@ def get_aef(
 
     tracked = set(summary.tracked_row_numbers)
     return TranselecAefResponse(
-        basis="row_level_source_values",
+        basis="pmf_from_source_rows",
         source_fields=[name for name in AEF_TRACKING_FIELDS if name in present],
         row_count=summary.row_count,
         pmf_count=summary.pmf_count,
@@ -1283,23 +1401,17 @@ def get_aef(
         rows_with_fecha_solicitud=summary.rows_with_fecha_solicitud,
         rows_with_fecha_corta=summary.rows_with_fecha_corta,
         rows_with_fecha_termino=summary.rows_with_fecha_termino,
-        pmf_with_aef=summary.pmf_with_aef,
-        pmf_with_partial_aef=summary.pmf_with_partial_aef,
         rows_with_chronology_warning=summary.rows_with_chronology_warning,
-        por_aef=[LabelCountView(label=entry.label, count=entry.count) for entry in summary.por_aef],
-        por_solicitante=[
-            LabelCountView(label=entry.label, count=entry.count)
-            for entry in summary.por_solicitante
-        ],
-        pmf_coverage=[
-            AefPmfCoverageView(
-                pmf=entry.pmf,
-                total_rows=entry.total_rows,
-                rows_with_aef=entry.rows_with_aef,
-                rows_with_any_tracking=entry.rows_with_any_tracking,
-            )
-            for entry in summary.pmf_coverage
-        ],
+        pmf_with_tracking=summary.pmf_with_tracking,
+        pmf_with_aef=summary.pmf_with_aef,
+        pmf_with_conflict=summary.pmf_with_conflict,
+        pmf_conflicts_by_field=summary.pmf_conflicts_by_field,
+        pmf_with_chronology_warning=summary.pmf_with_chronology_warning,
+        por_aef=_label_views(summary.por_aef),
+        por_solicitante=_label_views(summary.por_solicitante),
+        pmf_por_aef=_label_views(summary.pmf_por_aef),
+        pmf_por_solicitante=_label_views(summary.pmf_por_solicitante),
+        pmfs=[_aef_pmf_view(record) for record in summary.pmfs],
         rows=[_resumen_row_view(row) for row in rows if row.source_row_number in tracked],
     )
 

@@ -26,7 +26,15 @@ Issues carry a severity. ``error`` blocks the import (nothing is persisted);
 ``warning`` imports but must be reviewed before an operator publishes;
 ``info`` is recorded evidence. No business value is ever inferred: a cell
 that is not what its column promises is reported and left empty, never
-reinterpreted, and nothing here fills values down or across rows.
+reinterpreted, and nothing here fills values down or across rows. The one
+reading of text is a date column holding a single date written out in Spanish
+(``13 de noviembre de 2024``), which is unambiguous; the cell's raw text is
+kept beside the parsed date, and every other text in a date column (several
+dates, ``-``, numeric day/month forms) is kept as raw text with no date.
+
+AEF tracking values are resolved per PMF (:func:`resolve_pmf_field`) from the
+rows that carry them, naming those rows. Two different non-blank values for
+one PMF are a conflict reported for review, never a choice.
 
 Messages are Spanish and structural. They may name headers, column letters,
 row numbers and counts; they never quote a business cell value.
@@ -41,6 +49,7 @@ import xml.parsers.expat
 import zipfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -348,6 +357,29 @@ class LayoutReport:
         return next((issue for issue in self.issues if issue.severity == "error"), None)
 
 
+TextDateResolution = Literal["parsed_spanish_long", "multiple_dates", "placeholder", "unrecognized"]
+
+
+@dataclass(frozen=True, slots=True)
+class TextDateEvidence:
+    """The raw text found in a date column, and what was (not) read from it.
+
+    ``parsed`` is set only for ``parsed_spanish_long``. For every other
+    resolution the cell has no date and ``raw`` is the only record of it.
+    """
+
+    raw: str
+    resolution: TextDateResolution
+    parsed: dt.date | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "raw": self.raw,
+            "resolution": self.resolution,
+            "parsed": self.parsed.isoformat() if self.parsed else None,
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class ResolvedRow:
     """One business row: its worksheet row number and raw values by field.
@@ -355,10 +387,23 @@ class ResolvedRow:
     Every field in :data:`FIELD_SPECS` is present as a key; a field no column
     carried is ``None``. Values are exactly what the worksheet cell held —
     coercion to persisted types happens in ``import_projection``.
+    ``text_dates`` holds, per date field whose cell held text instead of an
+    Excel date, that text and how it was classified.
     """
 
     source_row_number: int
     values: dict[str, Any]
+    text_dates: dict[str, TextDateEvidence] = dataclass_field(default_factory=dict)
+
+    def effective(self, name: str) -> Any:
+        """The field's value for comparisons: a parsed text date when there
+        is one, the raw text when a date column's text was not resolved,
+        otherwise the cell value."""
+
+        evidence = self.text_dates.get(name)
+        if evidence is not None:
+            return evidence.parsed if evidence.parsed is not None else evidence.raw
+        return self.values.get(name)
 
 
 @dataclass(frozen=True, slots=True)
@@ -541,9 +586,11 @@ def _cell(grid: Sequence[Sequence[Any]], row: int, column: int) -> Any:
     return values[column] if column < len(values) else None
 
 
-def _capped(rows: Iterable[int]) -> tuple[tuple[int, ...], int]:
+def _capped(
+    rows: Iterable[int], limit: int | None = MAX_ROWS_PER_ISSUE
+) -> tuple[tuple[int, ...], int]:
     ordered = sorted(set(rows))
-    return tuple(ordered[:MAX_ROWS_PER_ISSUE]), len(ordered)
+    return tuple(ordered if limit is None else ordered[:limit]), len(ordered)
 
 
 def _recognize(header: Any) -> str | None:
@@ -1079,6 +1126,7 @@ def resolve_resumen_layout(
     rows_without_pmf: list[int] = []
     filled: dict[str, int] = {name: 0 for name in field_column}
     bad_dates: dict[str, list[int]] = {}
+    text_dates_by_resolution: dict[tuple[str, TextDateResolution], list[int]] = {}
     bad_numbers: dict[str, list[int]] = {}
     excel_errors: dict[str, list[int]] = {}
     uncached_formulas: dict[str, list[int]] = {}
@@ -1086,6 +1134,7 @@ def resolve_resumen_layout(
 
     for row in data_rows:
         mapped = {name: _cell(grid, row, column) for name, column in field_column.items()}
+        text_dates: dict[str, TextDateEvidence] = {}
         if all(_is_blank(value) for value in mapped.values()):
             continue
         if _is_blank(_cell(grid, row, pmf_column)):
@@ -1115,16 +1164,30 @@ def resolve_resumen_layout(
                 continue
             kind = FIELD_BY_NAME[name].kind
             if kind == "date" and not isinstance(value, dt.date):
-                # Includes a bare time-of-day, which is what a zero or
-                # fractional value in a date-formatted cell reads as.
-                bad_dates.setdefault(name, []).append(row + 1)
+                if isinstance(value, str):
+                    text_date = classify_text_date(value)
+                    text_dates[name] = text_date
+                    text_dates_by_resolution.setdefault((name, text_date.resolution), []).append(
+                        row + 1
+                    )
+                else:
+                    # A bare time-of-day, which is what a zero or fractional
+                    # value in a date-formatted cell reads as, or a number.
+                    bad_dates.setdefault(name, []).append(row + 1)
             elif kind == "number" and not _is_number_like(value):
                 bad_numbers.setdefault(name, []).append(row + 1)
 
         values = {spec.name: mapped.get(spec.name) for spec in FIELD_SPECS}
-        rows.append(ResolvedRow(source_row_number=row + 1, values=values))
+        resolved = ResolvedRow(source_row_number=row + 1, values=values, text_dates=text_dates)
+        rows.append(resolved)
 
-        issues.extend(_chronology_issues(row + 1, values, field_column))
+        issues.extend(
+            _chronology_issues(
+                row + 1,
+                {name: resolved.effective(name) for name in AEF_TRACKING_FIELDS},
+                field_column,
+            )
+        )
 
     if rows_without_pmf:
         capped, total = _capped(rows_without_pmf)
@@ -1143,6 +1206,22 @@ def resolve_resumen_layout(
             )
         )
 
+    for (name, resolution), affected in text_dates_by_resolution.items():
+        # Every affected row is listed: the operator reviews these cell by
+        # cell, and the raw text of each is kept on its row.
+        listed, total = _capped(affected, limit=None)
+        code, severity, message = _TEXT_DATE_ISSUES[resolution]
+        issues.append(
+            LayoutIssue(
+                code=code,
+                severity=severity,
+                message=f"«{FIELD_BY_NAME[name].header}» tiene {total} {message}",
+                field=name,
+                columns=(column_letter(field_column[name]),),
+                rows=listed,
+                row_count=total,
+            )
+        )
     for name, bad in bad_dates.items():
         capped, total = _capped(bad)
         issues.append(
@@ -1151,7 +1230,7 @@ def resolve_resumen_layout(
                 severity="warning",
                 message=(
                     f"«{FIELD_BY_NAME[name].header}» tiene {total} celdas que no son fechas de "
-                    "Excel; quedan vacías en esta versión (no se interpreta el texto)."
+                    "Excel (un número o una hora); quedan vacías en esta versión."
                 ),
                 field=name,
                 columns=(column_letter(field_column[name]),),
@@ -1223,6 +1302,8 @@ def resolve_resumen_layout(
             )
         )
 
+    issues.extend(_pmf_conflict_issues(rows, field_column))
+
     if not rows:
         issues.append(
             LayoutIssue(
@@ -1254,6 +1335,204 @@ def resolve_resumen_layout(
         issues=tuple(issues),
     )
     return LayoutResolution(report=report, rows=tuple(rows) if not report.has_errors else ())
+
+
+# (issue code, severity, message tail after "«header» tiene N") per resolution.
+_TEXT_DATE_ISSUES: dict[TextDateResolution, tuple[str, Severity, str]] = {
+    "parsed_spanish_long": (
+        "fecha_texto_interpretada",
+        "info",
+        "celdas con una sola fecha escrita en texto (día, mes en palabras y año); se leen "
+        "como esa fecha y se conserva el texto original.",
+    ),
+    "multiple_dates": (
+        "fecha_texto_multiple",
+        "warning",
+        "celdas con más de una fecha en el mismo texto; no se elige ninguna. La fila queda "
+        "sin fecha y conserva el texto original.",
+    ),
+    "placeholder": (
+        "fecha_texto_guion",
+        "warning",
+        "celdas con «-» en lugar de una fecha; la fila queda sin fecha y conserva el texto.",
+    ),
+    "unrecognized": (
+        "fecha_no_reconocida",
+        "warning",
+        "celdas con texto que no es una fecha inequívoca (p. ej. día y mes solo en números); "
+        "la fila queda sin fecha y conserva el texto original.",
+    ),
+}
+
+_SPANISH_MONTHS: dict[str, int] = {
+    "enero": 1,
+    "febrero": 2,
+    "marzo": 3,
+    "abril": 4,
+    "mayo": 5,
+    "junio": 6,
+    "julio": 7,
+    "agosto": 8,
+    "septiembre": 9,
+    "setiembre": 9,
+    "octubre": 10,
+    "noviembre": 11,
+    "diciembre": 12,
+}
+
+_SPANISH_LONG_DATE = re.compile(r"(\d{1,2}) de ([a-z]+) de (\d{4})")
+_NUMERIC_DATE = re.compile(r"(?<!\d)\d{1,2}[-/.]\d{1,2}[-/.](?:\d{4}|\d{2})(?!\d)")
+_PLACEHOLDER = re.compile(r"[-\u2010-\u2015]+")
+
+
+def _fold_text(value: str) -> str:
+    folded = unicodedata.normalize("NFKD", value)
+    folded = "".join(ch for ch in folded if not unicodedata.combining(ch)).casefold()
+    return re.sub(r"\s+", " ", folded).strip()
+
+
+def classify_text_date(value: str) -> TextDateEvidence:
+    """Classify the text of a date-column cell; parse only what is unambiguous.
+
+    Only one form is read as a date: the whole cell is a single day, a month
+    written as a Spanish word and a four-digit year (``13 de noviembre de
+    2024``, any case or accents), naming a real calendar day. The month word
+    removes the day/month-order ambiguity of numeric forms, which are never
+    parsed. Several dates in one cell are not resolved — which one the column
+    means is not established — and a dash is a placeholder, not a date.
+    """
+
+    raw = value.strip()
+    folded = _fold_text(raw)
+    if _PLACEHOLDER.fullmatch(folded):
+        return TextDateEvidence(raw=raw, resolution="placeholder")
+    date_tokens = len(_SPANISH_LONG_DATE.findall(folded)) + len(_NUMERIC_DATE.findall(folded))
+    if date_tokens >= 2:
+        return TextDateEvidence(raw=raw, resolution="multiple_dates")
+    match = _SPANISH_LONG_DATE.fullmatch(folded)
+    if match is not None and match.group(2) in _SPANISH_MONTHS:
+        try:
+            parsed = dt.date(
+                int(match.group(3)), _SPANISH_MONTHS[match.group(2)], int(match.group(1))
+            )
+        except ValueError:
+            parsed = None
+        if parsed is not None:
+            return TextDateEvidence(raw=raw, resolution="parsed_spanish_long", parsed=parsed)
+    return TextDateEvidence(raw=raw, resolution="unrecognized")
+
+
+# ---------------------------------------------------------------------------
+# PMF-level AEF tracking values
+# ---------------------------------------------------------------------------
+
+PmfValueStatus = Literal["value", "blank", "conflict"]
+
+
+@dataclass(frozen=True, slots=True)
+class PmfValueVariant:
+    """One distinct non-blank value of a field within a PMF, and its rows."""
+
+    value: Any
+    source_rows: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PmfFieldValue:
+    """A tracking field resolved for one PMF from the rows that carry it.
+
+    - ``value``: every non-blank row agrees; ``value`` is that value and
+      ``source_rows`` are the rows that supplied it.
+    - ``blank``: no row of the PMF has a value.
+    - ``conflict``: rows disagree; ``value`` is None and ``variants`` lists
+      each distinct value with its rows. Nothing is chosen.
+
+    Blank rows never count as disagreement and never receive the value.
+    """
+
+    status: PmfValueStatus
+    value: Any
+    source_rows: tuple[int, ...]
+    variants: tuple[PmfValueVariant, ...]
+
+
+def resolve_pmf_field(entries: Iterable[tuple[int, Any]]) -> PmfFieldValue:
+    """Resolve one field for one PMF from ``(source_row_number, value)``.
+
+    Values compare after trimming text and folding a midnight datetime to its
+    date; nothing else is normalized, so ``"Juan"`` and ``"juan"`` differ. A
+    raw text left unresolved in a date column is compared as that text, so it
+    conflicts with a real date rather than being assumed equal to it.
+    """
+
+    by_value: dict[Any, list[int]] = {}
+    originals: dict[Any, Any] = {}
+    for row_number, value in entries:
+        key = _comparable(value)
+        if key is None:
+            continue
+        # A date and a same-looking string must never compare equal.
+        tagged = (type(key).__name__, key)
+        by_value.setdefault(tagged, []).append(row_number)
+        originals.setdefault(tagged, key)
+    variants = tuple(
+        PmfValueVariant(value=originals[tagged], source_rows=tuple(sorted(rows)))
+        for tagged, rows in sorted(by_value.items(), key=lambda item: min(item[1]))
+    )
+    if not variants:
+        return PmfFieldValue(status="blank", value=None, source_rows=(), variants=())
+    if len(variants) == 1:
+        only = variants[0]
+        return PmfFieldValue(
+            status="value", value=only.value, source_rows=only.source_rows, variants=variants
+        )
+    return PmfFieldValue(
+        status="conflict",
+        value=None,
+        source_rows=tuple(sorted(row for variant in variants for row in variant.source_rows)),
+        variants=variants,
+    )
+
+
+def _pmf_conflict_issues(
+    rows: Sequence[ResolvedRow], field_column: dict[str, int]
+) -> list[LayoutIssue]:
+    by_pmf: dict[Any, list[ResolvedRow]] = {}
+    for resolved in rows:
+        by_pmf.setdefault(_comparable(resolved.values["pmf"]), []).append(resolved)
+
+    issues: list[LayoutIssue] = []
+    for name in AEF_TRACKING_FIELDS:
+        if name not in field_column:
+            continue
+        conflicting_pmfs = 0
+        affected: list[int] = []
+        for pmf_rows in by_pmf.values():
+            resolved_field = resolve_pmf_field(
+                (resolved.source_row_number, resolved.effective(name)) for resolved in pmf_rows
+            )
+            if resolved_field.status == "conflict":
+                conflicting_pmfs += 1
+                affected.extend(resolved_field.source_rows)
+        if not conflicting_pmfs:
+            continue
+        listed, total = _capped(affected, limit=None)
+        issues.append(
+            LayoutIssue(
+                code="aef_conflicto_pmf",
+                severity="warning",
+                message=(
+                    f"«{FIELD_BY_NAME[name].header}»: {conflicting_pmfs} PMF tienen valores "
+                    "distintos en sus filas. No se elige ninguno para el PMF; cada fila "
+                    "conserva su valor. Revise las filas indicadas."
+                ),
+                field=name,
+                columns=(column_letter(field_column[name]),),
+                rows=listed,
+                row_count=total,
+            )
+        )
+    return issues
 
 
 def _is_number_like(value: Any) -> bool:

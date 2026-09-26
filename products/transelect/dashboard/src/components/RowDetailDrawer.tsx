@@ -25,11 +25,12 @@ import {
   type TranselecPmfDetail,
   getPmfDetail,
 } from '../api'
-import { cell, formatDate, formatInteger, formatNumber } from '../format'
+import { cell, formatInteger, formatNumber } from '../format'
 import { aefInSource, chronologyFlagsOf, chronologyLabel, hasAefTracking } from '../lib/aef'
 import { classifyFailure, type FailureView } from '../lib/apiState'
 import { Drawer } from '../ui/Drawer'
 import { AlertBanner, LoadingBlock } from './StateViews'
+import { SourceDate } from './SourceDate'
 import { StatusPill } from './StatusPill'
 
 function AefSection({
@@ -72,18 +73,27 @@ function AefSection({
         <dt>Quién solicita</dt>
         <dd>{cell(row.quien_solicita, missing)}</dd>
         <dt>Fecha solicitud</dt>
-        <dd>{formatDate(row.fecha_solicitud) || missing}</dd>
+        <dd>
+          <SourceDate row={row} field="fecha_solicitud" missing={missing} />
+        </dd>
         <dt>Fecha corta</dt>
-        <dd>{formatDate(row.fecha_corta) || missing}</dd>
+        <dd>
+          <SourceDate row={row} field="fecha_corta" missing={missing} />
+        </dd>
         <dt>Fecha término</dt>
-        <dd>{formatDate(row.fecha_termino) || missing}</dd>
+        <dd>
+          <SourceDate row={row} field="fecha_termino" missing={missing} />
+        </dd>
       </dl>
       {detail && (
         <p className="hint" data-testid="drawer-aef-coverage">
           {formatInteger(tracked.length)} de {formatInteger(detail.row_count)} filas de{' '}
           {detail.pmf} tienen registro AEF.
-          {!rowTracked && tracked.length > 0 &&
-            ' El registro es por fila: el de otras filas no se aplica a esta.'}
+          {!rowTracked &&
+            tracked.length > 0 &&
+            ` El seguimiento de este PMF está en ${tracked.length === 1 ? 'la fila' : 'las filas'} ${tracked
+              .map((entry) => entry.source_row_number)
+              .join(', ')}; esta fila no lo repite y se muestra vacía, como en la planilla.`}
         </p>
       )}
     </section>
@@ -169,9 +179,13 @@ export function RowDetailDrawer({
           <dt>N.º ingreso</dt>
           <dd>{cell(row.numero_ingreso, 'Sin ingreso')}</dd>
           <dt>Fecha ingreso</dt>
-          <dd>{formatDate(row.fecha_ingreso) || 'Sin fecha'}</dd>
+          <dd>
+            <SourceDate row={row} field="fecha_ingreso" missing="Sin fecha" />
+          </dd>
           <dt>90 días</dt>
-          <dd>{formatDate(row.fecha_90_dias) || 'Sin fecha'}</dd>
+          <dd>
+            <SourceDate row={row} field="fecha_90_dias" missing="Sin fecha" />
+          </dd>
           <dt>Empresa</dt>
           <dd>{cell(row.empresa, 'Sin información')}</dd>
           <dt>Propietario</dt>

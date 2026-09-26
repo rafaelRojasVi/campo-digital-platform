@@ -9,7 +9,7 @@ resolution contains a blocking (``error``) issue.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +20,7 @@ from transelec_ingestion.resumen_layout import (
     FIELD_SPECS,
     LayoutIssue,
     LayoutReport,
+    TextDateEvidence,
     find_resumen_sheet,
     resolve_resumen_layout,
     scan_formula_cells,
@@ -59,6 +60,9 @@ CURRENT_RESUMEN_COLUMNS: tuple[tuple[str, str], ...] = tuple(
 class ResumenSourceRow:
     source_row_number: int
     values: dict[str, Any]
+    # Raw text found in date columns and how it was classified; see
+    # resumen_layout.classify_text_date.
+    text_dates: dict[str, TextDateEvidence] = field(default_factory=dict)
 
     @property
     def pmf(self) -> str:
@@ -131,7 +135,11 @@ def load_transelec_workbook(path: str | Path) -> TranselecWorkbook:
         source_path=source_path,
         sheet_names=sheet_names,
         resumen_rows=tuple(
-            ResumenSourceRow(source_row_number=row.source_row_number, values=row.values)
+            ResumenSourceRow(
+                source_row_number=row.source_row_number,
+                values=row.values,
+                text_dates=row.text_dates,
+            )
             for row in resolution.rows
         ),
         layout=report,

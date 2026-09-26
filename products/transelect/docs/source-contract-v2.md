@@ -42,7 +42,12 @@ FACT (reproducible with the opt-in private test
 - Row 315: `Fecha corta` precedes `Fecha solicitud`. Row 375: `Fecha termino`
   precedes `Fecha corta`.
 - `Fecha de ingreso` (Y) holds 124 and `90 dias` (AA) 63 cells that are text,
-  not Excel dates (Spanish long-form dates, or two dates in one cell).
+  not Excel dates. Of those 187 cells: 67 are a single date written out in
+  Spanish (`Fecha de ingreso` 64, `90 dias` 3), 116 hold two dates in one
+  cell (58 each; `DD-MM-YYYY` followed by `DD-MM-YY` or `DD-MM-YYYY`,
+  separated by a space or a line break), and 4 are `-` (2 each).
+- No PMF has two different non-blank values in any of the five AEF tracking
+  fields.
 - `ID_Predo_Unico` (AF) is a formula on all 729 rows and `Hoy` (AB) on 115;
   every formula has a cached value.
 - Regression: for every row, each of the 30 legacy fields read by V2 equals a
@@ -117,9 +122,28 @@ code change reviewed like any other.
 - A row with mapped data but no PMF is not imported (warning `fila_sin_pmf`,
   with rows). DECISION: V1 skipped such rows silently; V2 keeps the
   documented V1 behaviour but reports it.
-- Date fields accept only Excel dates. Text in a date column is left empty
-  and reported (`fecha_no_reconocida`); it is never parsed, because day/month
-  order and two-dates-per-cell are not established.
+- Date fields take Excel dates. Text in a date column is classified
+  (`resumen_layout.classify_text_date`), and its raw text is always kept on
+  the row (`source_text_dates`, with the classification):
+  - a whole cell that is one day + Spanish month word + four-digit year
+    naming a real calendar day (`13 de noviembre de 2024`; case and accents
+    insignificant; `setiembre` accepted) is read as that date — info
+    `fecha_texto_interpretada`;
+  - two or more dates in one cell are not resolved; the date is empty —
+    warning `fecha_texto_multiple`;
+  - a cell of only dashes is a placeholder; the date is empty — warning
+    `fecha_texto_guion`;
+  - anything else, including a single numeric `DD-MM-YYYY`, is not parsed;
+    the date is empty — warning `fecha_no_reconocida`.
+
+  DECISION: only the month-word form is parsed, because the word fixes the
+  day/month order. Numeric forms are not parsed even when the day exceeds 12:
+  the column's convention is not confirmed, and a rule that parses some
+  numeric dates but not others would be hard to review. Which date of a
+  two-date cell the column means is not established, so none is chosen.
+  These four issues list every affected row (no 50-row cap).
+- A number or time-of-day in a date column is left empty
+  (`fecha_no_reconocida`).
 - Non-numeric text in a number column is left empty (`numero_no_reconocido`)
   and excluded from totals, as in V1.
 - Excel error cells (`#N/A`, `#REF!`, …) are left empty
@@ -135,6 +159,32 @@ code change reviewed like any other.
   one issue per violated pair and row. The dates are stored as the source has
   them.
 - Nothing is filled down, forward or across rows.
+
+## AEF tracking per PMF
+
+DECISION (2026-09-26): the five AEF tracking fields are presented per PMF.
+In the 09-Sept workbook every AEF value is on its PMF's first row and the
+PMF's other rows are blank, which reads as one record per PMF written once.
+The rows themselves are not changed.
+
+- `resumen_layout.resolve_pmf_field` resolves one field for one PMF from
+  `(source_row_number, value)` pairs. Blank rows are ignored and never
+  receive the value. If all non-blank rows agree (text trimmed, a midnight
+  datetime equal to its date; nothing else normalized, so case differences
+  disagree), the PMF value is that value, with the rows that supplied it. If
+  they disagree, the status is `conflict`: no value, and each distinct value
+  is listed with its rows.
+- A date column whose text was not resolved contributes its raw text, so it
+  can only agree with the same text, never with a date.
+- Import: each field with at least one conflicting PMF produces a warning
+  `aef_conflicto_pmf` listing every row that carries a value in those PMF.
+  Like any warning, publishing then requires the explicit acknowledgement.
+- Read: `GET /transelec/aef` resolves each PMF with a row in the filtered
+  scope from *all* of that PMF's rows, so a PMF-level value does not change
+  with an unrelated filter. Row-level counts and rows are still returned for
+  the filtered scope.
+- PMF-level chronology uses the resolved dates (which may come from
+  different rows); a conflicting or blank date is not an ordering error.
 
 ## Severity and the import lifecycle
 
@@ -158,6 +208,8 @@ Migration `0009` (expand-only):
 - `transelec_resumen_row` gains `aef`, `quien_solicita`, `fecha_solicitud`,
   `fecha_corta`, `fecha_termino` (nullable; indexed with `import_id` for
   `aef` and `quien_solicita`).
+- `transelec_resumen_row` gains `source_text_dates` (JSONB, nullable): per
+  date field whose cell held text, `{raw, resolution, parsed}`.
 - `transelec_import` gains `mapping_report` (JSONB, NULL for V1 imports) and
   `warning_count`.
 
@@ -170,17 +222,26 @@ under V1 report the 30 legacy fields as their source fields.
 - `ValidateAndProjectResponse`: `warning_count`, `mapping_report`.
 - `GET /transelec/imports/{id}/report` (operator/admin).
 - `GET /transelec/imports/active`: `warning_count`, `source_fields`.
-- `GET /transelec/aef` (viewer+): row-level AEF counts, per-PMF coverage,
-  value/requester breakdowns and the tracked rows, under the shared filters.
-- Shared filters gain `aef` and `quien_solicita` multi-selects.
-- Every row view gains the five fields and `chronology_flags`.
+- `GET /transelec/aef` (viewer+), `basis: "pmf_from_source_rows"`: per-PMF
+  records (`pmfs`, each field with `status`, `value`, `value_kind`,
+  `source_rows`, `variants`), PMF counts including conflicts and chronology,
+  per-PMF value/requester breakdowns, plus the row-level counts,
+  breakdowns and tracked rows, under the shared filters.
+- Shared filters gain `aef` and `quien_solicita` multi-selects. They stay
+  row-level: `aef=Presentado` matches the row that holds the value.
+- Every row view gains the five fields, `chronology_flags` and
+  `source_text_dates`.
+- CSV export: the two folder columns are headed `Carpeta PMF` and `Carpeta
+  normalizada` (they were `Carpeta (col. E)` / `Carpeta (col. AC)`, letters
+  that became J/AH in this layout). `Fecha de ingreso` exports the raw text
+  when the cell's text was not resolved to a date, instead of a blank.
 
 ## Interpretation
 
-INFERENCE: the AEF row being each PMF's first row suggests AEF may be entered
-once per PMF on a representative row rather than per área de corta. It is not
-established, so the platform treats AEF strictly as a row value and shows
-per-PMF coverage explicitly.
+INFERENCE: the AEF row being each PMF's first row suggests AEF is entered
+once per PMF rather than per área de corta. The platform presents it per PMF
+(see "AEF tracking per PMF") while keeping every row as the source has it;
+Campo Digital has not confirmed this.
 
 HYPOTHESIS: `Fecha termino` may have month precision (all values on day 1).
 If so, row 375 (`Fecha corta` 8 Sept, `Fecha termino` 1 Sept) may not be an
@@ -190,16 +251,20 @@ error.
 
 - The meaning of AEF values (`Presentado`, `Solicitado, se puede cortar`) is
   not defined by the source; values are grouped by literal text only.
-- Text dates in `Fecha de ingreso` / `90 dias` remain empty in the
-  projection, as they were in V1.
-- The CSV export still labels the two folder columns `Carpeta (col. E)` and
-  `Carpeta (col. AC)` (the ratified TR-FUNC-037 header set); in the 09-Sept
-  layout they are J and AH. The dashboard now labels them by meaning.
+- 120 text cells in `Fecha de ingreso` / `90 dias` (116 with two dates, 4
+  `-`) still have no date; their raw text is kept and shown. The 90-day
+  overdue view (TR-FUNC-031, `90 dias`) does not count those rows.
+- The 67 parsed text dates now have a date where V1 had none; the 3 in
+  `90 dias` now take part in the 90-day overdue view.
+- The PMF-level presentation rests on the observed layout and a team
+  decision, not on a confirmed definition of AEF.
 
 ## Open questions for Campo Digital
 
 - What does AEF stand for, and what does each value mean?
-- Is AEF recorded per área de corta, or once per PMF on its first row?
+- Is AEF recorded once per PMF (as presented now), or per área de corta?
 - Does `Fecha termino` carry a day, or only a month?
 - Are rows 315 and 375 data-entry errors?
 - Should text dates in `Fecha de ingreso` / `90 dias` be converted at source?
+- In a cell with two dates, what does each date mean, and which one is the
+  column's value?

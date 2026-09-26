@@ -5,14 +5,15 @@ implementation brief), independent of and in addition to TR-OPEN-04's field
 set. The field set itself is now the exact, ordered Actualizable list
 confirmed by direct read of `exportCSV()` (source forensic audit, "Exact
 field list, confirmed by direct read"), with Carpeta split into its two
-positional source columns and Observación auxiliar shipped always-empty —
-18 columns, not a literal 17.
+source columns (headed by meaning, not by column letter) and Observación
+auxiliar shipped always-empty — 18 columns, not a literal 17.
 """
 
 from __future__ import annotations
 
 import csv
 import io
+from typing import Any
 
 from transelec_ingestion.csv_export import (
     EXPORT_FIELDS_V1,
@@ -26,10 +27,14 @@ def test_export_field_set_matches_the_corrected_actualizable_list() -> None:
     columns = [column for column, _ in EXPORT_FIELDS_V1]
     headers = [header for _, header in EXPORT_FIELDS_V1]
 
-    # Carpeta is split into both positional source fields, not one guess.
+    # Carpeta is split into both source fields, not one guess.
     assert "carpeta_source" in columns
     assert "carpeta_normalizada" in columns
     assert "carpeta" not in columns
+    # Headed by what the field is: its column letter moved between layouts.
+    assert ("carpeta_source", "Carpeta PMF") in EXPORT_FIELDS_V1
+    assert ("carpeta_normalizada", "Carpeta normalizada") in EXPORT_FIELDS_V1
+    assert not [header for header in headers if "col." in header]
 
     # Predio Ref included, raw Estado excluded — Actualizable relative to v0.
     assert "predio_ref" in columns
@@ -111,7 +116,7 @@ def test_render_csv_neutralizes_a_real_exported_row_starting_with_each_dangerous
 
     for header_label, original in (
         ("PMF", dangerous_values["pmf"]),
-        ("Carpeta (col. AC)", dangerous_values["carpeta_normalizada"]),
+        ("Carpeta normalizada", dangerous_values["carpeta_normalizada"]),
         ("PAS", dangerous_values["pas"]),
         ("Estado resumido", dangerous_values["estado_resumido"]),
     ):
@@ -138,3 +143,50 @@ def test_render_csv_renders_blank_and_numeric_and_date_cells() -> None:
 
     assert record["PMF"] == "MP001"
     assert record["N Ingreso"] == ""
+
+
+def test_unresolved_text_date_exports_its_raw_text_and_a_parsed_one_its_date() -> None:
+    import datetime as dt
+
+    rows: list[dict[str, Any]] = [
+        {
+            "pmf": "MP001",
+            "fecha_ingreso": None,
+            "source_text_dates": {
+                "fecha_ingreso": {
+                    "raw": "20-12-2024 09-06-26",
+                    "resolution": "multiple_dates",
+                    "parsed": None,
+                }
+            },
+        },
+        {
+            "pmf": "MP002",
+            "fecha_ingreso": None,
+            "source_text_dates": {
+                "fecha_ingreso": {"raw": "-", "resolution": "placeholder", "parsed": None}
+            },
+        },
+        {
+            "pmf": "MP003",
+            "fecha_ingreso": dt.date(2024, 11, 13),
+            "source_text_dates": {
+                "fecha_ingreso": {
+                    "raw": "13 de noviembre de 2024",
+                    "resolution": "parsed_spanish_long",
+                    "parsed": "2024-11-13",
+                }
+            },
+        },
+    ]
+
+    text = render_transelec_export_csv(rows).decode("utf-8-sig")
+    records = list(csv.reader(io.StringIO(text), delimiter=";"))
+    column = [header for _, header in EXPORT_FIELDS_V1].index("Fecha de ingreso")
+
+    # "-" is still neutralized against formula injection.
+    assert [record[column] for record in records[1:]] == [
+        "20-12-2024 09-06-26",
+        "'-",
+        "2024-11-13",
+    ]

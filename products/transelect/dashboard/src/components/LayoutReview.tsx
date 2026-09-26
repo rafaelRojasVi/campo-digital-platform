@@ -10,8 +10,10 @@
  *
  * Issues are ordered by what they mean for the operator: blocking errors
  * (nothing was imported), then warnings (imported, but must be reviewed
- * before publishing), then recorded observations. Row lists are capped by
- * the server; the true total is always stated beside them.
+ * before publishing), then recorded observations. Most row lists are capped
+ * by the server, with the true total stated beside them; text-date and
+ * PMF-conflict issues list every affected row, and long lists fold behind a
+ * "ver todas" toggle so the review stays readable.
  */
 import type { LayoutIssue, LayoutReport } from '../api'
 import { formatInteger } from '../format'
@@ -23,20 +25,37 @@ const STATUS_LABELS: Record<string, string> = {
   separator: 'Separador',
 }
 
+// Beyond this many rows, the list is folded behind a toggle.
+const INLINE_ROWS = 20
+
 function IssueReferences({ issue }: { issue: LayoutIssue }) {
   const parts: string[] = []
   if (issue.columns.length > 0) {
     parts.push(`${issue.columns.length === 1 ? 'Columna' : 'Columnas'} ${issue.columns.join(', ')}`)
   }
-  if (issue.rows.length > 0) {
+  const more = issue.row_count - issue.rows.length
+  const folded = issue.rows.length > INLINE_ROWS
+  if (issue.rows.length > 0 && !folded) {
     const listed = issue.rows.join(', ')
-    const more = issue.row_count - issue.rows.length
     parts.push(
       `${issue.rows.length === 1 ? 'Fila' : 'Filas'} ${listed}${more > 0 ? ` y ${formatInteger(more)} más` : ''}`,
     )
   }
-  if (parts.length === 0) return null
-  return <span className="issue-refs">{parts.join(' · ')}</span>
+  if (parts.length === 0 && !folded) return null
+  return (
+    <span className="issue-refs">
+      {parts.join(' · ')}
+      {folded && (
+        <details className="issue-rows" data-testid="issue-rows">
+          <summary>
+            {formatInteger(issue.row_count)} filas — ver {more > 0 ? 'las listadas' : 'todas'}
+          </summary>
+          {issue.rows.join(', ')}
+          {more > 0 && ` y ${formatInteger(more)} más`}
+        </details>
+      )}
+    </span>
+  )
 }
 
 function IssueGroup({
