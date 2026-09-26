@@ -34,7 +34,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("workbook", type=Path)
-    parser.add_argument("--out", type=Path, required=True, help="JSON report path, outside the repo")
+    parser.add_argument(
+        "--out", type=Path, required=True, help="JSON report path, outside the repo"
+    )
     args = parser.parse_args()
 
     out = args.out.resolve()
@@ -68,7 +70,9 @@ def main() -> int:
     statuses = Counter(decision.status for decision in report.columns)
     print(f"column decisions: {dict(statuses)}")
     for region in report.auxiliary_regions:
-        print(f"auxiliary region {region.first_column}-{region.last_column} ({region.column_count} cols)")
+        print(
+            f"auxiliary region {region.first_column}-{region.last_column} ({region.column_count} cols)"
+        )
     print(
         f"issues: {report.count('error')} error, {report.count('warning')} warning, "
         f"{report.count('info')} info"
