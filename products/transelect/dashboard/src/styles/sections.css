@@ -360,6 +360,15 @@ a.status-card .status-card-go {
 
 .queue-row {
   display: grid;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
   grid-template-columns: minmax(90px, auto) 1fr minmax(120px, auto) auto;
   gap: var(--s-4);
   align-items: baseline;
@@ -374,7 +383,21 @@ a.status-card .status-card-go {
 }
 
 .queue-row:hover {
-  background: var(--sunken);
+  background: var(--forest-tint);
+}
+
+.queue-row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.queue-row[data-selected='true'] {
+  background: var(--forest-tint);
+  box-shadow: inset 3px 0 0 var(--forest);
+}
+
+.queue-row + .queue-row {
+  border-top: 0;
 }
 
 .queue-pmf {
@@ -589,6 +612,17 @@ a.status-card .status-card-go {
   outline-offset: -2px;
 }
 
+/* The row whose detail is open, while the drawer covers the rest: tinted,
+ * barred on its leading edge and bold, so it is found again on close. */
+.rows-table tbody tr[aria-selected='true'] td {
+  background: var(--forest-tint);
+  font-weight: 600;
+}
+
+.rows-table tbody tr[aria-selected='true'] td:first-child {
+  box-shadow: inset 4px 0 0 var(--forest);
+}
+
 .tablewrap[aria-busy='true'] {
   opacity: 0.55;
   transition: opacity var(--d-fast) var(--ease);
@@ -616,14 +650,18 @@ a.status-card .status-card-go {
  */
 .quality {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: var(--s-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .quality-item {
   display: flex;
   flex-direction: column;
-  gap: var(--s-2);
+  gap: var(--s-3);
+  min-width: 0;
   padding: var(--s-5);
   border: 1px solid var(--line);
   border-radius: var(--r-control);
@@ -632,29 +670,66 @@ a.status-card .status-card-go {
 
 .quality-item[data-tone='warn'] {
   border-color: #e3cd93;
+  border-left: 4px solid var(--st-progress);
   background: var(--st-progress-tint);
 }
 
-.quality-item b {
+.quality-item p {
+  margin: 0;
+}
+
+.quality-headline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.quality-headline b {
   font-size: var(--t-title);
   font-weight: 660;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
 
-.quality-item[data-tone='warn'] b {
-  color: #8a6100;
+.quality-item[data-tone='warn'] .quality-headline b {
+  color: #7a5600;
 }
 
-.quality-item span {
+.quality-headline span {
+  color: var(--ink);
+  font-size: var(--t-body);
+  font-weight: 650;
+  text-wrap: balance;
+}
+
+.quality-what {
   color: var(--ink-2);
   font-size: var(--t-small);
+  line-height: 1.5;
 }
 
-.quality-item i {
-  color: var(--ink-3);
-  font-size: var(--t-micro);
-  font-style: normal;
+.quality-todo {
+  color: var(--ink);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+
+.quality-go {
+  align-self: flex-start;
+  color: var(--forest-deep);
+  font-size: var(--t-small);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.quality-go:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.quality-item .how {
+  margin-top: auto;
 }
 
 .refchips {
@@ -917,4 +992,58 @@ a.status-card .status-card-go {
   .split-two {
     grid-template-columns: 1fr;
   }
+}
+
+/* ------------------------------------------- owner table vs main status */
+
+.owner-why {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  max-width: 880px;
+  margin-top: var(--s-7);
+  padding: var(--s-5) var(--s-6);
+  border: 1px solid var(--info-line);
+  border-radius: var(--r-surface);
+  background: var(--info-tint);
+}
+
+.owner-why h3 {
+  margin: 0;
+  font-size: var(--t-section);
+  text-wrap: balance;
+}
+
+.owner-why-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  max-width: var(--measure);
+  margin: 0;
+  padding-left: var(--s-6);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.55;
+}
+
+.owner-why-list b {
+  color: var(--ink);
+}
+
+.owner-compare tbody th[scope='row'] {
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-small);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+}
+
+.owner-compare tbody tr.total th[scope='row'] {
+  background: inherit;
+}
+
+.owner-compare tbody tr.total th[scope='row'] {
+  font-weight: 700;
 }

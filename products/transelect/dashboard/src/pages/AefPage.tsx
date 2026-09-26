@@ -232,7 +232,6 @@ export function AefPage({
     <div className="page enter" aria-busy={loading}>
       <SectionHeader
         title="Seguimiento AEF"
-        basis="por PMF"
         meta="AEF, solicitante y fechas de cada PMF, con la fila de la hoja «Resumen» de la que viene cada valor."
       />
 
@@ -252,10 +251,11 @@ export function AefPage({
       )}
 
       <AlertBanner tone="info" title="Valores por PMF, con su fila de origen">
-        La planilla escribe el AEF una vez por PMF, en una de sus filas. Aquí se muestra como valor
-        del PMF indicando esa fila; las demás filas no se modifican y siguen vacías en el detalle
-        por fila. Si dos filas de un PMF tienen valores distintos, se marca para revisión y no se
-        elige ninguno.
+        En la planilla, el AEF aparece en una sola fila de cada PMF. Aquí se muestra como valor del
+        PMF indicando esa fila; las demás filas no se modifican y siguen vacías en el detalle por
+        fila. Si dos filas de un PMF tienen valores distintos, se marca para revisión y no se elige
+        ninguno. Campo Digital aún no confirma qué significa cada valor de AEF ni si se registra
+        por PMF o por área de corta.
         {chips.length > 0 &&
           ' Los PMF mostrados tienen alguna fila en el alcance filtrado; sus valores consideran todas sus filas.'}
         {missingColumns > 0 &&

@@ -168,7 +168,12 @@ function Shell() {
           />
         )
       case ROUTES.pendientes:
-        return <PendientesPage filterController={filterController} />
+        return (
+          <PendientesPage
+            filterController={filterController}
+            sourceFields={activeImport?.source_fields ?? null}
+          />
+        )
       case ROUTES.aef:
         return (
           <AefPage

@@ -50,7 +50,7 @@ describe('ConflictPanel', () => {
     renderPanel([MP015])
 
     expect(screen.getByText(/160 y 159/)).toBeInTheDocument()
-    expect(screen.getByText(/una sola vez/)).toBeInTheDocument()
+    expect(screen.getAllByText(/una sola vez/).length).toBeGreaterThan(0)
     expect(screen.getByText('estado_resumido_first_row')).toBeInTheDocument()
   })
 

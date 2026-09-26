@@ -10,18 +10,21 @@
 import type { ReactNode } from 'react'
 import { useId, useState } from 'react'
 
-/** A section heading, its optional basis identifier, and a right-hand slot. */
+/**
+ * A section heading and a right-hand slot.
+ *
+ * The heading no longer carries the API's rule identifier: a section that
+ * rests on a named rule ends with a «Cómo se calcula» detail
+ * (`ui/HowCalculated.tsx`) that explains it and names it exactly.
+ */
 export function SectionHeader({
   title,
   id,
-  basis,
   meta,
   actions,
 }: {
   title: ReactNode
   id?: string
-  /** The named legacy rule behind the numbers below, shown rather than hidden. */
-  basis?: string
   meta?: ReactNode
   actions?: ReactNode
 }) {
@@ -29,7 +32,6 @@ export function SectionHeader({
     <div className="section-head">
       <h2 id={id}>
         {title}
-        {basis && <span className="basis-tag">{basis}</span>}
       </h2>
       {(meta || actions) && (
         <div className="section-head-meta">

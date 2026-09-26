@@ -265,6 +265,36 @@ test.describe('the row detail drawer', () => {
     await expect(row).toBeFocused()
   })
 
+  test('covers the whole app, top bar included, and keeps the page from scrolling', async ({
+    page,
+  }) => {
+    await page.goto('/transelec/explorador')
+    await page.getByTestId('row-1').click()
+    await expect(page.getByTestId('row-drawer')).toBeVisible()
+    const topHit = await page.evaluate(() => {
+      const element = document.elementFromPoint(40, 20)
+      return element?.className ?? ''
+    })
+    expect(topHit).toContain('drawer-backdrop')
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden')
+    await page.keyboard.press('Escape')
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe('')
+  })
+
+  test('switches to another row of the same PMF without closing', async ({ page }) => {
+    await page.goto('/transelec/explorador')
+    await page.getByTestId('row-1').click()
+    const drawer = page.getByTestId('row-drawer')
+    await expect(page.getByTestId('drawer-provenance')).toContainText('Fila de origen 1')
+    await expect(page.getByTestId('drawer-row-1')).toHaveAttribute('aria-current', 'true')
+    await drawer.getByRole('button', { name: /Ver la fila/ }).first().click()
+    await expect(page.getByTestId('drawer-provenance')).toContainText('Fila de origen 99')
+    await expect(page.getByTestId('drawer-row-99')).toHaveAttribute('aria-current', 'true')
+    // Row 99 says «Aprobado»; the PMF is counted under its first row's value.
+    await expect(page.getByTestId('drawer-counted-as')).toContainText('«En tramite»')
+    await expect(drawer).toBeVisible()
+  })
+
   test('marks the row whose detail is open', async ({ page }) => {
     await page.goto('/transelec/explorador')
     await page.getByTestId('row-2').click()

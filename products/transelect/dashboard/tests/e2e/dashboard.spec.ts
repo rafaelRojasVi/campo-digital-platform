@@ -55,12 +55,16 @@ test('TR-FUNC-041/046: the shell carries the identity and the active version’s
 }) => {
   await openResumen(page)
 
-  await expect(page.getByText('Campo Digital', { exact: false }).first()).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Campo Digital' })).toBeVisible()
   await expect(page.getByText('Transmisora del Pacífico – Transelec')).toBeVisible()
   await expect(page.getByText('Versión activa #7')).toBeVisible()
   await expect(page.getByText(/Publicada 02-09-2026/).first()).toBeVisible()
-  // TR-OPEN-06: no logo payload is reused, so the shell carries no image.
-  await expect(page.locator('.topbar img')).toHaveCount(0)
+  // Campo Digital's own logo, served from the bundle and actually decoded —
+  // never hotlinked from campodigital.cl. The Transelec logo is not reused.
+  const logo = page.locator('.topbar img')
+  await expect(logo).toHaveCount(1)
+  expect(await logo.getAttribute('src')).not.toMatch(/^https?:/)
+  expect(await logo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0)
 })
 
 test('TR-FUNC-042: the Consulta documental banner keeps its source wording, beside the search it describes', async ({
@@ -166,10 +170,9 @@ test('TR-FUNC-014/015: a quality indicator reading zero renders calm, not as a w
   )
   await openCalidad(page)
 
-  const items = page.locator('.quality-item')
-  await expect(items.nth(0)).toHaveAttribute('data-tone', 'calm')
+  await expect(page.locator('[data-finding="sin-id"]')).toHaveAttribute('data-tone', 'calm')
   // …while the one that is non-zero still escalates.
-  await expect(items.nth(1)).toHaveAttribute('data-tone', 'warn')
+  await expect(page.locator('[data-finding="sin-ingreso"]')).toHaveAttribute('data-tone', 'warn')
 })
 
 test('TR-FUNC-018-022: a multi-select narrows the result set', async ({ page }) => {
@@ -211,11 +214,75 @@ test('TR-FUNC-024/032: the Resumen attention card and the Pendientes section agr
   await expect(page.getByTestId('pending-zone')).toBeVisible()
   await expect(page.getByTestId('pending-count')).toHaveText('5 de 12')
 
-  // Both reset entry points produce the same unfiltered pending scope.
-  await page.getByTestId('show-pending').click()
-  const viaShow = await page.getByTestId('pending-count').textContent()
-  await page.getByTestId('back-to-total').click()
-  expect(await page.getByTestId('pending-count').textContent()).toBe(viaShow)
+  // Unfiltered, there is nothing to clear, so no button pretends to act.
+  await expect(page.getByTestId('clear-pending-filters')).toHaveCount(0)
+})
+
+test('Pendientes: a narrowed scope offers one button that clears it', async ({ page }) => {
+  await page.goto('/transelec/pendientes?q=legal')
+  await expect(page.getByTestId('pending-zone')).toBeVisible()
+  await page.getByTestId('clear-pending-filters').click()
+  await expect(page).toHaveURL(/\/transelec\/pendientes$/)
+  await expect(page.getByTestId('clear-pending-filters')).toHaveCount(0)
+})
+
+test('Pendientes: every queue row opens the PMF detail, by mouse and by keyboard', async ({
+  page,
+}) => {
+  await page.goto('/transelec/pendientes')
+  const row = page.getByTestId('pending-row-2')
+  await row.click()
+  const drawer = page.getByTestId('row-drawer')
+  await expect(drawer).toBeVisible()
+  await expect(drawer).toContainText('PMF-002')
+  await expect(page.getByTestId('drawer-provenance')).toHaveText(
+    'Fila de origen 2 de la hoja «Resumen»',
+  )
+  await expect(row).toHaveAttribute('aria-selected', 'true')
+  await page.getByTestId('row-drawer-close').click()
+  await expect(drawer).toBeHidden()
+  await expect(row).toBeFocused()
+
+  await page.getByTestId('pending-row-3').focus()
+  await page.keyboard.press('Enter')
+  await expect(drawer).toContainText('PMF-003')
+})
+
+test('Resumen: the work-queue rows open the PMF detail', async ({ page }) => {
+  await openResumen(page)
+  await page.getByTestId('queue-row-1').click()
+  await expect(page.getByTestId('row-drawer')).toContainText('PMF-001')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('row-drawer')).toBeHidden()
+})
+
+test('no section shows a raw rule identifier in its reading text', async ({ page }) => {
+  for (const path of [
+    '/transelec',
+    '/transelec/explorador',
+    '/transelec/pendientes',
+    '/transelec/seguimiento-aef',
+    '/transelec/calidad',
+  ]) {
+    await page.goto(path)
+    await expect(page.locator('main .enter')).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    // innerText leaves out the body of a closed <details>: the identifiers
+    // are still there for audit, one «Cómo se calcula» away.
+    const text = await page.locator('main').innerText()
+    expect(text, path).not.toMatch(/_legacy|_first_row|pmf_from_source_rows|canónic|deduplica/)
+  }
+})
+
+test('Calidad: «Cómo se calcula» opens to the exact rule and source columns', async ({ page }) => {
+  await openCalidad(page)
+  const how = page.getByTestId('owner-how')
+  await expect(how.getByText('owner_stage_legacy')).toBeHidden()
+  await how.locator('summary').click()
+  await expect(how.getByText('owner_stage_legacy')).toBeVisible()
+  await expect(how).toContainText('Tipo de propietario')
+  await expect(page.getByTestId('owner-why')).toContainText('Cuenta predios, no planes')
+  await expect(page.getByTestId('owner-why-rejected')).toHaveText('6')
 })
 
 test('TR-FUNC-025: the Explorador’s search is the N.º de ingreso lookup, and it is the page’s first control', async ({

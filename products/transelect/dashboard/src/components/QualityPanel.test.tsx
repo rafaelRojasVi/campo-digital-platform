@@ -1,7 +1,13 @@
-import { render, screen } from '@testing-library/react'
+import { render as renderInDom, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import type { ReactNode } from 'react'
+import { ROUTES, RouterProvider } from '../router'
 import { QualityPanel } from './QualityPanel'
 import { makeSummary } from '../test/factories'
+
+function render(node: ReactNode) {
+  return renderInDom(<RouterProvider initialPath={ROUTES.calidad}>{node}</RouterProvider>)
+}
 
 describe('QualityPanel (TR-FUNC-014/015/016)', () => {
   it('shows the blank-ID row count from the API', () => {
@@ -26,8 +32,33 @@ describe('QualityPanel (TR-FUNC-014/015/016)', () => {
     expect(screen.getByText(/campo N.º de resolución/)).toBeInTheDocument()
   })
 
-  it('names the dedup rule the PMF-level indicator inherits', () => {
+  it('keeps the dedup rule the PMF-level indicator inherits in its «Cómo se calcula»', () => {
     render(<QualityPanel summary={makeSummary()} />)
-    expect(screen.getByText('estado_resumido_first_row')).toBeInTheDocument()
+    const how = screen.getByTestId('how-sin-ingreso')
+    expect(how.tagName).toBe('DETAILS')
+    expect(how).not.toHaveAttribute('open')
+    expect(how).toHaveTextContent('estado_resumido_first_row')
+    expect(how).toHaveTextContent('N Ingreso')
+  })
+
+  it('leads with plain language: what was found and what to review', () => {
+    render(
+      <QualityPanel
+        summary={makeSummary({ calidad_pmf_sin_numero_ingreso: 3, calidad_filas_sin_id_predial_unico: 0 })}
+      />,
+    )
+    const item = screen.getByTestId('quality-sin-ingreso').closest('li') as HTMLElement
+    expect(item).toHaveTextContent('Esos planes no se pueden vincular a un expediente CONAF.')
+    expect(item).toHaveTextContent('Qué revisar:')
+    // Outside the closed detail, no rule identifier is part of the reading line.
+    const visible = [...item.children].filter((node) => node.tagName !== 'DETAILS')
+    for (const node of visible) expect(node.textContent).not.toMatch(/_legacy|first_row/)
+  })
+
+  it('counts the PMF with conflicting statuses from the API list', () => {
+    render(<QualityPanel summary={makeSummary()} />)
+    expect(screen.getByTestId('quality-conflictos')).toHaveTextContent(
+      String(makeSummary().calidad_pmf_estado_resumido_conflictivo.length),
+    )
   })
 })

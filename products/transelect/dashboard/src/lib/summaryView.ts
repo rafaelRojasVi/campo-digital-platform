@@ -82,7 +82,7 @@ export function buildAttentionItems(
       id: 'pendientes',
       value: summary.pendientes_prioritarios_pmf_count,
       label: 'PMF pendientes prioritarios',
-      sub: `Sin N.º de ingreso o con rechazo vigente · ${summary.basis_pending_priority}`,
+      sub: 'Sin N.º de ingreso, o con un rechazo en su «Estado».',
       action: 'Ver la cola de trabajo',
       href: routes.pendientes,
       tone: summary.pendientes_prioritarios_pmf_count > 0 ? 'late' : 'calm',

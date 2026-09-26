@@ -156,7 +156,7 @@ export function LayoutReview({
               <tr>
                 <th scope="col">Columna</th>
                 <th scope="col">Encabezado en la planilla</th>
-                <th scope="col">Campo</th>
+                <th scope="col">Campo en la plataforma</th>
                 <th scope="col" className="numeric">
                   Filas con dato
                 </th>
