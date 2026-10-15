@@ -1,0 +1,32 @@
+{
+  "report": {
+    "generated_at": "2026-10-15T15:00:00+00:00",
+    "read_only": true,
+    "alerts": [
+      {"code": "sign_in_rejected", "severity": "warning", "count": 3, "message": "3 inicios de sesión rechazados en 24 h"},
+      {"code": "auth_burst", "severity": "critical", "count": 1, "message": "1 IP con más de 60 solicitudes sin sesión en un minuto"}
+    ],
+    "activity": [
+      {"at": "2026-10-15T14:20:00+00:00", "actor": "Persona Demo", "event_type": "import.published", "product": "transelect", "subject": "5"},
+      {"at": "2026-10-15T14:05:00+00:00", "actor": "Persona Demo", "event_type": "forestry.snapshot.uploaded", "product": "forestry", "subject": "1"},
+      {"at": "2026-10-15T13:50:00+00:00", "actor": "Persona Demo", "event_type": "session.created", "product": null, "subject": null}
+    ],
+    "suspicious_ips": [
+      {"ip": "203.0.113.7", "total": 140, "unauthorized": 138, "forbidden": 2, "first_seen": "2026-10-15T09:00:00+00:00", "last_seen": "2026-10-15T09:04:00+00:00"}
+    ],
+    "usage": [
+      {"day": "2026-10-13", "product": "platform", "category": "sign_in", "count": 1},
+      {"day": "2026-10-14", "product": "platform", "category": "sign_in", "count": 2},
+      {"day": "2026-10-14", "product": "transelect", "category": "upload", "count": 1},
+      {"day": "2026-10-14", "product": "transelect", "category": "publish", "count": 1},
+      {"day": "2026-10-14", "product": "forestry", "category": "upload", "count": 1},
+      {"day": "2026-10-15", "product": "platform", "category": "sign_in", "count": 1}
+    ]
+  },
+  "deployments": [
+    {"id": "94172cf4", "status": "SUCCESS", "created_at": "2026-10-15T18:00:00Z", "commit": "25b4014", "message": "Merge pull request #98 (demo)"}
+  ],
+  "fetched_at": "2026-10-15T15:00:05+00:00",
+  "error": null,
+  "demo": true
+}
