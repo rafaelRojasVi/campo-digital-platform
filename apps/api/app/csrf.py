@@ -56,6 +56,7 @@ from fastapi import Cookie, Depends, HTTPException, Request
 
 from app.config import Settings, get_settings
 from app.deps import SESSION_COOKIE_NAME
+from app.security_events import SecurityEventNote, SecurityHTTPException
 
 CSRF_HEADER_NAME = "X-CSRF-Token"
 
@@ -220,7 +221,13 @@ def require_csrf(
         app_env=settings.app_env,
         trusted_origins=parse_trusted_origins(settings.csrf_trusted_origins),
     ):
-        raise HTTPException(status_code=403, detail=_CSRF_REJECTED_DETAIL)
+        raise SecurityHTTPException(
+            403,
+            _CSRF_REJECTED_DETAIL,
+            SecurityEventNote("csrf.rejected", reason="origin_untrusted"),
+        )
 
     if not verify_csrf_token(request.headers.get(CSRF_HEADER_NAME), session_token=session_token):
-        raise HTTPException(status_code=403, detail=_CSRF_REJECTED_DETAIL)
+        raise SecurityHTTPException(
+            403, _CSRF_REJECTED_DETAIL, SecurityEventNote("csrf.rejected", reason="token_invalid")
+        )
