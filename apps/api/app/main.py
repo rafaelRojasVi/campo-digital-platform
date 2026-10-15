@@ -35,6 +35,7 @@ from app.google_auth import GoogleNotConfiguredError
 from app.http_hardening import RequestBodyLimitMiddleware, SecurityHeadersMiddleware
 from app.identity_safety import require_production_identity_configuration
 from app.object_store import LocalObjectStore, ObjectStoreError, ObjectStoreNotConfiguredError
+from app.observability import init_error_reporting
 from app.routers.access_admin import router as access_admin_router
 from app.routers.csrf import router as csrf_router
 from app.routers.entra_auth import router as entra_auth_router
@@ -75,6 +76,14 @@ def _resolve_app_env() -> str:
 
 
 APP_ENV = _resolve_app_env()
+
+# Server-error reporting starts before the app is built so the FastAPI
+# integration wraps every route. Without SENTRY_DSN it stays off.
+init_error_reporting(
+    dsn=os.environ.get("SENTRY_DSN"),
+    environment=APP_ENV,
+    release=os.environ.get("RAILWAY_GIT_COMMIT_SHA"),
+)
 
 
 @asynccontextmanager
