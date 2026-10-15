@@ -70,6 +70,10 @@ class GoogleSignInError(RuntimeError):
     """Raised when a Google sign-in attempt cannot be completed or trusted."""
 
 
+class GoogleDomainNotAllowedError(GoogleSignInError):
+    """The account is not in the Google Workspace domain allowed to sign in."""
+
+
 @dataclass(frozen=True, slots=True)
 class GoogleSignIn:
     """One verified Workspace identity. Carries no Google token by design."""
@@ -143,7 +147,7 @@ def verify_id_token(
         not isinstance(hosted_domain, str)
         or hosted_domain.casefold() != workspace_domain.casefold()
     ):
-        raise GoogleSignInError(
+        raise GoogleDomainNotAllowedError(
             "This account does not belong to the Google Workspace domain allowed to sign in."
         )
 

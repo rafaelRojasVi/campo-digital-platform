@@ -1,4 +1,4 @@
-.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check lidar-dev lidar-status lidar-stop transelec-dev transelec-status transelec-stop campo-demo campo-status campo-stop ensure-platform-db platform-local platform-worker platform-worker-concurrency forestry-dev forestry-status forestry-stop forestry-frontend-check
+.PHONY: setup lint format format-check typecheck test test-api docs-check architecture-check secret-check dependency-audit check db-test-up db-test-reset db-test-down migration-check persistence-check lidar-dev lidar-status lidar-stop transelec-dev transelec-status transelec-stop campo-demo campo-status campo-stop ensure-platform-db platform-local platform-worker platform-worker-concurrency forestry-dev forestry-status forestry-stop forestry-frontend-check consola consola-demo consola-install consola-uninstall
 
 N ?= 2
 
@@ -135,6 +135,18 @@ forestry-status:
 
 forestry-stop:
 	uv run --extra api --extra transelec python scripts/forestry_dev.py stop
+
+consola:
+	python3 scripts/consola.py
+
+consola-demo:
+	python3 scripts/consola.py --demo
+
+consola-install:
+	python3 scripts/consola.py install
+
+consola-uninstall:
+	python3 scripts/consola.py uninstall
 
 forestry-frontend-check:
 	cd products/forestry/dashboard && npm run lint && npm run build && npm test

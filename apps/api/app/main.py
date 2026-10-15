@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request, Response
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
@@ -50,6 +53,16 @@ from app.routers.session import router as session_router
 from app.routers.transelec import TRANSELEC_MAX_UPLOAD_BYTES
 from app.routers.transelec import router as transelec_router
 from app.routers.transelec_edits import router as transelec_edits_router
+from app.security_events import (
+    STATE_KEY,
+    DatabaseSecurityEventSink,
+    NullSecurityEventSink,
+    SecurityEventRecorder,
+    SecurityHTTPException,
+    purge_expired_security_events,
+    run_maintenance,
+)
+from app.security_middleware import SecurityEventMiddleware
 
 _execution_backend: ExecutionBackend | None = None
 
@@ -85,6 +98,12 @@ init_error_reporting(
     release=os.environ.get("RAILWAY_GIT_COMMIT_SHA"),
 )
 
+# Security events for the operator's Consola. Under APP_ENV=test there is no
+# database, so nothing is written. The engine is only resolved at write time.
+security_recorder = SecurityEventRecorder(
+    NullSecurityEventSink() if APP_ENV == "test" else DatabaseSecurityEventSink(get_database_engine)
+)
+
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -106,9 +125,20 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         await _execution_backend.start()
 
+    stop_maintenance = asyncio.Event()
+    purge = (
+        None
+        if APP_ENV == "test"
+        else lambda: purge_expired_security_events(get_database_engine(), now=datetime.now(UTC))
+    )
+    maintenance = asyncio.create_task(
+        run_maintenance(security_recorder, purge=purge, stop=stop_maintenance)
+    )
     try:
         yield
     finally:
+        stop_maintenance.set()
+        await maintenance
         if _execution_backend is not None:
             await _execution_backend.stop()
 
@@ -148,7 +178,18 @@ app.add_middleware(
     session_validator=has_active_session,
     session_required=UPLOAD_BODY_LIMITS.keys(),
 )
+# Outside the body limit so its 401s are counted; inside the headers so the
+# answers keep their security headers.
+app.add_middleware(SecurityEventMiddleware, recorder=security_recorder)
 app.add_middleware(SecurityHeadersMiddleware, app_env=APP_ENV)
+
+
+@app.exception_handler(SecurityHTTPException)
+async def _security_http_exception(request: Request, exc: SecurityHTTPException) -> Response:
+    """Answer exactly like an HTTPException, and leave the note for the middleware."""
+
+    setattr(request.state, STATE_KEY, exc.note)
+    return await http_exception_handler(request, exc)
 
 
 @app.exception_handler(EntraNotConfiguredError)

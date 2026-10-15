@@ -28,6 +28,7 @@ from app.dev_auth import (
 from app.entra_auth import EntraOidcClient, MsalEntraOidcClient
 from app.google_auth import GoogleOidcClient, GoogleOidcSignInClient
 from app.object_store import LocalObjectStore, ObjectStore, open_configured_object_store
+from app.security_events import SecurityEventNote, SecurityHTTPException
 from app.session_store import PlatformSessionStore
 
 SESSION_COOKIE_NAME = "campo_session"
@@ -208,6 +209,15 @@ def ensure_can(
 
     role = get_product_role(connection, app_user_id=app_user_id, product_key=product_key)
     if not can(role, action):
-        raise HTTPException(status_code=403, detail="Not permitted for this product.")
+        raise SecurityHTTPException(
+            403,
+            "Not permitted for this product.",
+            SecurityEventNote(
+                "access.denied",
+                reason="no_grant" if role is None else "action_not_allowed",
+                product_key=product_key,
+                actor_app_user_id=app_user_id,
+            ),
+        )
     assert role is not None  # can() returning True implies a grant exists
     return role

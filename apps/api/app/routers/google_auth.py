@@ -49,7 +49,8 @@ from app.deps import (
     get_google_oidc_client,
     get_platform_session_store,
 )
-from app.google_auth import GoogleOidcClient, GoogleSignInError
+from app.google_auth import GoogleDomainNotAllowedError, GoogleOidcClient, GoogleSignInError
+from app.security_events import SecurityEventNote, SecurityHTTPException
 from app.session_store import PlatformSessionStore
 from app.token_crypto import TokenDecryptionError, decrypt_token, encrypt_token
 
@@ -123,13 +124,21 @@ def google_callback(
     encryption_key = _require_encryption_key(settings)
     if flow_cookie is None:
         logger.warning("Google sign-in rejected: flow cookie missing or expired")
-        raise HTTPException(status_code=400, detail="Missing or expired sign-in state.")
+        raise SecurityHTTPException(
+            400,
+            "Missing or expired sign-in state.",
+            SecurityEventNote("sign_in.rejected", reason="flow_cookie_missing"),
+        )
 
     try:
         flow_state = decrypt_token(flow_cookie.encode("utf-8"), key=encryption_key)
     except TokenDecryptionError as exc:
         logger.warning("Google sign-in rejected: flow cookie could not be decrypted")
-        raise HTTPException(status_code=400, detail="Sign-in state could not be verified.") from exc
+        raise SecurityHTTPException(
+            400,
+            "Sign-in state could not be verified.",
+            SecurityEventNote("sign_in.rejected", reason="flow_cookie_invalid"),
+        ) from exc
 
     callback_params = {key: str(value) for key, value in request.query_params.items()}
 
@@ -137,7 +146,14 @@ def google_callback(
         sign_in = client.complete(flow_state, callback_params, _redirect_uri(settings))
     except GoogleSignInError as exc:
         logger.warning("Google sign-in rejected: %r", str(exc))
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        reason = (
+            "domain_not_allowed"
+            if isinstance(exc, GoogleDomainNotAllowedError)
+            else "token_invalid"
+        )
+        raise SecurityHTTPException(
+            401, str(exc), SecurityEventNote("sign_in.rejected", reason=reason)
+        ) from exc
 
     user = resolve_or_create_app_user(
         connection,
