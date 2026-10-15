@@ -65,7 +65,7 @@ should not need it.
 | `event_type` | Produced at | `reason` codes |
 |---|---|---|
 | `sign_in.rejected` | `routers/google_auth.py` callback, each rejection branch | `flow_cookie_missing`, `flow_cookie_invalid`, `domain_not_allowed`, `token_invalid` |
-| `csrf.rejected` | `csrf.require_csrf`, both `403` branches | `token_missing`, `token_mismatch` |
+| `csrf.rejected` | `csrf.require_csrf`, both `403` branches | `origin_untrusted`, `token_invalid` |
 | `access.denied` | `deps.ensure_can` (`403 Not permitted for this product.`), which knows the user and product | `no_grant` (no role), `action_not_allowed` (role lacks the action) |
 | `auth.required` | any `401` answer | none |
 
