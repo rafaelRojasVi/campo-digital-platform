@@ -1,0 +1,134 @@
+"""The Consola export: shape, alert rules, privacy, read-only transaction."""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime, timedelta
+
+from app.access_repository import resolve_or_create_app_user
+from app.audit import record_audit_event
+from app.consola_export import build_report, export_json
+from sqlalchemy import Connection, Engine, text
+
+NOW = datetime(2026, 10, 15, 15, 0, tzinfo=UTC)
+
+
+def _event(connection: Connection, **values: object) -> None:
+    row = {
+        "product_key": None,
+        "actor_app_user_id": None,
+        "client_ip": None,
+        "count": 1,
+        "reason": None,
+        **values,
+    }
+    connection.execute(
+        text(
+            """
+            INSERT INTO platform.security_event
+                (occurred_at, event_type, product_key, actor_app_user_id, client_ip,
+                 path, http_status, count, reason)
+            VALUES (:occurred_at, :event_type, :product_key, :actor_app_user_id,
+                    CAST(:client_ip AS inet), :path, :http_status, :count, :reason)
+            """
+        ),
+        row,
+    )
+
+
+def test_report_alerts_activity_ips_and_usage(integration_connection: Connection) -> None:
+    c = integration_connection
+    user = resolve_or_create_app_user(
+        c,
+        identity_kind="dev-local",
+        identity_key="ana",
+        display_name="Ana Prueba",
+        email="ana@example.cl",
+    )
+    recent = NOW - timedelta(hours=2)
+    for _ in range(3):
+        _event(
+            c,
+            occurred_at=recent,
+            event_type="sign_in.rejected",
+            path="/api/auth/google/callback",
+            http_status=400,
+            reason="flow_cookie_missing",
+        )
+    _event(
+        c,
+        occurred_at=recent,
+        event_type="sign_in.rejected",
+        path="/api/auth/google/callback",
+        http_status=401,
+        reason="domain_not_allowed",
+    )
+    _event(
+        c,
+        occurred_at=recent,
+        event_type="auth.required",
+        path="/api/transelec/summary",
+        http_status=401,
+        client_ip="200.1.2.3",
+        count=120,
+    )
+    _event(
+        c,
+        occurred_at=NOW - timedelta(days=30),
+        event_type="csrf.rejected",
+        path="/old",
+        http_status=403,
+        reason="token_invalid",
+    )
+    c.execute(
+        text("UPDATE platform.audit_event SET occurred_at = :at WHERE id = :id"),
+        {
+            "at": recent,
+            "id": record_audit_event(c, actor_app_user_id=user.id, event_type="session.created"),
+        },
+    )
+    c.execute(
+        text("UPDATE platform.audit_event SET occurred_at = :at WHERE id = :id"),
+        {
+            "at": recent,
+            "id": record_audit_event(
+                c,
+                actor_app_user_id=user.id,
+                event_type="import.published",
+                product_key="transelect",
+                subject_id="5",
+            ),
+        },
+    )
+
+    report = build_report(c, now=NOW)
+
+    codes = {alert["code"]: alert for alert in report["alerts"]}
+    assert codes["sign_in_rejected"]["count"] == 4
+    assert codes["domain_not_allowed"]["severity"] == "critical"
+    assert codes["auth_burst"]["count"] == 1
+    assert "csrf_rejected" not in codes  # older than 24 h
+
+    actors = {row["actor"] for row in report["activity"]}
+    assert "Ana Prueba" in actors
+    assert "ana@example.cl" not in json.dumps(report, default=str)
+
+    ips = report["suspicious_ips"]
+    assert ips[0]["ip"] == "200.1.2.3" and ips[0]["unauthorized"] == 120
+
+    usage = {(u["product"], u["category"]): u["count"] for u in report["usage"]}
+    assert usage[("platform", "sign_in")] >= 1
+    assert usage[("transelect", "publish")] >= 1
+
+
+def test_export_runs_in_a_read_only_transaction(integration_engine: Engine) -> None:
+    report = json.loads(export_json(integration_engine, now=NOW))
+    assert report["read_only"] is True
+    assert set(report) == {
+        "generated_at",
+        "read_only",
+        "alerts",
+        "activity",
+        "suspicious_ips",
+        "usage",
+    }
