@@ -102,7 +102,8 @@ proxy-set forwarding header, taking the address the edge appended, and only
 when the peer is in Railway's private range; otherwise the peer address is
 used. **OPEN QUESTION, resolved during implementation:** which header
 Railway sets and in what order. Verify with `railway logs --http --json`
-(`srcIp`) against what the app sees before relying on it.
+(`srcIp`) against what the app sees before relying on it. Resolved
+2026-10-15: see the Client IP entry in `products/transelect/docs/deployment.md`.
 
 ### Retention
 

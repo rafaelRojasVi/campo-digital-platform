@@ -79,7 +79,15 @@ def run_json(command: list[str], runner: Runner = subprocess.run) -> object:
         if "unauthorized" in stderr or "login" in stderr:
             raise ConsolaError("Railway no tiene sesión iniciada. Corre: railway login")
         raise ConsolaError(f"El comando de Railway falló (código {result.returncode}).")
-    for line in reversed((result.stdout or "").splitlines()):
+    lines = (result.stdout or "").splitlines()
+    # Pretty-printed output (the deployment list) spans several lines.
+    start = next((i for i, line in enumerate(lines) if line.startswith(("{", "["))), None)
+    if start is not None:
+        try:
+            return json.loads("\n".join(lines[start:]))
+        except json.JSONDecodeError:
+            pass
+    for line in reversed(lines):
         line = line.strip()
         if line.startswith(("{", "[")):
             try:
