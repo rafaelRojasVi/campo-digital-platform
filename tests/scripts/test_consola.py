@@ -157,3 +157,20 @@ def test_main_reuses_running_consola(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert consola.main([]) == 0
     assert opened == ["http://127.0.0.1:8787/"]
+
+
+def test_page_has_every_section_and_no_external_resources() -> None:
+    html = (consola.ASSETS / "index.html").read_text(encoding="utf-8")
+    for section in ("Alertas", "Actividad", "IPs sospechosas", "Uso por producto", "Salud"):
+        assert section in html
+    assert "http://" not in html.replace("http://127.0.0.1", "")
+    assert "<script src=" not in html and '<link rel="stylesheet"' not in html
+
+
+def test_page_never_shows_good_news_without_data() -> None:
+    """With no report (Railway failed), sections must say there is no data, not "no alerts"."""
+
+    html = (consola.ASSETS / "index.html").read_text(encoding="utf-8")
+    assert "function renderUnavailable" in html
+    assert "Sin datos: revisa el aviso de arriba." in html
+    assert 'aria-live="polite"' in html

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consola Campo Digital</title>
+<link rel="icon" href="/icon.svg">
+<meta name="theme-color" content="#0f3b2b">
+<style>
+:root {
+  --bg: #f4f5f2; --surface: #ffffff; --surface-2: #eef0ec; --ink: #16211d; --ink-2: #47564f;
+  --line: #d9ded8; --accent: #1e7a51; --accent-deep: #0f3b2b; --accent-tint: #e5f1ea;
+  --ok: #1e7a51; --ok-tint: #e5f1ea; --warn: #9a6a06; --warn-tint: #fbf0d8;
+  --crit: #b23a2b; --crit-tint: #f8e4df; --info: #2f5f8a; --info-tint: #e3edf6;
+  --on-accent: #ffffff;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1714; --surface: #16211c; --surface-2: #1d2a24; --ink: #e6efea; --ink-2: #a5b7ae;
+    --line: #2d3c35; --accent: #5fc596; --accent-deep: #b9e6cf; --accent-tint: #1b3229;
+    --ok: #5fc596; --ok-tint: #1b3229; --warn: #f1b443; --warn-tint: #3a2d12;
+    --crit: #f08473; --crit-tint: #3c201b; --info: #8cb8e0; --info-tint: #1a2836;
+    --on-accent: #0f1714;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 48px; display: grid; gap: 20px; }
+header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; justify-content: space-between;
+  background: var(--accent-deep); color: #f2f6f3; border-radius: 14px; padding: 16px 20px; }
+@media (prefers-color-scheme: dark) { header.top { background: var(--surface-2); color: var(--ink); } }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand img { width: 36px; height: 36px; }
+.brand h1 { margin: 0; font-size: 19px; }
+.brand p { margin: 0; font-size: 13px; opacity: .8; }
+.status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+  font-weight: 700; font-size: 14px; }
+.status::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.status.ok { background: var(--ok-tint); color: var(--ok); }
+.status.warning { background: var(--warn-tint); color: var(--warn); }
+.status.critical { background: var(--crit-tint); color: var(--crit); }
+.actions { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+button.refresh { font: 700 14px var(--font); border: 0; border-radius: 8px; padding: 10px 16px; min-height: 40px;
+  background: var(--accent); color: var(--on-accent); cursor: pointer; }
+button.refresh { touch-action: manipulation; }
+button.refresh:hover:not([disabled]) { filter: brightness(1.08); }
+button.refresh[disabled] { opacity: .6; cursor: progress; }
+.health a:hover { border-color: var(--accent); background: var(--accent-tint); }
+button:focus-visible, a:focus-visible { outline: 3px solid var(--warn); outline-offset: 2px; }
+.grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 20px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; min-width: 0; }
+.card h2 { margin: 0 0 12px; font-size: 16px; display: flex; justify-content: space-between; align-items: baseline; }
+.card h2 small { font-weight: 400; color: var(--ink-2); font-size: 12.5px; }
+.span-12 { grid-column: span 12; } .span-7 { grid-column: span 7; } .span-5 { grid-column: span 5; }
+@media (max-width: 900px) { .span-7, .span-5 { grid-column: span 12; } }
+.alerts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.alert { border-left: 4px solid var(--info); background: var(--info-tint); border-radius: 8px; padding: 12px 14px; }
+.alert.warning { border-color: var(--warn); background: var(--warn-tint); }
+.alert.critical { border-color: var(--crit); background: var(--crit-tint); }
+.alert b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.alert .sev { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.empty { color: var(--ink-2); padding: 14px; border: 1px dashed var(--line); border-radius: 8px; text-align: center; }
+.empty.good { color: var(--ok); border-color: var(--ok); background: var(--ok-tint); }
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 420px; overflow: auto; }
+.timeline li { display: grid; grid-template-columns: 96px 1fr auto; gap: 10px; align-items: start; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+.timeline .chip { align-self: start; }
+.timeline li.empty { display: block; border-bottom: 0; }
+@media (max-width: 560px) {
+  .timeline li { grid-template-columns: 1fr auto; row-gap: 2px; }
+  .timeline time { grid-column: 1 / -1; }
+}
+.timeline time { font: 12.5px var(--mono); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.chip { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); white-space: nowrap; }
+.chip.transelect { background: var(--info-tint); color: var(--info); }
+.chip.forestry { background: var(--ok-tint); color: var(--ok); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; color: var(--ink-2); font-weight: 700; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.ip { font-family: var(--mono); }
+.usage { display: grid; gap: 14px; }
+.usage-row h3 { margin: 0 0 6px; font-size: 14px; }
+.bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; height: 84px; }
+.bar { display: grid; align-content: end; gap: 3px; text-align: center; font-size: 11px; color: var(--ink-2); }
+.bar span.fill { display: block; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
+.bar b { font-size: 12px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.health { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.health a { color: var(--accent); font-weight: 700; text-decoration: none; border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 12px; min-height: 40px; display: inline-flex; align-items: center; }
+.banner { border-radius: 10px; padding: 12px 16px; font-weight: 600; }
+.banner.error { background: var(--crit-tint); color: var(--crit); }
+.banner.demo { background: var(--warn-tint); color: var(--warn); }
+.loading { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .loading { animation: none; } }
+footer { color: var(--ink-2); font-size: 12.5px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <img src="/icon.svg" alt="" width="36" height="36">
+      <div><h1>Consola Campo Digital</h1><p>Seguridad y uso · producción</p></div>
+    </div>
+    <span id="status" class="status ok" role="status" aria-live="polite">Cargando…</span>
+    <div class="actions">
+      <span id="updated">—</span>
+      <button id="refresh" class="refresh" type="button">Actualizar</button>
+    </div>
+  </header>
+  <div id="banner" role="alert" aria-live="polite" hidden></div>
+  <main class="grid">
+    <section class="card span-12" aria-labelledby="h-alerts"><h2 id="h-alerts">Alertas <small>últimas 24 h</small></h2><div id="alerts" class="alerts"></div></section>
+    <section class="card span-7" aria-labelledby="h-activity"><h2 id="h-activity">Actividad <small>últimos 7 días</small></h2><ul id="activity" class="timeline"></ul></section>
+    <section class="card span-5" aria-labelledby="h-ips"><h2 id="h-ips">IPs sospechosas <small>401 / 403 · 7 días</small></h2><div id="ips"></div></section>
+    <section class="card span-7" aria-labelledby="h-usage"><h2 id="h-usage">Uso por producto <small>por día · 7 días</small></h2><div id="usage" class="usage"></div></section>
+    <section class="card span-5" aria-labelledby="h-health"><h2 id="h-health">Salud</h2><div id="health" class="health"></div></section>
+  </main>
+  <footer>Datos de solo lectura, en memoria en este equipo. Se cierra sola tras 1 h sin uso.</footer>
+</div>
+<script>
+const ACTIONS = {
+  "session.created": "inició sesión", "upload.completed": "subió una planilla", "import.validated": "validó una importación",
+  "import.published": "publicó una versión", "import.restored": "restauró una versión", "import.validation.failed": "validación fallida",
+  "forestry.snapshot.uploaded": "subió una versión de Rodales", "forestry.snapshot.published": "publicó Rodales",
+  "forestry.snapshot.restored": "restauró Rodales", "transelec.override.saved": "editó un dato",
+  "transelec.export.xlsx_downloaded": "descargó el Excel", "product_grant.changed": "cambió permisos"
+};
+const PRODUCTS = { transelect: "Transelec", forestry: "Rodales", platform: "Plataforma" };
+const CATEGORIES = { sign_in: "Inicios de sesión", upload: "Cargas", validation: "Validaciones", publish: "Publicaciones", edit: "Ediciones" };
+const SEVERITY = { critical: "Crítica", warning: "Atención", info: "Info" };
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs = {}, ...children) => {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k === "class" ? (node.className = v) : node.setAttribute(k, v);
+  for (const c of children) node.append(c instanceof Node ? c : document.createTextNode(String(c ?? "")));
+  return node;
+};
+const when = (iso) => iso ? new Date(iso).toLocaleString("es-CL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }) : "—";
+const DEPLOY_STATUS = { SUCCESS: "Funcionando", FAILED: "Falló", CRASHED: "Caído", BUILDING: "Construyendo", DEPLOYING: "Desplegando", INITIALIZING: "Iniciando", QUEUED: "En cola", REMOVED: "Reemplazado" };
+const lastSevenDays = (iso) => {
+  const end = iso ? new Date(iso) : new Date();
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(end); d.setDate(end.getDate() - (6 - i));
+    return d.toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
+  });
+};
+
+function renderAlerts(alerts) {
+  const box = $("alerts"); box.replaceChildren();
+  if (!alerts.length) { box.append(el("div", { class: "empty good" }, "Sin alertas en las últimas 24 h")); return; }
+  for (const a of alerts) box.append(el("article", { class: `alert ${a.severity}` },
+    el("span", { class: "sev" }, SEVERITY[a.severity] || a.severity), el("b", {}, a.count), a.message));
+}
+function renderActivity(rows) {
+  const list = $("activity"); list.replaceChildren();
+  if (!rows.length) { list.append(el("li", { class: "empty" }, "Sin actividad en 7 días")); return; }
+  for (const r of rows) list.append(el("li", {},
+    el("time", { datetime: r.at }, when(r.at)),
+    el("span", {}, el("b", {}, r.actor), " ", ACTIONS[r.event_type] || r.event_type),
+    el("span", { class: `chip ${r.product || "platform"}` }, PRODUCTS[r.product || "platform"] || r.product)));
+}
+function renderIps(rows) {
+  const box = $("ips"); box.replaceChildren();
+  if (!rows.length) { box.append(el("div", { class: "empty good" }, "Ninguna IP con rechazos en 7 días")); return; }
+  const body = el("tbody");
+  for (const r of rows) body.append(el("tr", {}, el("td", { class: "ip", translate: "no" }, r.ip), el("td", { class: "num" }, r.unauthorized),
+    el("td", { class: "num" }, r.forbidden), el("td", {}, when(r.last_seen))));
+  box.append(el("table", {}, el("thead", {}, el("tr", {}, el("th", {}, "IP"), el("th", {}, "401"), el("th", {}, "403"), el("th", {}, "Última vez"))), body));
+}
+function renderUsage(rows, generatedAt) {
+  const box = $("usage"); box.replaceChildren();
+  if (!rows.length) { box.append(el("div", { class: "empty" }, "Sin uso registrado en 7 días")); return; }
+  const days = lastSevenDays(generatedAt);
+  const products = [...new Set(rows.map((r) => r.product))];
+  for (const product of products) {
+    const totals = days.map((d) => rows.filter((r) => r.product === product && r.day === d).reduce((s, r) => s + r.count, 0));
+    const max = Math.max(1, ...totals);
+    const cats = [...new Set(rows.filter((r) => r.product === product).map((r) => CATEGORIES[r.category] || r.category))].join(" · ");
+    const bars = el("div", { class: "bars", role: "img", "aria-label": `${PRODUCTS[product] || product}: ${totals.join(", ")} por día` });
+    days.forEach((d, i) => bars.append(el("div", { class: "bar" }, el("b", {}, totals[i]),
+      Object.assign(el("span", { class: "fill" }), { style: `height:${Math.round((totals[i] / max) * 56)}px` }), d.slice(5))));
+    box.append(el("div", { class: "usage-row" }, el("h3", {}, `${PRODUCTS[product] || product} `, el("span", { class: "chip" }, cats)), bars));
+  }
+}
+function renderHealth(deployments) {
+  const box = $("health"); box.replaceChildren();
+  const d = deployments[0];
+  if (d) {
+    const tone = d.status === "SUCCESS" ? "ok" : (d.status === "FAILED" || d.status === "CRASHED") ? "critical" : "warning";
+    box.append(el("span", { class: `status ${tone}` }, DEPLOY_STATUS[d.status] || d.status), el("span", { translate: "no" }, `Deploy ${d.id} · commit ${d.commit} · ${when(d.created_at)}`));
+  } else box.append(el("span", { class: "empty" }, "Sin datos de Railway"));
+  box.append(el("a", { href: "https://origenlab.sentry.io/issues/", target: "_blank", rel: "noreferrer" }, "Errores en Sentry"),
+             el("a", { href: "https://railway.com/dashboard", target: "_blank", rel: "noreferrer" }, "Railway"));
+}
+function renderUnavailable() {
+  const msg = "Sin datos: revisa el aviso de arriba.";
+  for (const id of ["alerts", "ips", "usage"]) $(id).replaceChildren(el("div", { class: "empty" }, msg));
+  $("activity").replaceChildren(el("li", { class: "empty" }, msg));
+}
+function setStatus(alerts, error) {
+  const s = $("status");
+  if (error) { s.className = "status critical"; s.textContent = "Sin datos"; return; }
+  const crit = alerts.some((a) => a.severity === "critical"), warn = alerts.length > 0;
+  s.className = `status ${crit ? "critical" : warn ? "warning" : "ok"}`;
+  s.textContent = warn ? `${alerts.length} alerta${alerts.length > 1 ? "s" : ""}` : "Todo normal";
+}
+async function load(refresh) {
+  const btn = $("refresh"); btn.disabled = true; btn.replaceChildren(el("span", { class: "loading", "aria-hidden": "true" }), " Consultando producción…");
+  try {
+    const res = await fetch(`/api/report${refresh ? "?refresh=1" : ""}`, { cache: "no-store" });
+    const snap = await res.json();
+    const banner = $("banner");
+    if (snap.error) { banner.hidden = false; banner.className = "banner error"; banner.textContent = snap.error; }
+    else if (snap.demo) { banner.hidden = false; banner.className = "banner demo"; banner.textContent = "Datos de demostración, no son de producción."; }
+    else banner.hidden = true;
+    const r = snap.report;
+    if (r) { renderAlerts(r.alerts); renderActivity(r.activity); renderIps(r.suspicious_ips); renderUsage(r.usage, r.generated_at); }
+    else renderUnavailable();
+    renderHealth(snap.deployments || []); setStatus(r ? r.alerts : [], snap.error || (r ? null : "Sin datos"));
+    $("updated").textContent = `Actualizado ${when(snap.fetched_at)}`;
+  } catch (e) {
+    $("banner").hidden = false; $("banner").className = "banner error"; $("banner").textContent = "La Consola local no respondió. ¿Sigue abierta la terminal?";
+  } finally { btn.disabled = false; btn.textContent = "Actualizar"; }
+}
+$("refresh").addEventListener("click", () => load(true));
+load(false);
+</script>
+</body>
+</html>
