@@ -12,10 +12,14 @@ Spec: docs/superpowers/specs/2026-10-15-platform-consola-design.md.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
+import sys
 import threading
 import time
-from collections.abc import Callable
+import urllib.request
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -157,3 +161,136 @@ def make_server(
             del format, args  # keep the terminal quiet
 
     return ThreadingHTTPServer((host, port), Handler)
+
+
+IDLE_EXIT_SECONDS = 3600
+URL = f"http://{HOST}:{PORT}/"
+
+
+def is_wsl(environ: Mapping[str, str], proc_version: str) -> bool:
+    return "WSL_DISTRO_NAME" in environ or "microsoft" in proc_version.lower()
+
+
+def browser_command(url: str, *, wsl: bool, which: Callable[[str], str | None]) -> list[str] | None:
+    candidates = ["wslview", "explorer.exe"] if wsl else ["xdg-open"]
+    for name in candidates:
+        if which(name):
+            return [name, url]
+    return None
+
+
+def open_browser(url: str) -> None:
+    try:
+        proc_version = Path("/proc/version").read_text(encoding="utf-8")
+    except OSError:
+        proc_version = ""
+    command = browser_command(url, wsl=is_wsl(os.environ, proc_version), which=shutil.which)
+    if command is None:
+        print(f"Abre en tu navegador: {url}")
+        return
+    subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # noqa: S603
+
+
+def already_running(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url + "api/ping", timeout=1) as response:  # noqa: S310 - localhost
+            return json.loads(response.read()).get("app") == "campo-consola"
+    except (OSError, ValueError):
+        return False
+
+
+_LAUNCHER = """#!/bin/sh
+# Consola Campo Digital (installed by `make consola-install`).
+exec python3 "{script}" "$@"
+"""
+
+_DESKTOP = """[Desktop Entry]
+Type=Application
+Name=Consola Campo Digital
+Comment=Seguridad y uso de la plataforma Campo Digital
+Exec={launcher}
+Icon={icon}
+Terminal=false
+Categories=Development;Monitor;
+"""
+
+
+def install(repo_root: Path, home: Path) -> list[Path]:
+    launcher = home / ".local/bin/consola"
+    desktop = home / ".local/share/applications/campo-consola.desktop"
+    launcher.parent.mkdir(parents=True, exist_ok=True)
+    desktop.parent.mkdir(parents=True, exist_ok=True)
+    launcher.write_text(
+        _LAUNCHER.format(script=repo_root / "scripts" / "consola.py"), encoding="utf-8"
+    )
+    launcher.chmod(0o755)
+    desktop.write_text(
+        _DESKTOP.format(launcher=launcher, icon=repo_root / "scripts" / "consola" / "icon.svg"),
+        encoding="utf-8",
+    )
+    return [launcher, desktop]
+
+
+def uninstall(home: Path) -> list[Path]:
+    removed = []
+    for path in (
+        home / ".local/bin/consola",
+        home / ".local/share/applications/campo-consola.desktop",
+    ):
+        if path.exists():
+            path.unlink()
+            removed.append(path)
+    return removed
+
+
+def _demo_snapshot() -> dict[str, object]:
+    return json.loads((ASSETS / "demo-report.json").read_text(encoding="utf-8"))
+
+
+def _watch_idle(server: ThreadingHTTPServer, state: ConsolaState) -> None:
+    while True:
+        time.sleep(60)
+        if time.monotonic() - state.last_request > IDLE_EXIT_SECONDS:
+            server.shutdown()
+            return
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    repo_root = Path(__file__).resolve().parents[1]
+    if args[:1] == ["install"]:
+        for path in install(repo_root, Path.home()):
+            print(f"Instalado: {path}")
+        print("Ábrela con el comando `consola` o desde el menú de aplicaciones.")
+        return 0
+    if args[:1] == ["uninstall"]:
+        for path in uninstall(Path.home()):
+            print(f"Eliminado: {path}")
+        return 0
+
+    if already_running(URL):
+        open_browser(URL)
+        return 0
+
+    fetch = _demo_snapshot if "--demo" in args else fetch_snapshot
+    state = ConsolaState(fetch)
+    page = (ASSETS / "index.html").read_bytes()
+    try:
+        server = make_server(state, page)
+    except OSError as exc:
+        print(f"No pude abrir el puerto {PORT}: {exc}")
+        return 1
+    threading.Thread(target=_watch_idle, args=(server, state), daemon=True).start()
+    print(f"Consola Campo Digital en {URL} (se cierra sola tras 1 h sin uso; Ctrl+C para salir)")
+    open_browser(URL)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

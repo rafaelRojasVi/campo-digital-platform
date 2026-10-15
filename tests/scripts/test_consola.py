@@ -7,6 +7,7 @@ import subprocess
 import threading
 import urllib.request
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from scripts import consola
@@ -107,3 +108,52 @@ def test_server_serves_page_and_report_on_localhost_only() -> None:
         }
     finally:
         server.shutdown()
+
+
+def test_is_wsl() -> None:
+    assert consola.is_wsl({"WSL_DISTRO_NAME": "Ubuntu"}, "")
+    assert consola.is_wsl({}, "Linux version 6.18 microsoft-standard-WSL2")
+    assert not consola.is_wsl({}, "Linux version 6.8.0-generic")
+
+
+@pytest.mark.parametrize(
+    ("wsl", "available", "expected"),
+    [
+        (True, {"wslview", "explorer.exe"}, ["wslview", "http://u"]),
+        (True, {"explorer.exe"}, ["explorer.exe", "http://u"]),
+        (False, {"xdg-open"}, ["xdg-open", "http://u"]),
+        (False, set(), None),
+    ],
+)
+def test_browser_command(wsl: bool, available: set[str], expected: list[str] | None) -> None:
+    which = lambda name: f"/usr/bin/{name}" if name in available else None  # noqa: E731
+    assert consola.browser_command("http://u", wsl=wsl, which=which) == expected
+
+
+def test_install_and_uninstall(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    (repo / "scripts" / "consola").mkdir(parents=True)
+    home = tmp_path / "home"
+
+    written = consola.install(repo, home)
+    launcher = home / ".local/bin/consola"
+    desktop = home / ".local/share/applications/campo-consola.desktop"
+    assert set(written) == {launcher, desktop}
+    assert str(repo / "scripts" / "consola.py") in launcher.read_text()
+    assert launcher.stat().st_mode & 0o111
+    assert "Name=Consola Campo Digital" in desktop.read_text()
+    assert f"Exec={launcher}" in desktop.read_text()
+
+    assert set(consola.uninstall(home)) == {launcher, desktop}
+    assert not launcher.exists() and not desktop.exists()
+
+
+def test_main_reuses_running_consola(monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(consola, "already_running", lambda url: True)
+    monkeypatch.setattr(consola, "open_browser", lambda url: opened.append(url))
+    monkeypatch.setattr(
+        consola, "make_server", lambda *a, **k: pytest.fail("must not start a server")
+    )
+    assert consola.main([]) == 0
+    assert opened == ["http://127.0.0.1:8787/"]
