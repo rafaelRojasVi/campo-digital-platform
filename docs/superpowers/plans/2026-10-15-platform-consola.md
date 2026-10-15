@@ -215,7 +215,13 @@ _INSERT = text(
 def test_accepts_a_known_event(integration_connection: Connection) -> None:
     row_id = integration_connection.execute(
         _INSERT,
-        {"event_type": "auth.required", "path": "/api/x", "status": 401, "ip": "200.1.2.3", "count": 5},
+        {
+            "event_type": "auth.required",
+            "path": "/api/x",
+            "status": 401,
+            "ip": "200.1.2.3",
+            "count": 5,
+        },
     ).scalar_one()
     assert row_id > 0
 
@@ -347,16 +353,26 @@ def test_ignored_paths() -> None:
 def test_notes_become_one_row_each() -> None:
     sink = _ListSink()
     recorder = SecurityEventRecorder(sink, clock=_clock)
-    note = SecurityEventNote("access.denied", reason="no_grant", product_key="forestry", actor_app_user_id=4)
+    note = SecurityEventNote(
+        "access.denied", reason="no_grant", product_key="forestry", actor_app_user_id=4
+    )
 
     recorder.observe(path="/api/forestry/versions", status=403, client_ip="200.1.2.3", note=note)
     assert recorder.flush() == 1
 
     (row,) = sink.rows
     assert (row.event_type, row.reason, row.product_key, row.actor_app_user_id) == (
-        "access.denied", "no_grant", "forestry", 4,
+        "access.denied",
+        "no_grant",
+        "forestry",
+        4,
     )
-    assert (row.path, row.http_status, row.client_ip, row.count) == ("/api/forestry/versions", 403, "200.1.2.3", 1)
+    assert (row.path, row.http_status, row.client_ip, row.count) == (
+        "/api/forestry/versions",
+        403,
+        "200.1.2.3",
+        1,
+    )
 
 
 def test_401s_aggregate_per_ip_path_and_minute() -> None:
@@ -387,7 +403,9 @@ def test_recorder_caps_buffers() -> None:
     recorder = SecurityEventRecorder(sink, clock=_clock, max_buffered=5)
     for index in range(50):
         recorder.observe(path=f"/scan/{index}", status=401, client_ip="200.1.2.3", note=None)
-        recorder.observe(path="/x", status=403, client_ip="200.1.2.3", note=SecurityEventNote("csrf.rejected"))
+        recorder.observe(
+            path="/x", status=403, client_ip="200.1.2.3", note=SecurityEventNote("csrf.rejected")
+        )
     assert len(recorder.drain()) == 10  # 5 aggregated keys + 5 noted rows
 
 
@@ -416,8 +434,13 @@ def test_maintenance_flushes_and_stops() -> None:
     async def scenario() -> None:
         stop = asyncio.Event()
         task = asyncio.create_task(
-            run_maintenance(recorder, purge=lambda: purged.append(1) or 0, stop=stop,
-                            flush_every=0.01, purge_every=0.01)
+            run_maintenance(
+                recorder,
+                purge=lambda: purged.append(1) or 0,
+                stop=stop,
+                flush_every=0.01,
+                purge_every=0.01,
+            )
         )
         await asyncio.sleep(0.05)
         stop.set()
@@ -608,7 +631,9 @@ class SecurityEventRecorder:
         try:
             self._sink.write(rows)
         except Exception as exc:  # noqa: BLE001 - recording must never break the app
-            logger.warning("Security events not written (%s): %d rows dropped", type(exc).__name__, len(rows))
+            logger.warning(
+                "Security events not written (%s): %d rows dropped", type(exc).__name__, len(rows)
+            )
             return 0
         return len(rows)
 
@@ -739,8 +764,17 @@ def _cleanup(engine: Engine) -> None:
 def test_sink_writes_and_purge_removes_only_old_rows(integration_engine: Engine) -> None:
     now = datetime(2026, 10, 15, 12, 0, tzinfo=UTC)
     rows = [
-        SecurityEventRow(now - timedelta(days=91), "auth.required", _MARK + "/old", 401, "200.1.2.3", count=7),
-        SecurityEventRow(now - timedelta(days=1), "sign_in.rejected", _MARK + "/new", 400, None, reason="flow_cookie_missing"),
+        SecurityEventRow(
+            now - timedelta(days=91), "auth.required", _MARK + "/old", 401, "200.1.2.3", count=7
+        ),
+        SecurityEventRow(
+            now - timedelta(days=1),
+            "sign_in.rejected",
+            _MARK + "/new",
+            400,
+            None,
+            reason="flow_cookie_missing",
+        ),
     ]
     _cleanup(integration_engine)
     try:
@@ -748,10 +782,14 @@ def test_sink_writes_and_purge_removes_only_old_rows(integration_engine: Engine)
         purge_expired_security_events(integration_engine, now=now)
         with integration_engine.connect() as connection:
             remaining = connection.execute(
-                text("SELECT path, reason, host(client_ip) AS ip FROM platform.security_event WHERE path LIKE :p"),
+                text(
+                    "SELECT path, reason, host(client_ip) AS ip FROM platform.security_event WHERE path LIKE :p"
+                ),
                 {"p": _MARK + "%"},
             ).all()
-        assert [(r.path, r.reason, r.ip) for r in remaining] == [(_MARK + "/new", "flow_cookie_missing", None)]
+        assert [(r.path, r.reason, r.ip) for r in remaining] == [
+            (_MARK + "/new", "flow_cookie_missing", None)
+        ]
     finally:
         _cleanup(integration_engine)
 ```
@@ -824,7 +862,9 @@ def _app(recorder: SecurityEventRecorder) -> FastAPI:
 
     @app.get("/denied")
     def denied() -> None:
-        raise SecurityHTTPException(403, "no", SecurityEventNote("access.denied", reason="no_grant"))
+        raise SecurityHTTPException(
+            403, "no", SecurityEventNote("access.denied", reason="no_grant")
+        )
 
     @app.get("/anon")
     def anon() -> None:
@@ -1068,15 +1108,25 @@ def test_domain_error_is_a_sign_in_error() -> None:
     ("role", "reason"),
     [(None, "no_grant"), (Role.VIEWER, "action_not_allowed")],
 )
-def test_ensure_can_raises_with_note(monkeypatch: pytest.MonkeyPatch, role: Role | None, reason: str) -> None:
+def test_ensure_can_raises_with_note(
+    monkeypatch: pytest.MonkeyPatch, role: Role | None, reason: str
+) -> None:
     monkeypatch.setattr(deps, "get_product_role", lambda *a, **k: role)
     with pytest.raises(SecurityHTTPException) as caught:
         deps.ensure_can(MagicMock(), app_user_id=7, product_key="forestry", action=Action.PUBLISH)
     exc = caught.value
     assert exc.status_code == 403
     assert exc.detail == "Not permitted for this product."
-    assert (exc.note.event_type, exc.note.reason, exc.note.product_key, exc.note.actor_app_user_id) == (
-        "access.denied", reason, "forestry", 7,
+    assert (
+        exc.note.event_type,
+        exc.note.reason,
+        exc.note.product_key,
+        exc.note.actor_app_user_id,
+    ) == (
+        "access.denied",
+        reason,
+        "forestry",
+        7,
     )
 ```
 
@@ -1228,7 +1278,14 @@ NOW = datetime(2026, 10, 15, 15, 0, tzinfo=UTC)
 
 
 def _event(connection: Connection, **values: object) -> None:
-    row = {"product_key": None, "actor_app_user_id": None, "client_ip": None, "count": 1, "reason": None, **values}
+    row = {
+        "product_key": None,
+        "actor_app_user_id": None,
+        "client_ip": None,
+        "count": 1,
+        "reason": None,
+        **values,
+    }
     connection.execute(
         text(
             """
@@ -1245,26 +1302,66 @@ def _event(connection: Connection, **values: object) -> None:
 def test_report_alerts_activity_ips_and_usage(integration_connection: Connection) -> None:
     c = integration_connection
     user = resolve_or_create_app_user(
-        c, identity_kind="dev-local", identity_key="ana", display_name="Ana Prueba", email="ana@example.cl"
+        c,
+        identity_kind="dev-local",
+        identity_key="ana",
+        display_name="Ana Prueba",
+        email="ana@example.cl",
     )
     recent = NOW - timedelta(hours=2)
     for _ in range(3):
-        _event(c, occurred_at=recent, event_type="sign_in.rejected", path="/api/auth/google/callback",
-               http_status=400, reason="flow_cookie_missing")
-    _event(c, occurred_at=recent, event_type="sign_in.rejected", path="/api/auth/google/callback",
-           http_status=401, reason="domain_not_allowed")
-    _event(c, occurred_at=recent, event_type="auth.required", path="/api/transelec/summary",
-           http_status=401, client_ip="200.1.2.3", count=120)
-    _event(c, occurred_at=NOW - timedelta(days=30), event_type="csrf.rejected", path="/old",
-           http_status=403, reason="token_invalid")
-    c.execute(
-        text("UPDATE platform.audit_event SET occurred_at = :at WHERE id = :id"),
-        {"at": recent, "id": record_audit_event(c, actor_app_user_id=user.id, event_type="session.created")},
+        _event(
+            c,
+            occurred_at=recent,
+            event_type="sign_in.rejected",
+            path="/api/auth/google/callback",
+            http_status=400,
+            reason="flow_cookie_missing",
+        )
+    _event(
+        c,
+        occurred_at=recent,
+        event_type="sign_in.rejected",
+        path="/api/auth/google/callback",
+        http_status=401,
+        reason="domain_not_allowed",
+    )
+    _event(
+        c,
+        occurred_at=recent,
+        event_type="auth.required",
+        path="/api/transelec/summary",
+        http_status=401,
+        client_ip="200.1.2.3",
+        count=120,
+    )
+    _event(
+        c,
+        occurred_at=NOW - timedelta(days=30),
+        event_type="csrf.rejected",
+        path="/old",
+        http_status=403,
+        reason="token_invalid",
     )
     c.execute(
         text("UPDATE platform.audit_event SET occurred_at = :at WHERE id = :id"),
-        {"at": recent, "id": record_audit_event(c, actor_app_user_id=user.id, event_type="import.published",
-                                                product_key="transelect", subject_id="5")},
+        {
+            "at": recent,
+            "id": record_audit_event(c, actor_app_user_id=user.id, event_type="session.created"),
+        },
+    )
+    c.execute(
+        text("UPDATE platform.audit_event SET occurred_at = :at WHERE id = :id"),
+        {
+            "at": recent,
+            "id": record_audit_event(
+                c,
+                actor_app_user_id=user.id,
+                event_type="import.published",
+                product_key="transelect",
+                subject_id="5",
+            ),
+        },
     )
 
     report = build_report(c, now=NOW)
@@ -1290,7 +1387,14 @@ def test_report_alerts_activity_ips_and_usage(integration_connection: Connection
 def test_export_runs_in_a_read_only_transaction(integration_engine: Engine) -> None:
     report = json.loads(export_json(integration_engine, now=NOW))
     assert report["read_only"] is True
-    assert set(report) == {"generated_at", "read_only", "alerts", "activity", "suspicious_ips", "usage"}
+    assert set(report) == {
+        "generated_at",
+        "read_only",
+        "alerts",
+        "activity",
+        "suspicious_ips",
+        "usage",
+    }
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -1319,6 +1423,7 @@ from typing import Any
 from sqlalchemy import Connection, Engine, text
 
 AUTH_BURST_PER_MINUTE = 60
+
 
 def _iso(value: object) -> object:
     if isinstance(value, datetime | date):
@@ -1352,9 +1457,24 @@ def _alerts(connection: Connection, since: datetime) -> list[dict[str, Any]]:
     ).scalar_one()
 
     rules = [
-        ("sign_in_rejected", "warning", counts.sign_in_rejected, "{n} inicios de sesión rechazados en 24 h"),
-        ("domain_not_allowed", "critical", counts.domain_not_allowed, "{n} intentos con cuentas fuera de Campo Digital"),
-        ("auth_burst", "critical", burst_ips, "{n} IP con más de 60 solicitudes sin sesión en un minuto"),
+        (
+            "sign_in_rejected",
+            "warning",
+            counts.sign_in_rejected,
+            "{n} inicios de sesión rechazados en 24 h",
+        ),
+        (
+            "domain_not_allowed",
+            "critical",
+            counts.domain_not_allowed,
+            "{n} intentos con cuentas fuera de Campo Digital",
+        ),
+        (
+            "auth_burst",
+            "critical",
+            burst_ips,
+            "{n} IP con más de 60 solicitudes sin sesión en un minuto",
+        ),
         ("csrf_rejected", "critical", counts.csrf_rejected, "{n} solicitudes rechazadas por CSRF"),
         ("access_denied", "warning", counts.access_denied, "{n} accesos denegados por permisos"),
     ]
@@ -1370,9 +1490,10 @@ def build_report(connection: Connection, *, now: datetime) -> dict[str, Any]:
     week_ago = now - timedelta(days=7)
     read_only = connection.execute(text("SHOW transaction_read_only")).scalar_one() == "on"
 
-    activity = connection.execute(
-        text(
-            """
+    activity = (
+        connection.execute(
+            text(
+                """
             SELECT e.occurred_at AS at, coalesce(u.display_name, 'Sistema') AS actor,
                    e.event_type, e.product_key AS product, e.subject_id AS subject
             FROM platform.audit_event e
@@ -1381,13 +1502,17 @@ def build_report(connection: Connection, *, now: datetime) -> dict[str, Any]:
             ORDER BY e.occurred_at DESC
             LIMIT 200
             """
-        ),
-        {"since": week_ago},
-    ).mappings().all()
+            ),
+            {"since": week_ago},
+        )
+        .mappings()
+        .all()
+    )
 
-    suspicious = connection.execute(
-        text(
-            """
+    suspicious = (
+        connection.execute(
+            text(
+                """
             SELECT host(client_ip) AS ip, sum(count) AS total,
                    coalesce(sum(count) FILTER (WHERE http_status = 401), 0) AS unauthorized,
                    coalesce(sum(count) FILTER (WHERE http_status = 403), 0) AS forbidden,
@@ -1398,13 +1523,17 @@ def build_report(connection: Connection, *, now: datetime) -> dict[str, Any]:
             ORDER BY total DESC
             LIMIT 20
             """
-        ),
-        {"since": week_ago},
-    ).mappings().all()
+            ),
+            {"since": week_ago},
+        )
+        .mappings()
+        .all()
+    )
 
-    usage = connection.execute(
-        text(
-            """
+    usage = (
+        connection.execute(
+            text(
+                """
             SELECT day, product, category, count(*) AS count FROM (
               SELECT (occurred_at AT TIME ZONE 'America/Santiago')::date AS day,
                      coalesce(product_key, 'platform') AS product,
@@ -1424,9 +1553,12 @@ def build_report(connection: Connection, *, now: datetime) -> dict[str, Any]:
             GROUP BY day, product, category
             ORDER BY day, product, category
             """
-        ),
-        {"since": week_ago},
-    ).mappings().all()
+            ),
+            {"since": week_ago},
+        )
+        .mappings()
+        .all()
+    )
 
     def rows(result: Any) -> list[dict[str, Any]]:
         return [{key: _iso(value) for key, value in row.items()} for row in result]
@@ -1437,8 +1569,12 @@ def build_report(connection: Connection, *, now: datetime) -> dict[str, Any]:
         "alerts": _alerts(connection, day_ago),
         "activity": rows(activity),
         "suspicious_ips": [
-            {**row, "total": int(row["total"]), "unauthorized": int(row["unauthorized"]),
-             "forbidden": int(row["forbidden"])}
+            {
+                **row,
+                "total": int(row["total"]),
+                "unauthorized": int(row["unauthorized"]),
+                "forbidden": int(row["forbidden"]),
+            }
             for row in rows(suspicious)
         ],
         "usage": [{**row, "count": int(row["count"])} for row in rows(usage)],
@@ -1520,12 +1656,14 @@ import pytest
 from scripts import consola
 
 
-def _completed(stdout: str = "", stderr: str = "", code: int = 0) -> subprocess.CompletedProcess[str]:
+def _completed(
+    stdout: str = "", stderr: str = "", code: int = 0
+) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(args=[], returncode=code, stdout=stdout, stderr=stderr)
 
 
 def test_run_json_reads_the_last_json_line() -> None:
-    out = "Using SSH key from file ...\n{\"alerts\": []}\n"
+    out = 'Using SSH key from file ...\n{"alerts": []}\n'
     assert consola.run_json(["x"], runner=lambda *a, **k: _completed(out)) == {"alerts": []}
 
 
@@ -1539,7 +1677,9 @@ def test_run_json_missing_cli() -> None:
 
 def test_run_json_logged_out() -> None:
     with pytest.raises(consola.ConsolaError, match="railway login"):
-        consola.run_json(["x"], runner=lambda *a, **k: _completed(stderr="Unauthorized. Please login", code=1))
+        consola.run_json(
+            ["x"], runner=lambda *a, **k: _completed(stderr="Unauthorized. Please login", code=1)
+        )
 
 
 def test_run_json_other_failure_shows_exit_code_only() -> None:
@@ -1557,11 +1697,22 @@ def test_run_json_timeout() -> None:
 
 
 def test_summarize_deployments() -> None:
-    raw = [{"id": "94172cf4-aaaa", "status": "SUCCESS", "createdAt": "2026-10-15T18:00:00Z",
-            "meta": {"commitHash": "25b4014abc", "commitMessage": "Merge pull request #98\n\nbody"}}]
+    raw = [
+        {
+            "id": "94172cf4-aaaa",
+            "status": "SUCCESS",
+            "createdAt": "2026-10-15T18:00:00Z",
+            "meta": {"commitHash": "25b4014abc", "commitMessage": "Merge pull request #98\n\nbody"},
+        }
+    ]
     assert consola.summarize_deployments(raw) == [
-        {"id": "94172cf4", "status": "SUCCESS", "created_at": "2026-10-15T18:00:00Z",
-         "commit": "25b4014", "message": "Merge pull request #98"}
+        {
+            "id": "94172cf4",
+            "status": "SUCCESS",
+            "created_at": "2026-10-15T18:00:00Z",
+            "commit": "25b4014",
+            "message": "Merge pull request #98",
+        }
     ]
 
 
@@ -1589,11 +1740,15 @@ def test_server_serves_page_and_report_on_localhost_only() -> None:
     try:
         base = f"http://127.0.0.1:{port}"
         assert urllib.request.urlopen(base + "/").read() == b"<html>ok</html>"
-        assert json.loads(urllib.request.urlopen(base + "/api/report").read())["report"] == {"alerts": []}
+        assert json.loads(urllib.request.urlopen(base + "/api/report").read())["report"] == {
+            "alerts": []
+        }
         urllib.request.urlopen(base + "/api/report")  # cached
         urllib.request.urlopen(base + "/api/report?refresh=1")  # refetch
         assert len(calls) == 2
-        assert json.loads(urllib.request.urlopen(base + "/api/ping").read()) == {"app": "campo-consola"}
+        assert json.loads(urllib.request.urlopen(base + "/api/ping").read()) == {
+            "app": "campo-consola"
+        }
     finally:
         server.shutdown()
 ```
@@ -1634,8 +1789,14 @@ PORT = 8787
 SERVICE = "campo-digital-platform"
 ASSETS = Path(__file__).resolve().parent / "consola"
 EXPORT_COMMAND = [
-    "railway", "ssh", "--service", SERVICE, "--",
-    "sh", "-c", "cd /app/apps/api && /app/.venv/bin/python -m app.consola_export",
+    "railway",
+    "ssh",
+    "--service",
+    SERVICE,
+    "--",
+    "sh",
+    "-c",
+    "cd /app/apps/api && /app/.venv/bin/python -m app.consola_export",
 ]
 DEPLOYMENTS_COMMAND = ["railway", "deployment", "list", "--service", SERVICE, "--json"]
 TIMEOUT_SECONDS = 120
@@ -1650,7 +1811,9 @@ Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 def run_json(command: list[str], runner: Runner = subprocess.run) -> object:
     try:
-        result = runner(command, capture_output=True, text=True, timeout=TIMEOUT_SECONDS, check=False)
+        result = runner(
+            command, capture_output=True, text=True, timeout=TIMEOUT_SECONDS, check=False
+        )
     except FileNotFoundError as exc:
         raise ConsolaError(
             "No encuentro el comando railway. Instálalo con: npm install -g @railway/cli"
@@ -1692,7 +1855,12 @@ def summarize_deployments(raw: object) -> list[dict[str, str]]:
 def fetch_snapshot(
     runner: Runner = subprocess.run, now: Callable[[], datetime] = lambda: datetime.now(UTC)
 ) -> dict[str, object]:
-    snapshot: dict[str, object] = {"report": None, "deployments": [], "fetched_at": now().isoformat(), "error": None}
+    snapshot: dict[str, object] = {
+        "report": None,
+        "deployments": [],
+        "fetched_at": now().isoformat(),
+        "error": None,
+    }
     try:
         snapshot["report"] = run_json(EXPORT_COMMAND, runner)
         snapshot["deployments"] = summarize_deployments(run_json(DEPLOYMENTS_COMMAND, runner))
@@ -1715,13 +1883,18 @@ class ConsolaState:
             return self._data
 
 
-def make_server(state: ConsolaState, page: bytes, host: str = HOST, port: int = PORT) -> ThreadingHTTPServer:
+def make_server(
+    state: ConsolaState, page: bytes, host: str = HOST, port: int = PORT
+) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, body: bytes, content_type: str) -> None:
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:")
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:",
+            )
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -1860,7 +2033,9 @@ def test_main_reuses_running_consola(monkeypatch: pytest.MonkeyPatch) -> None:
     opened: list[str] = []
     monkeypatch.setattr(consola, "already_running", lambda url: True)
     monkeypatch.setattr(consola, "open_browser", lambda url: opened.append(url))
-    monkeypatch.setattr(consola, "make_server", lambda *a, **k: pytest.fail("must not start a server"))
+    monkeypatch.setattr(
+        consola, "make_server", lambda *a, **k: pytest.fail("must not start a server")
+    )
     assert consola.main([]) == 0
     assert opened == ["http://127.0.0.1:8787/"]
 ```
@@ -1932,7 +2107,9 @@ def install(repo_root: Path, home: Path) -> list[Path]:
     desktop = home / ".local/share/applications/campo-consola.desktop"
     launcher.parent.mkdir(parents=True, exist_ok=True)
     desktop.parent.mkdir(parents=True, exist_ok=True)
-    launcher.write_text(_LAUNCHER.format(script=repo_root / "scripts" / "consola.py"), encoding="utf-8")
+    launcher.write_text(
+        _LAUNCHER.format(script=repo_root / "scripts" / "consola.py"), encoding="utf-8"
+    )
     launcher.chmod(0o755)
     desktop.write_text(
         _DESKTOP.format(launcher=launcher, icon=repo_root / "scripts" / "consola" / "icon.svg"),
@@ -1943,7 +2120,10 @@ def install(repo_root: Path, home: Path) -> list[Path]:
 
 def uninstall(home: Path) -> list[Path]:
     removed = []
-    for path in (home / ".local/bin/consola", home / ".local/share/applications/campo-consola.desktop"):
+    for path in (
+        home / ".local/bin/consola",
+        home / ".local/share/applications/campo-consola.desktop",
+    ):
         if path.exists():
             path.unlink()
             removed.append(path)
@@ -2061,7 +2241,7 @@ def test_page_has_every_section_and_no_external_resources() -> None:
     for section in ("Alertas", "Actividad", "IPs sospechosas", "Uso por producto", "Salud"):
         assert section in html
     assert "http://" not in html.replace("http://127.0.0.1", "")
-    assert "<script src=" not in html and "<link rel=\"stylesheet\"" not in html
+    assert "<script src=" not in html and '<link rel="stylesheet"' not in html
 ```
 
 - [ ] **Step 2: Run to verify it fails**

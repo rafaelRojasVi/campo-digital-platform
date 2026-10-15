@@ -294,6 +294,63 @@ directly would mean adding Sentry's origin to the CSP; the planned route is
 Sentry's tunnel option through the platform's own API, which keeps the CSP
 same-origin.
 
+### Security events and the Consola
+
+**DECISION (2026-10-15):** the operator sees security and usage from a local
+tool, the Consola, instead of a page in the platform (no `@campodigital.cl`
+account is needed and nothing new is exposed). Spec:
+[platform Consola design](../../../docs/superpowers/specs/2026-10-15-platform-consola-design.md).
+
+**What the platform records** (`platform.security_event`, migration `0013`):
+
+| `event_type` | Recorded when | `reason` |
+|---|---|---|
+| `sign_in.rejected` | the Google callback refuses a sign-in | `flow_cookie_missing`, `flow_cookie_invalid`, `domain_not_allowed`, `token_invalid` |
+| `csrf.rejected` | `require_csrf` answers `403` | `origin_untrusted`, `token_invalid` |
+| `access.denied` | `ensure_can` answers `403` | `no_grant`, `action_not_allowed` |
+| `auth.required` | any other `401` | none |
+
+- Producers raise `SecurityHTTPException`; `SecurityEventMiddleware`
+  (outside the body limit, inside the security headers) records after the
+  response. Clients receive exactly the same status and `detail` as before.
+- `401`s are counted in memory per client IP, path and minute and written
+  once a minute; buffers are capped at 10,000 rows/keys, so a flood cannot
+  grow memory or the table without bound. A failed write is logged and
+  dropped; it never changes a response.
+- Rows keep the URL path only (a check constraint rejects `?`), a reason
+  code, the client IP and, for `access.denied`, the user id. Never tokens,
+  cookies, OAuth codes, query strings, bodies or email addresses.
+- Rows older than 90 days are deleted once a day.
+- **Client IP:** the last `X-Forwarded-For` entry, trusted only when the
+  peer is in Railway's `100.64.0.0/10` range; otherwise the peer address.
+  **OPEN QUESTION:** confirm against Railway's HTTP logs after the first
+  deploy (plan Task 9, Step 5).
+- **LIMITATION:** in-memory aggregation assumes one replica (the volume
+  already requires it).
+- **LIMITATION:** IP addresses are personal data; they are kept 90 days and
+  shown only on the operator's machine.
+
+**The Consola** (`scripts/consola.py`, standard library only):
+
+- `make consola` (or the `consola` command) runs `railway ssh … python -m
+  app.consola_export`, which reads production in one read-only transaction
+  and prints JSON. It needs the Railway CLI logged in (`railway login`); no
+  database credential is stored locally.
+- The page is served on `127.0.0.1:8787` only, keeps data in memory, and
+  closes itself after an hour without use. A second launch opens the browser
+  on the running one.
+- `make consola-install` adds `~/.local/bin/consola` and an app-menu entry
+  ("Consola Campo Digital"); `make consola-uninstall` removes both. **Run the
+  install from the main checkout**, not a worktree: the launcher points to
+  the folder it was installed from.
+- `make consola-demo` shows fictional data, for reviewing the page.
+- Sections: Alertas (last 24 h), Actividad (7 days, display names only), IPs
+  sospechosas, Uso por producto, Salud (current deployment, links to Sentry
+  and Railway). If Railway cannot be reached, every section says there is no
+  data, never "no alerts".
+- **LIMITATION:** without a working `railway ssh`, the Consola shows nothing.
+
+
 ## Container image
 
 `Dockerfile` (repo root) is a two-stage build, adapted from the *shape* of
