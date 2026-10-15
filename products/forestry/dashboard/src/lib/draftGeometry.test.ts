@@ -102,21 +102,128 @@ describe('straight draft cuts', () => {
     expect(result.largerPieceIndex).toBe(0)
   })
 
-  it('refuses multipart or holed geometry instead of guessing topology', () => {
+  it('keeps a hole the line does not touch on the side that contains it', () => {
     const withHole = [[
       [[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]],
       [[20, 20], [30, 20], [30, 30], [20, 30], [20, 20]],
     ]]
     const result = straightCutCandidates(withHole, [-10, 40], [110, 40])
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.reason).toMatch(/polígonos simples/)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    // Left of the left-to-right line is the upper side; the hole sits below.
+    expect(result.areasSquareMeters).toEqual([6000, 3900])
+    expect(result.pieces[0][0]).toHaveLength(1)
+    expect(result.pieces[1][0]).toHaveLength(2)
+    expect(result.untouched).toEqual([])
   })
 
-  it('requires exactly two clean boundary crossings', () => {
+  it('cuts through a hole, leaving a notch in both pieces', () => {
+    const withHole = [[
+      [[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]],
+      [[40, 30], [60, 30], [60, 50], [40, 50], [40, 30]],
+    ]]
+    const result = straightCutCandidates(withHole, [-10, 40], [110, 40])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.areasSquareMeters[0]).toBeCloseTo(5800)
+    expect(result.areasSquareMeters[1]).toBeCloseTo(3800)
+    // Each side is one simple ring; the hole became part of its outline.
+    for (const piece of result.pieces) {
+      expect(piece).toHaveLength(1)
+      expect(piece[0]).toHaveLength(1)
+    }
+  })
+
+  it('cuts only the part of a multipart polygon the line crosses', () => {
+    const multipart = [
+      [[[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]]],
+      [[[200, 0], [250, 0], [250, 50], [200, 50], [200, 0]]],
+    ]
+    const result = straightCutCandidates(multipart, [-10, 40], [110, 40])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.areasSquareMeters).toEqual([6000, 4000])
+    expect(result.untouched).toEqual([multipart[1]])
+  })
+
+  it('cuts every part the line crosses and keeps sides consistent', () => {
+    const multipart = [
+      [[[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]]],
+      [[[200, 0], [250, 0], [250, 50], [200, 50], [200, 0]]],
+    ]
+    const result = straightCutCandidates(multipart, [-10, 40], [260, 40])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.pieces[0]).toHaveLength(2)
+    expect(result.pieces[1]).toHaveLength(2)
+    expect(result.areasSquareMeters).toEqual([6000 + 500, 4000 + 2000])
+    expect(result.untouched).toEqual([])
+  })
+
+  it('refuses a line that ends inside a hole', () => {
+    const withHole = [[
+      [[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]],
+      [[40, 30], [60, 30], [60, 50], [40, 50], [40, 30]],
+    ]]
+    const result = straightCutCandidates(withHole, [-10, 40], [50, 40])
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toMatch(/hueco/)
+  })
+
+  it('cuts a concave outline the line crosses four times into three pieces', () => {
+    const uShape = [[[[0, 0], [100, 0], [100, 100], [70, 100], [70, 30], [30, 30], [30, 100], [0, 100], [0, 0]]]]
+    const result = straightCutCandidates(uShape, [-10, 60], [110, 60])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    // Both arm tops are above (left of) the line; the base is below.
+    expect(result.pieces[0]).toHaveLength(2)
+    expect(result.pieces[1]).toHaveLength(1)
+    expect(result.areasSquareMeters[0]).toBeCloseTo(2400)
+    expect(result.areasSquareMeters[1]).toBeCloseTo(4800)
+  })
+
+  it('cuts through a notch and a hole in the same stroke', () => {
+    // A square with a notch cut into its bottom edge and a hole above it.
+    const notched = [[
+      [[0, 0], [40, 0], [40, 30], [60, 30], [60, 0], [100, 0], [100, 100], [0, 100], [0, 0]],
+      [[45, 50], [55, 50], [55, 70], [45, 70], [45, 50]],
+    ]]
+    const result = straightCutCandidates(notched, [50, 110], [50, -10])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    const total = 100 * 100 - 20 * 30 - 10 * 20
+    expect(result.areasSquareMeters[0] + result.areasSquareMeters[1]).toBeCloseTo(total)
+    expect(result.areasSquareMeters[0]).toBeCloseTo(total / 2)
+    expect(result.pieces[0]).toHaveLength(1)
+    expect(result.pieces[1]).toHaveLength(1)
+  })
+
+  it('handles a clockwise exterior the same as a counter-clockwise one', () => {
+    const clockwise = [[[[0, 0], [0, 100], [100, 100], [100, 0], [0, 0]]]]
+    const result = straightCutCandidates(clockwise, [-10, 40], [110, 40])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.areasSquareMeters).toEqual([6000, 4000])
+  })
+
+  it('refuses a line that starts inside the polygon', () => {
+    const result = straightCutCandidates(square, [50, 50], [110, 50])
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toMatch(/fuera del polígono/)
+  })
+
+  it('requires the line to cross the boundary', () => {
     const result = straightCutCandidates(square, [-10, -10], [-5, -5])
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.reason).toMatch(/exactamente dos veces/)
+    expect(result.reason).toMatch(/no cruza/)
   })
 })

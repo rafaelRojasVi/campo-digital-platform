@@ -30,6 +30,19 @@ polígonos, 13 predios, 10.422,61 ha) tal como viene en la fuente.
   explicación y acceso directo en el mapa. Son observaciones de la fuente,
   no errores corregidos por el sistema.
 - **Exportar a CSV** la tabla filtrada (se abre directo en Excel).
+- **Ajustar la opacidad** de los polígonos para ver la imagen satelital de
+  fondo; bajo 50 % el borde toma el color del uso, así no se pierden los
+  límites entre usos.
+- **Simular un ajuste de límite** de un polígono (mover puntos, reducir
+  puntos o cortar con una línea recta) y ver el área resultante. Es solo una
+  simulación en pantalla: no se guarda. Desde el 2026-10-15 el corte también
+  funciona en polígonos con varias partes, con huecos o con bordes muy
+  irregulares (antes estaba desactivado en ~200 polígonos). La línea debe
+  empezar y terminar fuera del polígono; solo se cortan las partes que
+  cruza, y si atraviesa un hueco, este queda como una entrada en ambos lados.
+- **Ayudas en pantalla**: los términos menos obvios (Evidencia, Sup_ha vs.
+  geometría, huella del contenido, etc.) tienen un pequeño `?` que los
+  explica al pasar el mouse.
 
 ## Qué NO hace todavía (a propósito)
 

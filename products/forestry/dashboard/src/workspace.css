@@ -33,6 +33,11 @@
   max-width: calc(100% - 72px);
 }
 
+/* The inspector overlays the map's right edge; wrap the toolbar before it. */
+.app__body:has(> .inspector) .map__controls {
+  max-width: calc(100% - 72px - var(--inspector-w));
+}
+
 .map__basemap-control {
   display: flex;
   align-items: center;
@@ -200,4 +205,28 @@
   .app__sidebar {
     transition: none;
   }
+}
+
+.map__opacity-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 8px 0 10px;
+  color: var(--ink-2);
+  border-right: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.map__opacity-control input[type='range'] {
+  width: 84px;
+  accent-color: var(--green-700);
+}
+
+.map__opacity-value {
+  min-width: 3ch;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
 }

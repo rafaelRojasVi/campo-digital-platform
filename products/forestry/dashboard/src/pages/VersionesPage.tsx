@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from 'react'
 import { canUpload, fetchVersions } from '../api.ts'
+import { Hint } from '../components/Hint.tsx'
 import { Notice, PageShell, StatusChip } from '../components/PageShell.tsx'
 import { formatHa, formatInt } from '../lib/format.ts'
 import { EVENT_LABELS, formatDateTime, versionSource } from '../lib/versions.ts'
@@ -102,7 +103,16 @@ export function VersionesPage({
               <thead>
                 <tr>
                   <th scope="col">Versión</th>
-                  <th scope="col">Estado</th>
+                  <th scope="col">
+                    Estado
+                    <Hint
+                      text={
+                        'Publicada: la versión que muestra el mapa.\n' +
+                        'Pendiente de revisión: cargada, todavía no publicada.\n' +
+                        'Publicada anteriormente: estuvo publicada y se puede restaurar.'
+                      }
+                    />
+                  </th>
                   <th scope="col">Origen</th>
                   <th scope="col">Cargada por</th>
                   <th scope="col" className="numeric">

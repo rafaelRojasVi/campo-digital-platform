@@ -343,12 +343,13 @@ function segmentIntersection(
   }
 }
 
-function buildBoundaryPiece(
+/** Open boundary arc from one crossing to the next, following ring order. */
+function ringArc(
   vertices: number[][],
   start: SegmentIntersection,
   end: SegmentIntersection,
 ): number[][] {
-  const ring: number[][] = [[...start.point]]
+  const arc: number[][] = [[...start.point]]
   const vertexCount = vertices.length
   let index = (start.edgeIndex + 1) % vertexCount
   const stop = (end.edgeIndex + 1) % vertexCount
@@ -356,29 +357,197 @@ function buildBoundaryPiece(
 
   while (index !== stop && guard <= vertexCount) {
     const vertex = vertices[index]
-    if (vertex !== undefined) ring.push([...vertex])
+    if (vertex !== undefined) arc.push([...vertex])
     index = (index + 1) % vertexCount
     guard += 1
   }
 
-  ring.push([...end.point], [...start.point])
-  return ring
+  arc.push([...end.point])
+  return arc
 }
 
 export type StraightCutResult =
   | {
       ok: true
+      /** Index 0 is left of the drawn line (start → end), index 1 is right. */
       pieces: [DraftCoordinates, DraftCoordinates]
+      /** Parts the line does not cross; they stay whichever side is kept. */
+      untouched: DraftCoordinates
       areasSquareMeters: [number, number]
       largerPieceIndex: 0 | 1
     }
   | { ok: false; reason: string }
 
+type CutSide = 0 | 1
+
+interface RingCrossing extends SegmentIntersection {
+  /** Ring index within the polygon part (0 = exterior). */
+  ring: number
+  /** Position among that ring's crossings, in ring order. */
+  order: number
+}
+
+interface CutFace {
+  side: CutSide
+  ring: number[][]
+}
+
+function pointInRing(point: number[], ring: number[][]): boolean {
+  const x = point[0] ?? 0
+  const y = point[1] ?? 0
+  let inside = false
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
+    const xi = ring[index]?.[0] ?? 0
+    const yi = ring[index]?.[1] ?? 0
+    const xj = ring[previous]?.[0] ?? 0
+    const yj = ring[previous]?.[1] ?? 0
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
+function locateInPart(part: number[][][], point: number[]): 'outside' | 'inside' | 'hole' {
+  if (!pointInRing(point, part[0]!)) return 'outside'
+  return part.slice(1).some((hole) => pointInRing(point, hole)) ? 'hole' : 'inside'
+}
+
+/** Copy of a closed ring, reversed if needed to get the requested winding. */
+function orientRing(ring: number[][], counterClockwise: boolean): number[][] {
+  const copy = ring.map((point) => [...point])
+  return signedRingArea(ring) > 0 === counterClockwise ? copy : copy.reverse()
+}
+
+/** Crossings of the cut with one closed ring, or null if it hits a vertex. */
+function ringCrossings(
+  ring: number[][],
+  cutStart: [number, number],
+  cutEnd: [number, number],
+): SegmentIntersection[] | null {
+  const vertices = ring.slice(0, -1)
+  const crossings: SegmentIntersection[] = []
+  for (let edgeIndex = 0; edgeIndex < vertices.length; edgeIndex += 1) {
+    const start = vertices[edgeIndex]
+    const end = vertices[(edgeIndex + 1) % vertices.length]
+    if (start === undefined || end === undefined) continue
+    const intersection = segmentIntersection(start, end, cutStart, cutEnd, edgeIndex)
+    if (intersection === null) continue
+    // A line through an existing vertex touches two adjoining edges and is
+    // ambiguous. Ask the user to draw a cleaner cut instead.
+    if (intersection.edgeT < 1e-7 || intersection.edgeT > 1 - 1e-7) return null
+    crossings.push(intersection)
+  }
+  return crossings.sort((a, b) => a.edgeIndex + a.edgeT - (b.edgeIndex + b.edgeT))
+}
+
 /**
- * Split one simple exterior ring with a user-drawn straight segment. The
- * operation intentionally refuses multipart polygons, holes, vertex hits and
- * lines with anything other than two clean crossings. That narrow contract is
- * safer for a local planning simulator than guessing topology.
+ * Split one polygon part along the drawn segment. The exterior is wound
+ * counter-clockwise and holes clockwise, so the interior is always on the
+ * left of a ring. Sorted along the line, crossings pair up into chords that
+ * lie inside the part. Each piece is traced by following a ring to its next
+ * crossing, jumping along that crossing's chord, and repeating until the
+ * walk closes. The direction a piece walks its chords says which side of the
+ * line it is on. Holes the line misses go to the piece that contains them.
+ *
+ * Returns null when the line misses the part, or a reason when it cannot be
+ * cut safely.
+ */
+function cutPart(
+  part: number[][][],
+  cutStart: [number, number],
+  cutEnd: [number, number],
+): { pieces: [DraftCoordinates, DraftCoordinates] } | { reason: string } | null {
+  const rings = part.map((ring, index) => orientRing(ring, index === 0))
+  const crossingsByRing: RingCrossing[][] = []
+  for (let ringIndex = 0; ringIndex < rings.length; ringIndex += 1) {
+    const found = ringCrossings(rings[ringIndex]!, cutStart, cutEnd)
+    if (found === null) {
+      return { reason: 'El corte pasa exactamente por un vértice; muévelo un poco.' }
+    }
+    crossingsByRing.push(found.map((crossing, order) => ({ ...crossing, ring: ringIndex, order })))
+  }
+
+  const crossings = crossingsByRing.flat()
+  if (crossings.length === 0) return null
+
+  const endpoints = [locateInPart(part, cutStart), locateInPart(part, cutEnd)]
+  if (endpoints.includes('hole')) {
+    return { reason: 'La línea no puede empezar ni terminar dentro de un hueco.' }
+  }
+  if (endpoints.includes('inside')) {
+    return { reason: 'La línea debe empezar y terminar fuera del polígono.' }
+  }
+
+  // With both ends outside, the line alternates out → in → out, so
+  // consecutive crossings along it bound the chords inside the part.
+  const alongLine = [...crossings].sort((a, b) => a.cutT - b.cutT)
+  const partner = new Map<RingCrossing, RingCrossing>()
+  for (let index = 0; index + 1 < alongLine.length; index += 2) {
+    partner.set(alongLine[index]!, alongLine[index + 1]!)
+    partner.set(alongLine[index + 1]!, alongLine[index]!)
+  }
+  const nextOnRing = (crossing: RingCrossing): RingCrossing => {
+    const ringCrossingsList = crossingsByRing[crossing.ring]!
+    return ringCrossingsList[(crossing.order + 1) % ringCrossingsList.length]!
+  }
+
+  const faces: CutFace[] = []
+  const visited = new Set<RingCrossing>()
+  for (const start of crossings) {
+    if (visited.has(start)) continue
+    const ring: number[][] = []
+    let side: CutSide | null = null
+    let current = start
+    let steps = 0
+
+    do {
+      visited.add(current)
+      const end = nextOnRing(current)
+      const vertices = rings[current.ring]!.slice(0, -1)
+      for (const point of ringArc(vertices, current, end)) ring.push(point)
+
+      const across = partner.get(end)
+      if (across === undefined) {
+        return { reason: 'No se pudo calcular el corte; prueba otra línea.' }
+      }
+      // Walking the chord with the piece on the left: forward along the
+      // line means the piece is left of it.
+      const chordSide: CutSide = across.cutT > end.cutT ? 0 : 1
+      if (side === null) {
+        side = chordSide
+      } else if (side !== chordSide) {
+        return { reason: 'La línea rodea una parte del polígono; prueba otra línea.' }
+      }
+
+      current = across
+      steps += 1
+      if (steps > crossings.length) {
+        return { reason: 'No se pudo calcular el corte; prueba otra línea.' }
+      }
+    } while (current !== start)
+
+    ring.push([...ring[0]!])
+    faces.push({ side: side!, ring })
+  }
+
+  const polygons = faces.map((face) => [face.ring])
+  part.slice(1).forEach((hole, index) => {
+    if (crossingsByRing[index + 1]!.length > 0) return
+    const owner = faces.findIndex((face) => pointInRing(hole[0]!, face.ring))
+    polygons[owner === -1 ? 0 : owner]!.push(hole.map((point) => [...point]))
+  })
+
+  const pieces: [DraftCoordinates, DraftCoordinates] = [[], []]
+  faces.forEach((face, index) => pieces[face.side].push(polygons[index]!))
+  return { pieces }
+}
+
+/**
+ * Split a draft with a user-drawn straight segment. Every polygon part the
+ * line crosses is cut, however many times the line enters and leaves it and
+ * including through holes; each resulting piece belongs to the left or right
+ * side of the line. Parts the line misses are returned untouched. The line
+ * must start and end outside the polygon, so the result never depends on
+ * guessing topology.
  */
 export function straightCutCandidates(
   coordinates: DraftCoordinates,
@@ -388,64 +557,45 @@ export function straightCutCandidates(
   if (squaredDistance(cutStart, cutEnd) < 1) {
     return { ok: false, reason: 'La línea de corte es demasiado corta.' }
   }
-  if (coordinates.length !== 1 || coordinates[0]?.length !== 1) {
+
+  const pieces: [DraftCoordinates, DraftCoordinates] = [[], []]
+  const untouched: DraftCoordinates = []
+
+  for (const part of coordinates) {
+    const exterior = part[0]
+    if (exterior === undefined || !isClosedRing(exterior) || exterior.length < 4) {
+      return { ok: false, reason: 'La geometría del borrador no tiene un anillo simple cerrado.' }
+    }
+
+    const result = cutPart(part, cutStart, cutEnd)
+    if (result === null) {
+      untouched.push(part.map((ring) => ring.map((point) => [...point])))
+      continue
+    }
+    if ('reason' in result) return { ok: false, reason: result.reason }
+    pieces[0].push(...result.pieces[0])
+    pieces[1].push(...result.pieces[1])
+  }
+
+  if (pieces[0].length === 0 && pieces[1].length === 0) {
+    const startsInside = coordinates.some((part) => locateInPart(part, cutStart) !== 'outside')
     return {
       ok: false,
-      reason: 'El corte recto está disponible solo para polígonos simples, sin partes ni huecos.',
+      reason: startsInside
+        ? 'La línea debe empezar y terminar fuera del polígono.'
+        : 'La línea no cruza el polígono.',
     }
   }
 
-  const ring = coordinates[0][0]
-  if (ring === undefined || !isClosedRing(ring) || ring.length < 4) {
-    return { ok: false, reason: 'La geometría del borrador no tiene un anillo simple cerrado.' }
-  }
-
-  const vertices = ring.slice(0, -1)
-  const intersections: SegmentIntersection[] = []
-
-  for (let edgeIndex = 0; edgeIndex < vertices.length; edgeIndex += 1) {
-    const start = vertices[edgeIndex]
-    const end = vertices[(edgeIndex + 1) % vertices.length]
-    if (start === undefined || end === undefined) continue
-    const intersection = segmentIntersection(start, end, cutStart, cutEnd, edgeIndex)
-    if (intersection === null) continue
-
-    // A line through an existing source/draft vertex is ambiguous because it
-    // touches two adjoining edges. Ask the user to draw a cleaner cut instead.
-    if (intersection.edgeT < 1e-7 || intersection.edgeT > 1 - 1e-7) {
-      return { ok: false, reason: 'El corte pasa exactamente por un vértice; muévelo un poco.' }
-    }
-    intersections.push(intersection)
-  }
-
-  if (intersections.length !== 2) {
-    return {
-      ok: false,
-      reason: `La línea debe cruzar el límite exactamente dos veces; se detectaron ${intersections.length}.`,
-    }
-  }
-
-  intersections.sort((a, b) => a.edgeIndex + a.edgeT - (b.edgeIndex + b.edgeT))
-  const first = intersections[0]!
-  const second = intersections[1]!
-  if (first.edgeIndex === second.edgeIndex) {
-    return { ok: false, reason: 'El corte debe atravesar el polígono, no entrar y salir por el mismo borde.' }
-  }
-
-  const ringA = buildBoundaryPiece(vertices, first, second)
-  const ringB = buildBoundaryPiece(vertices, second, first)
-  const pieceA: DraftCoordinates = [[ringA]]
-  const pieceB: DraftCoordinates = [[ringB]]
-  const areaA = multiPolygonAreaSquareMeters(pieceA)
-  const areaB = multiPolygonAreaSquareMeters(pieceB)
-
+  const areaA = multiPolygonAreaSquareMeters(pieces[0])
+  const areaB = multiPolygonAreaSquareMeters(pieces[1])
   if (areaA < 1 || areaB < 1) {
     return { ok: false, reason: 'El corte produciría una pieza prácticamente vacía.' }
   }
-
   return {
     ok: true,
-    pieces: [pieceA, pieceB],
+    pieces,
+    untouched,
     areasSquareMeters: [areaA, areaB],
     largerPieceIndex: areaA >= areaB ? 0 : 1,
   }
