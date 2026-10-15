@@ -25,6 +25,13 @@ def test_run_json_reads_the_last_json_line() -> None:
     assert consola.run_json(["x"], runner=lambda *a, **k: _completed(out)) == {"alerts": []}
 
 
+def test_run_json_reads_pretty_printed_json() -> None:
+    # `railway deployment list --json` prints indented, multi-line JSON.
+    out = 'Warning: something\n[\n  {\n    "id": "abc",\n    "status": "SUCCESS"\n  }\n]\n'
+    result = consola.run_json(["x"], runner=lambda *a, **k: _completed(out))
+    assert result == [{"id": "abc", "status": "SUCCESS"}]
+
+
 def test_run_json_missing_cli() -> None:
     def runner(*a: object, **k: object) -> subprocess.CompletedProcess[str]:
         raise FileNotFoundError("railway")

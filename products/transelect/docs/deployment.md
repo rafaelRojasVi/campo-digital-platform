@@ -328,10 +328,20 @@ account is needed and nothing new is exposed). Spec:
   without a name, the platform stores the email as the display name, so the
   Consola can show it (on the operator's machine only).
 - Rows older than 90 days are deleted once a day.
-- **Client IP:** the last `X-Forwarded-For` entry, trusted only when the
-  peer is in Railway's `100.64.0.0/10` range; otherwise the peer address.
-  **OPEN QUESTION:** confirm against Railway's HTTP logs after the first
-  deploy (plan Task 9, Step 5).
+- **Client IP:** `X-Real-IP`, else the first `X-Forwarded-For` entry,
+  trusted only when the peer is in Railway's `100.64.0.0/10` range;
+  otherwise the peer address.
+  - **RESULT (2026-10-15, deploy bb87e433):** uvicorn saw peers
+    `100.64.0.x`. Railway's HTTP log `srcIp` showed the real client, but
+    the last `X-Forwarded-For` entry (the first rule) was a Railway edge
+    hop (`46.151.194.x`), so every request was recorded with an edge
+    address. A caller-supplied `X-Forwarded-For` was not recorded.
+  - **DECISION:** follow Railway staff guidance that the edge overwrites
+    `X-Real-IP` and `X-Forwarded-For` and puts the client first.
+  - **OPEN QUESTION:** confirm after deploying this rule that the Consola
+    shows the `srcIp` value and never a spoofed header. Railway does not
+    document its proxy range; if peers leave `100.64.0.0/10`, the Consola
+    shows edge addresses again.
 - **LIMITATION:** in-memory aggregation assumes one replica (the volume
   already requires it).
 - **LIMITATION:** IP addresses are personal data; they are kept 90 days and

@@ -85,16 +85,25 @@ def _valid_ip(value: str) -> str | None:
 
 
 def client_ip(scope: Scope) -> str | None:
-    """The caller's address: the proxy-appended forwarded entry, else the peer."""
+    """The caller's address as Railway's edge reports it, else the peer.
+
+    The edge overwrites ``X-Real-IP`` and ``X-Forwarded-For`` (callers'
+    copies do not survive) and puts the client first; later forwarded
+    entries are the edge's own hops.
+    """
 
     client = scope.get("client")
     peer = _valid_ip(client[0]) if client else None
     if peer is not None and ipaddress.ip_address(peer) in _TRUSTED_PROXY_NETWORK:
-        forwarded = Headers(scope=scope).get("x-forwarded-for")
+        headers = Headers(scope=scope)
+        real_ip = _valid_ip(headers.get("x-real-ip", ""))
+        if real_ip is not None:
+            return real_ip
+        forwarded = headers.get("x-forwarded-for")
         if forwarded:
-            appended = _valid_ip(forwarded.split(",")[-1])
-            if appended is not None:
-                return appended
+            first = _valid_ip(forwarded.split(",")[0])
+            if first is not None:
+                return first
     return peer
 
 

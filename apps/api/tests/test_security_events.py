@@ -33,8 +33,12 @@ def _clock(second: int = 10) -> datetime:
     return datetime(2026, 10, 15, 12, 30, second, tzinfo=UTC)
 
 
-def _scope(peer: str, forwarded: str | None = None) -> dict[str, object]:
+def _scope(
+    peer: str, forwarded: str | None = None, real_ip: str | None = None
+) -> dict[str, object]:
     headers = [(b"x-forwarded-for", forwarded.encode())] if forwarded else []
+    if real_ip:
+        headers.append((b"x-real-ip", real_ip.encode()))
     return {"type": "http", "client": (peer, 1234), "headers": headers}
 
 
@@ -45,8 +49,20 @@ def test_security_http_exception_carries_its_note() -> None:
     assert exc.note is note
 
 
-def test_client_ip_trusts_the_last_forwarded_entry_from_railway() -> None:
-    assert client_ip(_scope("100.64.0.7", "9.9.9.9, 200.1.2.3")) == "200.1.2.3"
+def test_client_ip_prefers_the_real_ip_header_from_railway() -> None:
+    # Railway's edge overwrites X-Real-IP with the client; trailing
+    # X-Forwarded-For entries are edge hops (seen in production 2026-10-15).
+    scope = _scope("100.64.0.7", "200.1.2.3, 46.151.194.129", real_ip="200.1.2.3")
+    assert client_ip(scope) == "200.1.2.3"
+
+
+def test_client_ip_falls_back_to_the_first_forwarded_entry_from_railway() -> None:
+    assert client_ip(_scope("100.64.0.7", "200.1.2.3, 46.151.194.129")) == "200.1.2.3"
+
+
+def test_client_ip_skips_an_invalid_real_ip_header() -> None:
+    scope = _scope("100.64.0.7", "200.1.2.3, 46.151.194.129", real_ip="garbage")
+    assert client_ip(scope) == "200.1.2.3"
 
 
 def test_client_ip_ignores_forwarded_header_from_outside_railway() -> None:
