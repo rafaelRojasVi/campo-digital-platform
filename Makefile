@@ -68,7 +68,7 @@ persistence-check: migration-check
 	uv run pytest -q apps/api/integration_tests
 
 lidar-dev:
-	uv run --extra api python scripts/lidar_dev.py up
+	uv run --extra api --extra transelec python scripts/lidar_dev.py up
 
 lidar-status:
 	uv run python scripts/lidar_dev.py status
@@ -77,7 +77,7 @@ lidar-stop:
 	uv run python scripts/lidar_dev.py stop
 
 transelec-dev:
-	uv run --extra api python scripts/transelec_dev.py up
+	uv run --extra api --extra transelec python scripts/transelec_dev.py up
 
 transelec-status:
 	uv run python scripts/transelec_dev.py status
@@ -86,7 +86,7 @@ transelec-stop:
 	uv run python scripts/transelec_dev.py stop
 
 campo-demo:
-	uv run --extra api python scripts/campo_demo.py up
+	uv run --extra api --extra transelec python scripts/campo_demo.py up
 
 campo-status:
 	uv run python scripts/campo_demo.py status
@@ -128,13 +128,13 @@ platform-worker-concurrency: ensure-platform-db
 	wait
 
 forestry-dev:
-	uv run --extra api python scripts/forestry_dev.py up
+	uv run --extra api --extra transelec python scripts/forestry_dev.py up
 
 forestry-status:
-	uv run --extra api python scripts/forestry_dev.py status
+	uv run --extra api --extra transelec python scripts/forestry_dev.py status
 
 forestry-stop:
-	uv run --extra api python scripts/forestry_dev.py stop
+	uv run --extra api --extra transelec python scripts/forestry_dev.py stop
 
 forestry-frontend-check:
 	cd products/forestry/dashboard && npm run lint && npm run build && npm test

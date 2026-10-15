@@ -48,6 +48,7 @@ from _local_process import (  # noqa: E402
     load_process,
     spawn,
     stop_process,
+    uv_run_api,
     wait_for_http,
 )
 from _platform_db import PlatformDatabaseError, ensure_platform_database_ready  # noqa: E402
@@ -91,7 +92,7 @@ def start_api() -> tuple[int, int]:
 
     port = find_free_port(API_PREFERRED_PORT)
     marker = f"uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port {port}"
-    command = ["uv", "run", "--extra", "api", *marker.split(" ")]
+    command = uv_run_api(*marker.split(" "))
 
     # APP_ENV is required and fails closed if unset (see app.main and
     # app.config.Settings) — set it explicitly here, like lidar_dev.py and
