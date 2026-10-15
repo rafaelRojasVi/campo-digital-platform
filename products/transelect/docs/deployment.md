@@ -44,8 +44,8 @@ Container packaging: **built and locally verified** (this document).
   [hosted release](../../forestry/docs/hosted-release-v1.md)) redeployed the
   same `f984e18` as Railway deployment `96946275`: `SUCCESS` in about 30 s,
   pre-deploy ran no upgrade, `/health` and `/ready` answer `200`.
-- **FACT (2026-10-05 16:27 UTC, Railway deployment list, deploy log and
-  checked from outside):** production serves `main` at `318ca55` (PR #92:
+- **FACT (2026-10-05 16:27 UTC, until `dfcdd928`; Railway deployment list,
+  deploy log and checked from outside):** production served `main` at `318ca55` (PR #92:
   the Estado table fits the page; the Oficina Virtual link opens a
   plain-digit N.º in CONAF), Railway deployment `523d1f19`, built from
   GitHub by `railway redeploy --service campo-digital-platform
@@ -56,6 +56,31 @@ Container packaging: **built and locally verified** (this document).
   signed out, and the served Transelec bundle carries the new
   `consultas/action.php` link. The logs show no errors or `5xx` after the
   deploy. No backup was taken just before it (no migration).
+- **FACT (2026-10-14 22:43 UTC, Railway deployment list):** deployment
+  `6d17fcaa` rebuilt the same `e21cdb6` that `dfcdd928` had served since
+  2026-10-05 16:32 UTC (PR #93, docs only). Railway records the reason only
+  as `deploy`; what triggered it is not recorded. `SUCCESS`. The deploy
+  logs of `dfcdd928` (2026-10-09 to 2026-10-14) show no errors or `5xx`.
+- **FACT (2026-10-15 17:17 UTC, Railway CLI and checked from outside):**
+  production serves `main` at `ddd8c53` (PR #96: server-error reporting to
+  Sentry, see [Server-error reporting](#server-error-reporting-sentry)).
+  `SENTRY_DSN` was set with `--skip-deploys`, then `railway redeploy
+  --service campo-digital-platform --from-source` built deployment
+  `b2cc468a` (`SUCCESS`; pre-deploy ran no upgrade, no migration in the
+  change). Inside the container (`railway ssh`): `sentry-sdk` 2.72.0,
+  `SENTRY_DSN` present, `RAILWAY_GIT_COMMIT_SHA` = `ddd8c53`. From outside:
+  `/ready`, `/transelec/` and `/rodales/` answer `200`,
+  `/api/transelec/summary` answers `401` signed out, `/docs` answers `404`,
+  and CSP, HSTS and `X-Frame-Options` are present. No backup was taken just
+  before it (no migration).
+- **FACT (2026-10-15 17:40 UTC):** `PLATFORM_BOOTSTRAP_ADMINS` was deleted
+  (Rodales [hosted release](../../forestry/docs/hosted-release-v1.md),
+  step 3) and `railway redeploy` rebuilt the same `ddd8c53` as deployment
+  `1616a7fb` (`SUCCESS`). Inside the container the variable is absent and
+  `SENTRY_DSN` is still set; `/ready`, `/transelec/` and `/rodales/` answer
+  `200`.
+- **FACT (2026-10-15):** `/ready` answers `GET` with `200` and `HEAD` with
+  `405`. An uptime monitor must use `GET`.
 - **FACT (2026-10-05 15:19 UTC, until `523d1f19`):** production served
   `main` at `b478a73` (PR #91:
   the web edits pill, log and history), Railway deployment `20c79b8c`. It

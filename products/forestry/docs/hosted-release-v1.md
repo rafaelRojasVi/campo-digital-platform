@@ -29,6 +29,19 @@ that order.
   the snapshot can also be loaded with «Cargar versión»
   ([Upload, review, publish V1](upload-review-publish-v1.md), deployed)
   instead of the import script in step 2.
+- **FACT (2026-10-15, production database via `railway ssh`, no emails
+  read out):** the platform has one account, the Campo Digital
+  administrator, and it holds ADMIN on both `forestry` and `transelect`. The
+  audit trail records `product_grant.changed` on 2026-09-28 and 2026-10-07.
+- **FACT (2026-10-14 22:03 UTC, deploy log):** that account uploaded the
+  Degenfeld ZIP with «Cargar versión» (version 1) and opened it in the
+  review map, but did not publish it, so
+  `/api/forestry/snapshots/published` still answers `404` and other users
+  see no published version.
+- **RESULT (2026-10-15 17:40 UTC):** step 3 done.
+  `PLATFORM_BOOTSTRAP_ADMINS` was deleted from the app service and the same
+  commit redeployed as deployment `1616a7fb` (`SUCCESS`); the variable is
+  absent in the running container.
 
 It is step 3 of the
 [unified platform design](../../../docs/superpowers/specs/2026-09-28-unified-platform-design.md),
