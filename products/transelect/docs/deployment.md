@@ -232,6 +232,43 @@ Both are wired in `app.main`.
 See the [2026-09-26 security readiness audit](audit/2026-09-26-security-readiness-audit.md)
 for the evidence behind both.
 
+### Server-error reporting (Sentry)
+
+**DECISION (2026-10-15):** server failures are reported to Sentry so a crash
+is noticed in minutes instead of when a user complains. Railway's Hobby plan
+has logs but no alerts. `apps/api/app/observability.py` starts the client from
+`app.main`, before the app is built.
+
+- **Off unless configured.** Without `SENTRY_DSN` nothing starts. Local
+  development, tests and CI never report
+  (`apps/api/tests/test_main_error_reporting.py`).
+- **Only server errors.** 5xx answers and unhandled exceptions are reported;
+  the expected 401, 403, 404 and 422 answers are not. No performance tracing.
+- **No client data leaves the platform.** Sentry receives the exception, its
+  stack without local variable values, the HTTP method and the URL path. It
+  never receives request bodies (workbooks, ZIPs, forms), query strings (the
+  Google callback carries the OAuth code; searches carry typed text),
+  headers, cookies, user identity or breadcrumbs. The SDK's
+  `data_collection` option turns every category off, and a `before_send`
+  hook (`scrub_event`) reduces the request to method and path again as a
+  second layer. `apps/api/tests/test_observability.py` drives a real client
+  against a capturing transport and asserts none of those values appear.
+- **Release tag.** Each event carries `APP_ENV` as the environment and
+  Railway's `RAILWAY_GIT_COMMIT_SHA` as the release, so an error points to
+  the deployed commit.
+- **LIMITATION:** an exception *message* is sent as written, so it can
+  carry a value if the code that raised it included one (for example, a
+  workbook check that quotes a cell). Messages have not been audited for
+  this. Review the first events that arrive, and reword any message that
+  quotes client data.
+- **To turn it off:** remove `SENTRY_DSN` from the Railway service and
+  redeploy.
+
+Browser errors from the two dashboards are not reported yet. Sending them
+directly would mean adding Sentry's origin to the CSP; the planned route is
+Sentry's tunnel option through the platform's own API, which keeps the CSP
+same-origin.
+
 ## Container image
 
 `Dockerfile` (repo root) is a two-stage build, adapted from the *shape* of
@@ -619,6 +656,7 @@ On the Railway service that runs this image:
 | Pre-deploy command | `.venv/bin/alembic upgrade head` (stored on the service; declared in `.railway/railway.ts`) |
 | Builder | `RAILPACK` stored, with `dockerfilePath = /Dockerfile`, which makes Railway build the Dockerfile (see below) |
 | Config file path | none (`railwayConfigFile` is `null`) |
+| `SENTRY_DSN` | optional; the Sentry project's DSN turns on server-error reporting (see [Server-error reporting](#server-error-reporting-sentry)) |
 
 **LIMITATION:** a Railway volume is a single-instance disk. The service must
 stay at one replica, and the volume is not a backup. A managed object-store

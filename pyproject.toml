@@ -42,6 +42,7 @@ api = [
   "msal>=1.28,<2",
   "pyjwt[crypto]>=2.10,<3",
   "cryptography>=49.0",
+  "sentry-sdk[fastapi]>=2.30,<3",
 ]
 
 [project.scripts]
