@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import threading
+import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
@@ -101,7 +102,8 @@ def test_server_serves_page_and_report_on_localhost_only() -> None:
             "alerts": []
         }
         urllib.request.urlopen(base + "/api/report")  # cached
-        urllib.request.urlopen(base + "/api/report?refresh=1")  # refetch
+        refresh = urllib.request.Request(base + "/api/report?refresh=1", headers={"X-Consola": "1"})
+        urllib.request.urlopen(refresh)  # refetch
         assert len(calls) == 2
         assert json.loads(urllib.request.urlopen(base + "/api/ping").read()) == {
             "app": "campo-consola"
@@ -174,3 +176,88 @@ def test_page_never_shows_good_news_without_data() -> None:
     assert "function renderUnavailable" in html
     assert "Sin datos: revisa el aviso de arriba." in html
     assert 'aria-live="polite"' in html
+
+
+def _serve(fetch: object) -> tuple[object, str, int]:
+    server = consola.make_server(consola.ConsolaState(fetch), b"<html>ok</html>", port=0)  # type: ignore[arg-type]
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{port}", port
+
+
+def test_server_rejects_foreign_host_header() -> None:
+    server, base, port = _serve(
+        lambda: {"report": {}, "deployments": [], "fetched_at": "t", "error": None}
+    )
+    try:
+        request = urllib.request.Request(
+            base + "/api/report", headers={"Host": f"evil.example:{port}"}
+        )
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(request)
+        assert caught.value.code == 403
+        ok = urllib.request.Request(base + "/", headers={"Host": f"localhost:{port}"})
+        assert urllib.request.urlopen(ok).status == 200
+    finally:
+        server.shutdown()  # type: ignore[attr-defined]
+
+
+def test_refresh_requires_the_page_header() -> None:
+    calls: list[int] = []
+
+    def fetch() -> dict[str, object]:
+        calls.append(1)
+        return {"report": {}, "deployments": [], "fetched_at": "t", "error": None}
+
+    server, base, _ = _serve(fetch)
+    try:
+        urllib.request.urlopen(base + "/api/report")
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(base + "/api/report?refresh=1")
+        assert caught.value.code == 403
+        refresh = urllib.request.Request(base + "/api/report?refresh=1", headers={"X-Consola": "1"})
+        urllib.request.urlopen(refresh)
+        assert len(calls) == 2
+    finally:
+        server.shutdown()  # type: ignore[attr-defined]
+
+
+def test_railway_runs_from_the_repository_folder() -> None:
+    seen: dict[str, object] = {}
+
+    def runner(*a: object, **k: object) -> subprocess.CompletedProcess[str]:
+        seen.update(k)
+        return _completed("{}")
+
+    consola.run_json(["railway", "status"], runner=runner)
+    assert seen["cwd"] == consola.REPO_ROOT
+    assert seen["errors"] == "replace"
+
+
+def test_run_json_not_linked_gives_a_link_hint() -> None:
+    def runner(*a: object, **k: object) -> subprocess.CompletedProcess[str]:
+        return _completed(stderr="No linked project found. Run railway link to connect", code=1)
+
+    with pytest.raises(consola.ConsolaError, match="railway link"):
+        consola.run_json(["x"], runner=runner)
+
+
+def test_deployments_failure_keeps_the_report() -> None:
+    def runner(command: list[str], **k: object) -> subprocess.CompletedProcess[str]:
+        if "deployment" in command:
+            return _completed(stderr="boom", code=1)
+        return _completed('{"alerts": []}')
+
+    snap = consola.fetch_snapshot(runner=runner, now=lambda: datetime(2026, 10, 15, tzinfo=UTC))
+    assert snap["report"] == {"alerts": []}
+    assert snap["error"] is None
+    assert "código 1" in str(snap["deployments_error"])
+
+
+def test_unexpected_errors_become_a_plain_message() -> None:
+    def runner(*a: object, **k: object) -> subprocess.CompletedProcess[str]:
+        raise RuntimeError("weird")
+
+    snap = consola.fetch_snapshot(runner=runner, now=lambda: datetime(2026, 10, 15, tzinfo=UTC))
+    assert snap["report"] is None
+    assert "inesperado" in str(snap["error"])

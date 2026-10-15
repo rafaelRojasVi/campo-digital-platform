@@ -29,6 +29,9 @@ HOST = "127.0.0.1"
 PORT = 8787
 SERVICE = "campo-digital-platform"
 ASSETS = Path(__file__).resolve().parent / "consola"
+# The Railway CLI finds the linked project from the current folder; an
+# app-menu launch starts elsewhere, so railway always runs from the repo.
+REPO_ROOT = Path(__file__).resolve().parents[1]
 EXPORT_COMMAND = [
     "railway",
     "ssh",
@@ -53,7 +56,13 @@ Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 def run_json(command: list[str], runner: Runner = subprocess.run) -> object:
     try:
         result = runner(
-            command, capture_output=True, text=True, timeout=TIMEOUT_SECONDS, check=False
+            command,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=TIMEOUT_SECONDS,
+            check=False,
+            cwd=REPO_ROOT,
         )
     except FileNotFoundError as exc:
         raise ConsolaError(
@@ -63,6 +72,10 @@ def run_json(command: list[str], runner: Runner = subprocess.run) -> object:
         raise ConsolaError("Railway tardó demasiado en responder. Intenta de nuevo.") from exc
     if result.returncode != 0:
         stderr = (result.stderr or "").lower()
+        if "no linked project" in stderr or "railway link" in stderr:
+            raise ConsolaError(
+                f"Railway no sabe qué proyecto usar. Corre `railway link` en {REPO_ROOT}"
+            )
         if "unauthorized" in stderr or "login" in stderr:
             raise ConsolaError("Railway no tiene sesión iniciada. Corre: railway login")
         raise ConsolaError(f"El comando de Railway falló (código {result.returncode}).")
@@ -101,12 +114,21 @@ def fetch_snapshot(
         "deployments": [],
         "fetched_at": now().isoformat(),
         "error": None,
+        "deployments_error": None,
     }
     try:
         snapshot["report"] = run_json(EXPORT_COMMAND, runner)
-        snapshot["deployments"] = summarize_deployments(run_json(DEPLOYMENTS_COMMAND, runner))
     except ConsolaError as exc:
         snapshot["error"] = str(exc)
+    except Exception as exc:  # noqa: BLE001 - show a message, never crash the page
+        snapshot["error"] = f"Error inesperado al leer producción ({type(exc).__name__})."
+    # The deployment list is secondary: its failure must not hide the report.
+    try:
+        snapshot["deployments"] = summarize_deployments(run_json(DEPLOYMENTS_COMMAND, runner))
+    except ConsolaError as exc:
+        snapshot["deployments_error"] = str(exc)
+    except Exception as exc:  # noqa: BLE001
+        snapshot["deployments_error"] = f"Error inesperado al leer Railway ({type(exc).__name__})."
     return snapshot
 
 
@@ -127,6 +149,8 @@ class ConsolaState:
 def make_server(
     state: ConsolaState, page: bytes, host: str = HOST, port: int = PORT
 ) -> ThreadingHTTPServer:
+    allowed_hosts: set[str] = set()
+
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, body: bytes, content_type: str) -> None:
             self.send_response(status)
@@ -142,12 +166,22 @@ def make_server(
             self.wfile.write(body)
 
         def do_GET(self) -> None:  # noqa: N802 - http.server API
+            # Only answer this machine's own names: a page rebinding its
+            # domain to 127.0.0.1 (DNS rebinding) must not read the report.
+            if self.headers.get("Host") not in allowed_hosts:
+                self._send(403, b"Forbidden", "text/plain")
+                return
             state.last_request = time.monotonic()
             url = urlparse(self.path)
             if url.path == "/":
                 self._send(200, page, "text/html; charset=utf-8")
             elif url.path == "/api/report":
                 refresh = parse_qs(url.query).get("refresh") == ["1"]
+                # A refresh runs railway against production; only the page,
+                # which sends this header, may ask for one.
+                if refresh and self.headers.get("X-Consola") != "1":
+                    self._send(403, b"Forbidden", "text/plain")
+                    return
                 body = json.dumps(state.snapshot(refresh), ensure_ascii=False).encode()
                 self._send(200, body, "application/json; charset=utf-8")
             elif url.path == "/api/ping":
@@ -160,7 +194,10 @@ def make_server(
         def log_message(self, format: str, *args: object) -> None:  # noqa: A002
             del format, args  # keep the terminal quiet
 
-    return ThreadingHTTPServer((host, port), Handler)
+    server = ThreadingHTTPServer((host, port), Handler)
+    bound_port = server.server_address[1]
+    allowed_hosts.update({f"127.0.0.1:{bound_port}", f"localhost:{bound_port}"})
+    return server
 
 
 IDLE_EXIT_SECONDS = 3600
@@ -257,7 +294,7 @@ def _watch_idle(server: ThreadingHTTPServer, state: ConsolaState) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = REPO_ROOT
     if args[:1] == ["install"]:
         for path in install(repo_root, Path.home()):
             print(f"Instalado: {path}")

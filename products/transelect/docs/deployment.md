@@ -317,9 +317,16 @@ account is needed and nothing new is exposed). Spec:
   once a minute; buffers are capped at 10,000 rows/keys, so a flood cannot
   grow memory or the table without bound. A failed write is logged and
   dropped; it never changes a response.
-- Rows keep the URL path only (a check constraint rejects `?`), a reason
-  code, the client IP and, for `access.denied`, the user id. Never tokens,
-  cookies, OAuth codes, query strings, bodies or email addresses.
+- Rows keep the URL path only, a reason code, the client IP and, for
+  `access.denied`, the user id. ASGI percent-decodes the path, so `?` and
+  control characters are re-escaped (`%3F`, `%00`) before writing, and a
+  check constraint rejects any `?`. If the database rejects one row, the
+  batch is retried row by row so the rest is kept; if the database is
+  unreachable, the batch is dropped in one attempt. Never tokens, cookies,
+  OAuth codes, query strings or bodies.
+- **LIMITATION:** activity shows the display name; for a Google account
+  without a name, the platform stores the email as the display name, so the
+  Consola can show it (on the operator's machine only).
 - Rows older than 90 days are deleted once a day.
 - **Client IP:** the last `X-Forwarded-For` entry, trusted only when the
   peer is in Railway's `100.64.0.0/10` range; otherwise the peer address.
@@ -336,9 +343,13 @@ account is needed and nothing new is exposed). Spec:
   app.consola_export`, which reads production in one read-only transaction
   and prints JSON. It needs the Railway CLI logged in (`railway login`); no
   database credential is stored locally.
-- The page is served on `127.0.0.1:8787` only, keeps data in memory, and
-  closes itself after an hour without use. A second launch opens the browser
-  on the running one.
+- The page is served on `127.0.0.1:8787` only, answers only requests whose
+  `Host` is `127.0.0.1:8787` or `localhost:8787` (so a web page cannot read
+  it through DNS rebinding), and runs `railway` again only when the page
+  asks with its own header. It keeps data in memory and closes itself after
+  an hour without use. A second launch opens the browser on the running one.
+- `railway` always runs from the repository folder, which must be linked
+  (`railway link`); if it is not, the page says so.
 - `make consola-install` adds `~/.local/bin/consola` and an app-menu entry
   ("Consola Campo Digital"); `make consola-uninstall` removes both. **Run the
   install from the main checkout**, not a worktree: the launcher points to

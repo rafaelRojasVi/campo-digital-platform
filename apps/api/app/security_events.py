@@ -23,6 +23,7 @@ from typing import Literal, Protocol
 
 from fastapi import HTTPException
 from sqlalchemy import Engine, text
+from sqlalchemy.exc import DataError, IntegrityError
 from starlette.datastructures import Headers
 from starlette.types import Scope
 
@@ -97,8 +98,25 @@ def client_ip(scope: Scope) -> str | None:
     return peer
 
 
+def _clean_path(path: str) -> str:
+    """Re-escape what ASGI percent-decoded: ``?`` and control characters.
+
+    ``scope["path"]`` is decoded, so ``/runs/%3Fx`` arrives as ``/runs/?x``
+    and ``%00`` as NUL; both would make the database reject the row.
+    """
+
+    cleaned = "".join(
+        f"%{ord(char):02X}" if char == "?" or ord(char) < 0x20 or ord(char) == 0x7F else char
+        for char in path
+    )
+    return cleaned[:MAX_PATH_LENGTH]
+
+
 def is_ignored_path(path: str) -> bool:
     return path in _IGNORED_PATHS or path.startswith(_IGNORED_PREFIXES)
+
+
+_ROW_ERRORS = (IntegrityError, DataError, ValueError)
 
 
 class SecurityEventRecorder:
@@ -121,7 +139,7 @@ class SecurityEventRecorder:
     def observe(
         self, *, path: str, status: int, client_ip: str | None, note: SecurityEventNote | None
     ) -> None:
-        path = path[:MAX_PATH_LENGTH]
+        path = _clean_path(path)
         now = self._clock()
         if note is not None:
             if len(self._noted) >= self._max:
@@ -171,6 +189,11 @@ class SecurityEventRecorder:
         try:
             self._sink.write(rows)
         except Exception as exc:  # noqa: BLE001 - recording must never break the app
+            # A row the database rejects must not drop the whole batch, so a
+            # data error is retried row by row. Anything else (an unreachable
+            # database) drops the batch in one attempt instead of thousands.
+            if len(rows) > 1 and isinstance(exc, _ROW_ERRORS):
+                return sum(self.write([row]) for row in rows)
             logger.warning(
                 "Security events not written (%s): %d rows dropped", type(exc).__name__, len(rows)
             )

@@ -168,3 +168,47 @@ def test_maintenance_flushes_and_stops() -> None:
     asyncio.run(scenario())
     assert len(sink.rows) == 1
     assert purged
+
+
+def test_decoded_query_marks_and_control_characters_are_escaped() -> None:
+    sink = _ListSink()
+    recorder = SecurityEventRecorder(sink, clock=_clock)
+    recorder.observe(path="/runs/?x", status=401, client_ip=None, note=None)
+    recorder.observe(path="/runs/a\x00b\x1f", status=401, client_ip=None, note=None)
+    recorder.flush()
+    assert sorted(row.path for row in sink.rows) == ["/runs/%3Fx", "/runs/a%00b%1F"]
+
+
+def test_one_bad_row_does_not_drop_the_rest_of_the_batch() -> None:
+    class _PickySink:
+        def __init__(self) -> None:
+            self.rows: list[SecurityEventRow] = []
+
+        def write(self, rows: list[SecurityEventRow]) -> None:
+            if any(row.path == "/bad" for row in rows):
+                raise ValueError("constraint violation")
+            self.rows.extend(rows)
+
+    sink = _PickySink()
+    recorder = SecurityEventRecorder(sink, clock=_clock)
+    for path in ("/a", "/bad", "/b"):
+        recorder.observe(path=path, status=401, client_ip=None, note=None)
+
+    assert recorder.flush() == 2
+    assert sorted(row.path for row in sink.rows) == ["/a", "/b"]
+
+
+def test_an_unreachable_database_is_not_retried_row_by_row() -> None:
+    attempts: list[int] = []
+
+    class _DownSink:
+        def write(self, rows: list[SecurityEventRow]) -> None:
+            attempts.append(len(rows))
+            raise RuntimeError("could not connect")
+
+    recorder = SecurityEventRecorder(_DownSink(), clock=_clock)
+    for path in ("/a", "/b", "/c"):
+        recorder.observe(path=path, status=401, client_ip=None, note=None)
+
+    assert recorder.flush() == 0
+    assert attempts == [3]

@@ -44,8 +44,15 @@ def _alerts(connection: Connection, since: datetime) -> list[dict[str, Any]]:
     burst_ips = connection.execute(
         text(
             """
-            SELECT count(DISTINCT client_ip) FROM platform.security_event
-            WHERE event_type = 'auth.required' AND occurred_at >= :since AND count > :limit
+            SELECT count(DISTINCT client_ip) FROM (
+              -- One IP's 401s in one minute, across every path and every
+              -- flush (rows carry the start of their minute).
+              SELECT client_ip FROM platform.security_event
+              WHERE event_type = 'auth.required' AND occurred_at >= :since
+                AND client_ip IS NOT NULL
+              GROUP BY client_ip, date_trunc('minute', occurred_at)
+              HAVING sum(count) > :limit
+            ) bursts
             """
         ),
         {"since": since, "limit": AUTH_BURST_PER_MINUTE},

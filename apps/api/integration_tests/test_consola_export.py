@@ -132,3 +132,34 @@ def test_export_runs_in_a_read_only_transaction(integration_engine: Engine) -> N
         "suspicious_ips",
         "usage",
     }
+
+
+def test_burst_alert_sums_paths_and_split_flushes_per_ip_minute(
+    integration_connection: Connection,
+) -> None:
+    c = integration_connection
+    minute = NOW - timedelta(hours=1)
+    # One scanner: 40 + 30 on two paths in the same minute (two flush rows).
+    for path, count in (("/runs/a", 40), ("/runs/b", 30)):
+        _event(
+            c,
+            occurred_at=minute,
+            event_type="auth.required",
+            path=path,
+            http_status=401,
+            client_ip="203.0.113.9",
+            count=count,
+        )
+    # Below the threshold: another IP with 50 in one minute.
+    _event(
+        c,
+        occurred_at=minute,
+        event_type="auth.required",
+        path="/x",
+        http_status=401,
+        client_ip="203.0.113.10",
+        count=50,
+    )
+
+    codes = {alert["code"]: alert for alert in build_report(c, now=NOW)["alerts"]}
+    assert codes["auth_burst"]["count"] == 1
