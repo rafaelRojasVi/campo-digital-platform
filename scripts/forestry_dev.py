@@ -35,6 +35,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _local_process import uv_run_api  # noqa: E402
+
 API_ROOT = REPO_ROOT / "apps" / "api"
 DASHBOARD_ROOT = REPO_ROOT / "products" / "forestry" / "dashboard"
 STATE_DIR = REPO_ROOT / ".forestry-dev"
@@ -162,7 +167,7 @@ def start_database() -> None:
 def run_migrations() -> None:
     log("applying migrations (alembic upgrade head)…")
     result = subprocess.run(
-        ["uv", "run", "--extra", "api", "alembic", "upgrade", "head"],
+        uv_run_api("alembic", "upgrade", "head"),
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -346,7 +351,7 @@ def start_api() -> ManagedProcess:
 
     port = find_free_port(API_PREFERRED_PORT)
     marker = f"uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port {port}"
-    command = ["uv", "run", "--extra", "api", *marker.split(" ")]
+    command = uv_run_api(*marker.split(" "))
 
     log(f"starting FastAPI on 127.0.0.1:{port}…")
     process = spawn("api", command, REPO_ROOT, port, marker, dict(os.environ))

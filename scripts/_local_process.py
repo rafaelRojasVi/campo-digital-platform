@@ -33,6 +33,21 @@ class ManagedProcess:
     marker: str
 
 
+# The API imports every product's code (the Transelec inspector needs
+# python_calamine), so launchers run it with the extras the production image
+# installs. tests/scripts/test_api_extras.py keeps this equal to the Dockerfile.
+API_UV_EXTRAS = ("api", "transelec")
+
+
+def uv_run_api(*args: str) -> list[str]:
+    """``uv run`` with the API's extras, followed by ``args``."""
+
+    command = ["uv", "run"]
+    for extra in API_UV_EXTRAS:
+        command += ["--extra", extra]
+    return [*command, *args]
+
+
 def state_file(state_dir: Path, name: str) -> Path:
     return state_dir / f"{name}.json"
 
