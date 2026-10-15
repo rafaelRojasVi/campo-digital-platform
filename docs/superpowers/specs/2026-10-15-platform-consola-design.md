@@ -153,6 +153,52 @@ The document contains:
   failure, export failure (with the exit status), never a stack trace of
   production data.
 
+### Opening it easily on Ubuntu (WSL2 and native)
+
+**DECISION (2026-10-15):** besides `make consola`, the Consola must open
+without remembering commands or folders.
+
+- `make consola-install` installs, for the current user only:
+  - `~/.local/bin/consola`, a small launcher that runs the Consola from this
+    repository's path (resolved at install time) from any folder;
+  - `~/.local/share/applications/campo-consola.desktop` with an icon, so it
+    appears as "Consola Campo Digital" in the Ubuntu applications menu. On
+    WSL2 with WSLg the same entry appears in the Windows Start menu.
+- `make consola-uninstall` removes both.
+- If the Consola is already running, the launcher opens the browser on the
+  existing page instead of starting a second one.
+- **Browser:** under WSL (detected from `/proc/version` or `WSL_DISTRO_NAME`)
+  the page opens in the Windows browser with `wslview` when available, else
+  `explorer.exe`; on native Ubuntu with `xdg-open`. If none works, the URL
+  is printed.
+
+### Visual design
+
+**DECISION (2026-10-15):** the page is designed, not a raw table dump. It is
+an operations view the operator scans: state first, detail after.
+
+- **Summary first:** a top band with the overall status ("Todo normal" /
+  "N alertas") as a coloured state chip, the time of the last refresh, and
+  an "Actualizar" button.
+- **Alerts as cards** with a severity stripe (critical, warning, info) and a
+  plain sentence ("3 inicios de sesión rechazados en 24 h"), each linking to
+  the rows behind it.
+- **Usage as small charts:** one sparkline or bar row per product (sign-ins,
+  uploads, publishes per day over 7 days), drawn to scale, with the numbers
+  shown.
+- **Activity as a timeline** (time, person, action, product), and
+  **suspicious IPs as a ranked table** with counts and first/last seen.
+- **Health** shows the deployment as a chip (status colour), commit, time,
+  and buttons to Sentry and Railway.
+- The platform's forest palette and typography, semantic colours for
+  severity kept separate from the accent, tabular numbers, light and dark
+  themes, keyboard focus visible, works at laptop and narrow widths. Built
+  with the UI skills (`ui-ux-pro-max`, web design guidelines) and reviewed
+  in a browser before delivery.
+- An **empty state** that reads as good news ("Sin alertas en las últimas
+  24 h") and a **loading state** while `railway ssh` runs (it takes a few
+  seconds).
+
 ## Part 3: testing
 
 - **Recording:** each producer sets the right note; the middleware writes
@@ -168,6 +214,12 @@ The document contains:
   transaction is read-only (a write inside it fails).
 - **Runner:** the page renders from a fixture JSON; CLI failures produce
   the plain-language error; the server binds only to `127.0.0.1`.
+- **Launcher:** install writes both files with the resolved repository path
+  and uninstall removes them; the browser opener picks `wslview`,
+  `explorer.exe` or `xdg-open` from the environment; a second launch reuses
+  the running Consola.
+- **Visual:** reviewed in a browser with fixture data covering alerts, no
+  alerts and an export failure, in light and dark.
 
 ## Out of scope
 
