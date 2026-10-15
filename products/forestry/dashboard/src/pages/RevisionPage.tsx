@@ -19,6 +19,7 @@ import {
   restoreSnapshot,
 } from '../api.ts'
 import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
+import { Hint } from '../components/Hint.tsx'
 import { Notice, PageShell, StatusChip } from '../components/PageShell.tsx'
 import { formatHa, formatInt, shortFingerprint, sourceUnitsToHa } from '../lib/format.ts'
 import { qualityFlagLabel } from '../lib/qualityLabels.ts'
@@ -164,13 +165,19 @@ function SourceDetails({ version }: { version: Version }) {
         <dd>{version.layer_name}</dd>
       </div>
       <div>
-        <dt>Sistema de coordenadas</dt>
+        <dt>
+          Sistema de coordenadas
+          <Hint text="Sistema de referencia declarado por el archivo (.prj) y código EPSG con que se guardan las geometrías. Las áreas se calculan en sus metros." />
+        </dt>
         <dd>
           {version.crs_name ?? 'Declarado'} (EPSG:{version.storage_srid})
         </dd>
       </div>
       <div>
-        <dt>Huella del contenido</dt>
+        <dt>
+          Huella del contenido
+          <Hint text="Código calculado a partir de los archivos del shapefile (.shp, .dbf, …). Dos cargas con la misma huella tienen exactamente el mismo contenido, aunque el ZIP se llame distinto." />
+        </dt>
         <dd>
           <code title={version.family_fingerprint}>{shortFingerprint(version.family_fingerprint)}</code>
         </dd>
@@ -371,7 +378,10 @@ export function RevisionPage({
                   <th scope="col">Predio</th>
                   <th scope="col">Rodal</th>
                   <th scope="col">OBJECTID</th>
-                  <th scope="col">Motivo (GEOS)</th>
+                  <th scope="col">
+                    Motivo (GEOS)
+                    <Hint text="Razón técnica por la que el polígono no es válido, según la librería geométrica GEOS (por ejemplo, un borde que se cruza a sí mismo)." />
+                  </th>
                 </tr>
               </thead>
               <tbody>

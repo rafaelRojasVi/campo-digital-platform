@@ -197,6 +197,52 @@ Measured in Chromium at 1440×900 against the real snapshot, dev server:
 
 **DECISION** — No vector tiles, server clustering, or caching infrastructure
 at this scale; revisit only with measured evidence of degradation.
+**DECISION** (2026-10-15) — An `Opacidad` slider (0–100 %, default 78 %)
+sets the fill opacity of source polygons so the basemap/satellite shows
+through. Below 50 % the outline switches from white to the polygon's own
+category color at 1.5 px, so the boundaries between uses stay readable
+without the fill (requested by Campo Digital, 2026-10-14).
+
+**DECISION** (2026-10-15) — Labels that need context carry a quiet `?`
+(component `Hint`) that explains them on hover, keyboard focus, or tap:
+KPI strip, table `Evidencia` column, map `Opacidad`, the boundary simulator
+(draft badge, areas, tools, visible handles), and the Revisión/Versiones
+pages (CRS, content fingerprint, GEOS reason, version status). The tooltip
+is portalled with fixed positioning so scrolling containers never clip it.
+
+## Local boundary simulation ("Simular ajuste")
+
+A local-only draft editor for one selected, OGC-valid polygon: move
+vertices, reduce points (Douglas–Peucker at 2 / 10 / 30 m), or cut with a
+straight line, with live area in EPSG:32718 metres. Nothing is persisted;
+the source snapshot never changes.
+
+**DECISION** (2026-10-15) — "Cortar con línea" works on multipart polygons,
+polygons with holes, and concave outlines the line enters and leaves several
+times (previously only single-ring polygons crossed exactly twice). Every
+part the drawn segment crosses is split; each resulting piece lies left or
+right of the line, and the user keeps one side. Parts the line misses stay
+with whichever side is kept; holes it misses go to the piece that contains
+them; holes it crosses become notches in the adjoining pieces. Method:
+exterior wound counter-clockwise and holes clockwise, crossings paired along
+the line into interior chords, then each piece traced ring → chord → ring
+until it closes; the direction a piece walks its chords gives its side.
+Implemented in `straightCutCandidates` (`src/lib/draftGeometry.ts`).
+
+**FACT** — In snapshot 1 (1,568 features, 1,561 OGC-valid), 164 valid
+polygons are multipart and 56 have at least one hole; all of them had the
+cut tool disabled before this change.
+
+**RESULT** (2026-10-15, local dev, snapshot 1) — Purretrun rodal 17
+(8.09 ha, 3 holes): one vertical line through two holes and a concave
+bottom edge (4 exterior crossings) gave 4.05 + 4.04 ha, matching the
+original; the untouched hole stayed whole in its piece. Hacienda Trinidad
+rodal 1 (2 parts, 3.95 ha): only the crossed part was split, 2.70 + 1.24 ha.
+
+**LIMITATION** — The cut refuses, with a message, a line that starts or
+ends inside the polygon or a hole, passes exactly through a vertex, or
+wraps around part of the polygon so one piece would lie on both sides.
+Invalid source geometries (7) cannot enter the simulator at all.
 
 ## Limitations and open items
 
@@ -207,7 +253,8 @@ at this scale; revisit only with measured evidence of degradation.
 - **LIMITATION** — At estate zoom, sub-pixel polygons are clickable only via
   their centroid markers (small subsets) or after zooming; hit-testing tiny
   canvas polygons is inherently imprecise.
-- Read-only by design: no editing, uploads, management-plan requests, print
+- Read-only by design: no persisted editing (the boundary simulation is
+  local-only), management-plan requests, print
   layouts, Excel (XLSX) export, or German-language views — pending the
   stakeholder answers in
   [preguntas-campo-digital.md](es/preguntas-campo-digital.md).

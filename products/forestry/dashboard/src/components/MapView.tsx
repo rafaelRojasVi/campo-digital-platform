@@ -23,6 +23,7 @@ import {
 import type { ColorEncoding } from '../lib/palette.ts'
 import type { FeatureCollection, GeoFeature } from '../types.ts'
 import type { ZoomRequest } from '../App.tsx'
+import { Hint } from './Hint.tsx'
 
 interface MapViewProps {
   collection: FeatureCollection
@@ -46,8 +47,18 @@ type SimplifyLevel = 'alto' | 'medio' | 'bajo'
 
 interface CutPreview {
   pieces: [DraftCoordinates, DraftCoordinates]
+  /** Parts the line did not cross; kept whichever side is chosen. */
+  untouched: DraftCoordinates
   selectedIndex: 0 | 1
   beforeCut: DraftCoordinates
+}
+
+function retainedCoordinates(preview: CutPreview): DraftCoordinates {
+  return [...preview.pieces[preview.selectedIndex], ...preview.untouched]
+}
+
+function removedCoordinates(preview: CutPreview): DraftCoordinates {
+  return preview.pieces[preview.selectedIndex === 0 ? 1 : 0]
 }
 
 const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -85,6 +96,15 @@ const SIMPLIFY_LEVELS: { id: SimplifyLevel; label: string; toleranceMeters: numb
   { id: 'medio', label: 'Medio', toleranceMeters: 10 },
   { id: 'bajo', label: 'Bajo', toleranceMeters: 30 },
 ]
+
+/** Default fill opacity for source polygons; the "Opacidad" slider overrides it. */
+const DEFAULT_FILL_OPACITY = 0.78
+
+/**
+ * Below this fill opacity the outline takes the use color, so the borders
+ * between uses stay readable over the satellite image.
+ */
+const COLORED_OUTLINE_BELOW = 0.5
 
 const DRAFT_STYLE: L.PathOptions = {
   color: '#f3a712',
@@ -153,6 +173,7 @@ export function MapView({
   const prevSelectedRef = useRef<number | null>(null)
   const prevDraftRef = useRef<number | null>(null)
   const prevEncodingRef = useRef<ColorEncoding | null>(null)
+  const prevFillOpacityRef = useRef(DEFAULT_FILL_OPACITY)
 
   const draftLayerRef = useRef<L.Polygon | null>(null)
   const draftMarkerGroupRef = useRef<L.LayerGroup | null>(null)
@@ -180,6 +201,7 @@ export function MapView({
   const [simplifyLevel, setSimplifyLevel] = useState<SimplifyLevel | null>(null)
   const [historyTick, setHistoryTick] = useState(0)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
+  const [fillOpacity, setFillOpacity] = useState(DEFAULT_FILL_OPACITY)
 
   useEffect(() => {
     onSelectRef.current = onSelect
@@ -337,7 +359,10 @@ export function MapView({
         onSelectRef.current(featureOrdinal)
       })
 
-      layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.92, weight: 2 }))
+      layer.on('mouseover', () => {
+        const base = styleForRef.current(featureOrdinal).fillOpacity ?? DEFAULT_FILL_OPACITY
+        layer.setStyle({ fillOpacity: Math.min(0.92, base + 0.25), weight: 2 })
+      })
       layer.on('mouseout', () => layer.setStyle(styleForRef.current(featureOrdinal)))
 
       const [minx, miny, maxx, maxy] = multiPolygonUtmBbox(feature.geometry)
@@ -400,21 +425,27 @@ export function MapView({
       const selected = featureOrdinal === selectedOrdinal
       const editing = featureOrdinal === draftFeatureOrdinal
       const zoom = mapRef.current?.getZoom() ?? 12
-      const strokeWeight = zoom >= 12 || visibleOrdinals.size <= 200 ? 0.8 : 0
+      const coloredOutline = fillOpacity < COLORED_OUTLINE_BELOW
+      const strokeWeight = coloredOutline
+        ? 1.5
+        : zoom >= 12 || visibleOrdinals.size <= 200
+          ? 0.8
+          : 0
 
       return {
-        color: editing || selected ? '#14130f' : '#ffffff',
+        color: editing || selected ? '#14130f' : coloredOutline ? color : '#ffffff',
         weight: editing ? 2 : selected ? 2.5 : strokeWeight,
-        opacity: editing || selected ? 1 : 0.85,
+        opacity: editing || selected || coloredOutline ? 1 : 0.85,
         fillColor: color,
-        fillOpacity: editing ? 0.12 : 0.78,
+        fillOpacity: editing ? 0.12 : fillOpacity,
         dashArray: editing ? '5 4' : undefined,
       }
     }
     styleForRef.current = styleFor
 
     const previouslyVisible = prevVisibleRef.current
-    const encodingChanged = prevEncodingRef.current !== encoding
+    const encodingChanged =
+      prevEncodingRef.current !== encoding || prevFillOpacityRef.current !== fillOpacity
     const touchedOrdinals = new Set<number>()
     if (prevSelectedRef.current !== null) touchedOrdinals.add(prevSelectedRef.current)
     if (selectedOrdinal !== null) touchedOrdinals.add(selectedOrdinal)
@@ -443,6 +474,7 @@ export function MapView({
     prevSelectedRef.current = selectedOrdinal
     prevDraftRef.current = draftFeatureOrdinal
     prevEncodingRef.current = encoding
+    prevFillOpacityRef.current = fillOpacity
 
     const syncMarkers = () => {
       const map = mapRef.current
@@ -504,7 +536,7 @@ export function MapView({
         map.off('zoomend', restyleOnZoom)
       }
     }
-  }, [filteredFeatures, encoding, selectedOrdinal, draftFeatureOrdinal])
+  }, [filteredFeatures, encoding, selectedOrdinal, draftFeatureOrdinal, fillOpacity])
 
   // Local-only draft geometry editor. A seed is used after simplification or
   // cutting; otherwise the immutable source geometry starts the draft.
@@ -625,7 +657,7 @@ export function MapView({
     }
   }, [draftFeatureOrdinal, draftVersion, draftMode])
 
-  // Two-click straight cut. Only the safe geometry contract in
+  // Two-click straight cut. Only the geometry contract in
   // straightCutCandidates can produce a preview.
   useEffect(() => {
     cutClickHandlerRef.current = (latlng: L.LatLng) => {
@@ -679,6 +711,7 @@ export function MapView({
       const removedHa = result.areasSquareMeters[selectedIndex === 0 ? 1 : 0] / 10_000
       const preview: CutPreview = {
         pieces: [cloneCoordinates(result.pieces[0]), cloneCoordinates(result.pieces[1])],
+        untouched: cloneCoordinates(result.untouched),
         selectedIndex,
         beforeCut: cloneCoordinates(current),
       }
@@ -697,15 +730,12 @@ export function MapView({
     const map = mapRef.current
     if (map === null || cutPreview === null) return
 
-    const retainedCoordinates = cutPreview.pieces[cutPreview.selectedIndex]
-    const removedCoordinates = cutPreview.pieces[cutPreview.selectedIndex === 0 ? 1 : 0]
-
     const retainedLayer = L.polygon(
-      multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates: retainedCoordinates }),
+      multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates: retainedCoordinates(cutPreview) }),
       CUT_RETAINED_STYLE,
     ).addTo(map)
     const removedLayer = L.polygon(
-      multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates: removedCoordinates }),
+      multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates: removedCoordinates(cutPreview) }),
       CUT_REMOVED_STYLE,
     ).addTo(map)
 
@@ -773,13 +803,11 @@ export function MapView({
   const previewRetainedAreaHa =
     cutPreview === null
       ? null
-      : multiPolygonAreaSquareMeters(cutPreview.pieces[cutPreview.selectedIndex]) / 10_000
+      : multiPolygonAreaSquareMeters(retainedCoordinates(cutPreview)) / 10_000
   const previewRemovedAreaHa =
     cutPreview === null
       ? null
-      : multiPolygonAreaSquareMeters(
-          cutPreview.pieces[cutPreview.selectedIndex === 0 ? 1 : 0],
-        ) / 10_000
+      : multiPolygonAreaSquareMeters(removedCoordinates(cutPreview)) / 10_000
 
   const displayedAreaHa = previewRetainedAreaHa ?? draftAreaHa
   const areaDifferenceHa =
@@ -798,11 +826,6 @@ export function MapView({
 
   const sourceVertexCount =
     draftFeature === null ? null : countDraftVertices(draftFeature.geometry.coordinates)
-  const cutSupported =
-    draftFeature !== null &&
-    draftFeature.geometry.coordinates.length === 1 &&
-    draftFeature.geometry.coordinates[0]?.length === 1
-
   const simplifyPreview = useMemo(() => {
     if (simplifyLevel === null) return null
     const current = draftCoordinatesRef.current
@@ -863,14 +886,16 @@ export function MapView({
     setSimplifyLevel(null)
     setCutPreview(null)
     clearCutGuide()
-    setCutStatus('Haz clic en dos puntos del borde para trazar el corte. Esc para cancelar.')
+    setCutStatus(
+      'Haz un clic a cada lado del polígono para trazar una línea que lo atraviese. Esc para cancelar.',
+    )
     setDraftMode('cut')
   }
 
   const acceptCut = () => {
     if (cutPreview === null) return
     recordHistory(cutPreview.beforeCut)
-    draftSeedRef.current = cloneCoordinates(cutPreview.pieces[cutPreview.selectedIndex])
+    draftSeedRef.current = cloneCoordinates(retainedCoordinates(cutPreview))
     setCutPreview(null)
     setCutStatus('Corte aplicado al borrador local. Puedes seguir ajustando puntos.')
     clearCutGuide()
@@ -945,7 +970,9 @@ export function MapView({
   escapeHandlerRef.current = () => {
     if (cutStartRef.current !== null) {
       clearCutGuide()
-      setCutStatus('Haz clic en dos puntos del borde para trazar el corte. Esc para cancelar.')
+      setCutStatus(
+        'Haz un clic a cada lado del polígono para trazar una línea que lo atraviese. Esc para cancelar.',
+      )
       return true
     }
     if (cutPreview !== null) {
@@ -990,6 +1017,20 @@ export function MapView({
             <option value="none">Sin fondo</option>
           </select>
         </label>
+        <label className="map__opacity-control">
+          <span>Opacidad</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={Math.round(fillOpacity * 100)}
+            onChange={(event) => setFillOpacity(Number(event.target.value) / 100)}
+            aria-label="Opacidad de los polígonos"
+          />
+          <span className="map__opacity-value">{Math.round(fillOpacity * 100)}%</span>
+          <Hint text="Transparencia del relleno de los polígonos. Bájala para ver la imagen de fondo; bajo 50 % el borde toma el color del uso, así no se pierden los límites." />
+        </label>
         <button type="button" className="map__control-button" onClick={onFitToResults}>
           Ajustar a resultados
         </button>
@@ -1032,7 +1073,10 @@ export function MapView({
                   : `Polígono #${draftFeature.properties.feature_ordinal}`}
               </span>
             </div>
-            <span className="draft-edit__badge">Borrador local</span>
+            <span className="draft-edit__badge">
+              Borrador local
+              <Hint text="Los cambios viven solo en esta pantalla: no se guardan ni modifican la capa de rodales. Se pierden al descartar o al seleccionar otro polígono." />
+            </span>
             <button
               type="button"
               className="draft-edit__collapse"
@@ -1046,7 +1090,10 @@ export function MapView({
 
           <div className="draft-edit__metrics">
             <div>
-              <span>Área original</span>
+              <span>
+                Área original
+                <Hint text="Área calculada del dibujo del polígono fuente, en metros (EPSG:32718). Puede diferir de Sup_ha, que es un valor escrito en los atributos del archivo." />
+              </span>
               <strong>{formatHa(originalAreaHa)} ha</strong>
             </div>
             <div>
@@ -1060,7 +1107,10 @@ export function MapView({
               </div>
             ) : null}
             <div>
-              <span>Diferencia</span>
+              <span>
+                Diferencia
+                <Hint text="Área del borrador (o resultante del corte) menos el área original." />
+              </span>
               <strong>
                 {areaDifferenceHa !== null && areaDifferenceHa >= 0 ? '+' : ''}
                 {areaDifferenceHa === null ? '—' : formatHa(areaDifferenceHa)} ha
@@ -1106,15 +1156,16 @@ export function MapView({
                   type="button"
                   className={`draft-tool${draftMode === 'cut' ? ' draft-tool--active' : ''}`}
                   onClick={startCut}
-                  disabled={!cutSupported}
-                  title={
-                    cutSupported
-                      ? 'Dibuja una línea recta con dos clics y conserva uno de los lados'
-                      : 'Disponible solo para polígonos simples sin huecos ni partes múltiples'
-                  }
                 >
                   Cortar con línea
                 </button>
+                <Hint
+                  text={
+                    'Mover puntos: arrastra los puntos del borde.\n' +
+                    'Reducir puntos: simplifica el borde quitando puntos casi alineados; «Alto» conserva más detalle.\n' +
+                    'Cortar con línea: haz un clic a cada lado del polígono (fuera de él) para trazar una línea recta y elige qué lado conservar. Solo se cortan las partes que cruza; puede atravesar huecos y entrar y salir varias veces.'
+                  }
+                />
               </div>
 
               {simplifyLevel !== null ? (
@@ -1167,7 +1218,10 @@ export function MapView({
                 draftHandleCount !== null &&
                 draftVertexCount !== null &&
                 draftHandleCount < draftVertexCount ? (
-                  <span>Controles visibles: {draftHandleCount}</span>
+                  <span>
+                    Controles visibles: {draftHandleCount}
+                    <Hint text="En polígonos con muchos puntos solo se muestran los más importantes para que el mapa no se ponga lento. Los demás puntos siguen en el borde." />
+                  </span>
                 ) : null}
               </div>
 

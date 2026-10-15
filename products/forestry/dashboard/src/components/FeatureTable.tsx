@@ -5,6 +5,7 @@ import { qualityFlagLabel } from '../lib/qualityLabels.ts'
 import { sortFeatures } from '../lib/tableSort.ts'
 import type { SortKey, SortState } from '../lib/tableSort.ts'
 import type { GeoFeature } from '../types.ts'
+import { Hint } from './Hint.tsx'
 
 interface FeatureTableProps {
   features: GeoFeature[]
@@ -15,14 +16,18 @@ interface FeatureTableProps {
 
 const PAGE_SIZE = 25
 
-const COLUMNS: { key: SortKey | null; label: string; className?: string }[] = [
+const COLUMNS: { key: SortKey | null; label: string; className?: string; hint?: string }[] = [
   { key: 'predio', label: 'Predio' },
   { key: 'rodal', label: 'Rodal', className: 'table__cell--num' },
   { key: 'uso2026', label: 'Uso 2026' },
   { key: 'codigo2026', label: 'Código 2026' },
   { key: null, label: 'Descripción' },
   { key: 'supHa', label: 'Sup. (ha)', className: 'table__cell--num' },
-  { key: null, label: 'Evidencia' },
+  {
+    key: null,
+    label: 'Evidencia',
+    hint: 'Cantidad de observaciones de calidad de datos que trae el polígono desde el archivo original. No son errores. Pasa el mouse sobre el número para ver cuáles son.',
+  },
 ]
 
 export function FeatureTable({
@@ -141,6 +146,7 @@ export function FeatureTable({
                   ) : (
                     column.label
                   )}
+                  {column.hint !== undefined ? <Hint text={column.hint} /> : null}
                 </th>
               ))}
             </tr>

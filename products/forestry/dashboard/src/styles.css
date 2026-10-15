@@ -1400,3 +1400,60 @@ a.button {
     font-size: 12px;
   }
 }
+
+/* Inline help: a quiet "?" that explains a label on hover or focus. */
+.hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  vertical-align: 1px;
+  color: var(--ink-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: help;
+  opacity: 0.7;
+  transition: opacity 120ms var(--ease), color 120ms var(--ease), border-color 120ms var(--ease);
+}
+
+.hint:hover,
+.hint:focus-visible {
+  color: var(--green-700);
+  border-color: var(--green-700);
+  opacity: 1;
+}
+
+.hint:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.hint__tooltip {
+  position: fixed;
+  z-index: 3000;
+  padding: 7px 10px;
+  color: var(--ink-inverse);
+  background: var(--green-950);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-float);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: pre-line;
+  pointer-events: none;
+}
+
+.hint__tooltip--above {
+  transform: translateY(-100%);
+}
