@@ -13,6 +13,8 @@ export const ROUTES = {
   versiones: '/rodales/versiones',
   importar: '/rodales/importar',
   revision: '/rodales/revision',
+  informes: '/rodales/informes',
+  informe: '/rodales/informes/editar',
 } as const
 
 export type Route = (typeof ROUTES)[keyof typeof ROUTES]
@@ -57,6 +59,17 @@ export function versionParam(search: URLSearchParams): number | null {
   const raw = search.get('version')
   if (raw === null || !/^[1-9][0-9]*$/.test(raw)) return null
   return Number(raw)
+}
+
+/** `?informe=<id>` as a positive integer, or null. */
+export function reportParam(search: URLSearchParams): number | null {
+  const raw = search.get('informe')
+  if (raw === null || !/^[1-9][0-9]*$/.test(raw)) return null
+  return Number(raw)
+}
+
+export function reportPath(reportId: number): string {
+  return `${ROUTES.informe}?informe=${reportId}`
 }
 
 export function reviewPath(snapshotId: number): string {

@@ -359,7 +359,14 @@ _transelec_dist = dist_dir_from_environment(TRANSELEC_DIST_ENV, DEFAULT_TRANSELE
 # ROUTES in products/forestry/dashboard/src/router.ts (enforced by
 # test_dashboard_static.py), so a reload of any page gets the shell.
 RODALES_SPA_PAGE_PATHS = frozenset(
-    {"rodales", "rodales/versiones", "rodales/importar", "rodales/revision"}
+    {
+        "rodales",
+        "rodales/versiones",
+        "rodales/importar",
+        "rodales/revision",
+        "rodales/informes",
+        "rodales/informes/editar",
+    }
 )
 
 _rodales_dist = dist_dir_from_environment(RODALES_DIST_ENV, DEFAULT_RODALES_DIST)
