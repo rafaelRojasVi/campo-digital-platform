@@ -5,10 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from forestry_report_fixtures import seed_published_base, seed_user
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import IntegrityError
-
-from forestry_report_fixtures import seed_published_base, seed_user
 
 
 def _insert_report(
