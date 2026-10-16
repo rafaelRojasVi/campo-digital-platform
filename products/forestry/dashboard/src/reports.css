@@ -1,0 +1,66 @@
+/* Rodales management reports (informes de manejo). */
+
+.report-chip {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--panel-2);
+  color: var(--ink-2);
+}
+
+.report-chip--enviado {
+  background: #e3f0f8;
+  color: #0b5c8c;
+}
+
+.report-chip--aprobado {
+  background: var(--green-tint);
+  color: var(--green-900);
+}
+
+.report-chip--cambios_solicitados {
+  background: #fbefd9;
+  color: #8a5300;
+}
+
+.report-chip--archivado {
+  background: var(--panel-2);
+  color: var(--ink-3);
+}
+
+.report-form {
+  display: grid;
+  gap: 14px;
+  min-width: min(420px, 80vw);
+}
+
+.report-form__field {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.report-form__field input,
+.report-form__field select,
+.report-form__field textarea {
+  font: inherit;
+  font-weight: 400;
+  color: var(--ink);
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.report-form__field input:focus-visible,
+.report-form__field select:focus-visible,
+.report-form__field textarea:focus-visible {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: var(--focus-ring);
+}

@@ -5,6 +5,7 @@ import './styles.css'
 import './workspace.css'
 import './draft.css'
 import './workflow.css'
+import './reports.css'
 import Root from './Root.tsx'
 
 const rootElement = document.getElementById('root')
