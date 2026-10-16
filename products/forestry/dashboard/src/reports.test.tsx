@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { ApiError } from './api.ts'
 import Root from './Root.tsx'
 import { reportParam, reportPath } from './router.ts'
 
 vi.mock('./api.ts', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api.ts')>()
-  return { ...original, fetchForestryRole: vi.fn() }
+  return { ...original, fetchForestryRole: vi.fn(), fetchFeatureCollection: vi.fn() }
 })
 vi.mock('./App.tsx', () => ({ default: () => <p>mapa-stub</p> }))
 vi.mock('./pages/InformesPage.tsx', () => ({ InformesPage: () => <p>informes-stub</p> }))
@@ -47,7 +48,17 @@ describe('report routes', () => {
 
 vi.mock('./reportsApi.ts', async (importOriginal) => {
   const original = await importOriginal<typeof import('./reportsApi.ts')>()
-  return { ...original, fetchReports: vi.fn(), createReport: vi.fn() }
+  return {
+    ...original,
+    fetchReports: vi.fn(),
+    createReport: vi.fn(),
+    fetchReport: vi.fn(),
+    saveReportFeatures: vi.fn(),
+    transitionReport: vi.fn(),
+    updateReport: vi.fn(),
+    duplicateReport: vi.fn(),
+    deleteReport: vi.fn(),
+  }
 })
 
 const reportsApi = vi.mocked(await import('./reportsApi.ts'))
@@ -109,5 +120,260 @@ describe('Informes list', () => {
     render(<RealInformesPage role="viewer" />)
     expect(await screen.findByText('Aún no hay informes aprobados.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Nuevo informe' })).not.toBeInTheDocument()
+  })
+})
+
+vi.mock('./components/ReportMap.tsx', () => ({
+  ReportMap: (props: {
+    base: { features: { properties: { feature_ordinal: number } }[] }
+    onBaseClick: (ordinal: number, additive: boolean) => void
+    onLinePoint: (point: [number, number]) => void
+    onFinishLine: () => void
+    onPieceClick: (key: string, index: number) => void
+    choosePieces: { featureKey: string; index: number; label: string }[]
+  }) => (
+    <div>
+      {props.base.features.map((feature) => (
+        <button
+          key={feature.properties.feature_ordinal}
+          type="button"
+          onClick={() => props.onBaseClick(feature.properties.feature_ordinal, false)}
+        >
+          {`base-${feature.properties.feature_ordinal}`}
+        </button>
+      ))}
+      <button type="button" onClick={() => props.onLinePoint([60, -10])}>punto-1</button>
+      <button type="button" onClick={() => props.onLinePoint([60, 110])}>punto-2</button>
+      <button type="button" onClick={() => props.onFinishLine()}>terminar</button>
+      {props.choosePieces.map((piece) => (
+        <button
+          key={`${piece.featureKey}-${piece.index}`}
+          type="button"
+          onClick={() => props.onPieceClick(piece.featureKey, piece.index)}
+        >
+          {`pieza-${piece.label}`}
+        </button>
+      ))}
+    </div>
+  ),
+}))
+
+const { InformeEditorPage: RealEditor } = await vi.importActual<
+  typeof import('./pages/InformeEditorPage.tsx')
+>('./pages/InformeEditorPage.tsx')
+
+const SQUARE = [[[[0, 0], [0, 100], [100, 100], [100, 0], [0, 0]]]]
+
+function baseCollection() {
+  return {
+    type: 'FeatureCollection' as const,
+    shapefile_snapshot_id: 3,
+    storage_srid: 32718,
+    feature_count: 1,
+    features: [
+      {
+        type: 'Feature' as const,
+        properties: {
+          feature_ordinal: 1,
+          source_objectid: 11,
+          cod_predial: 'PU1',
+          nom_predio: 'Purretrun',
+          n_rodal: '17',
+          cod_uso: 'Pi06',
+          uso_2024: null,
+          desc_uso: null,
+          uso_2026: null,
+          cod_uso_2026: null,
+          sup_ha: 1,
+          geometry_is_valid: true,
+          geometry_area_source_units: 10000,
+          quality_flags: [],
+        },
+        geometry: { type: 'MultiPolygon' as const, coordinates: SQUARE },
+      },
+    ],
+  }
+}
+
+function reportDetail(overrides: Partial<import('./reportsApi.ts').Report> = {}, withFeature = false) {
+  return {
+    report: listedReport({ status: 'borrador', revision: 1, feature_count: 0, ...overrides }),
+    features: withFeature
+      ? [
+          {
+            position: 1,
+            source_feature_ordinal: 1,
+            in_report: true,
+            geometry_changed: false,
+            attributes: { objectid: 11, n_rodal: '17', sup_ha: 1 },
+            geometry: { type: 'MultiPolygon' as const, coordinates: SQUARE },
+          },
+        ]
+      : [],
+    sources: withFeature
+      ? [
+          {
+            source_feature_ordinal: 1,
+            attributes: { objectid: 11, n_rodal: '17', sup_ha: 1 },
+            geometry: { type: 'MultiPolygon' as const, coordinates: SQUARE },
+            is_valid: true,
+          },
+        ]
+      : [],
+    notes: [
+      {
+        kind: 'cambios_solicitados' as const,
+        body: 'Saca el rodal 18.',
+        author_display_name: 'Javier',
+        created_at: '2026-10-15T12:00:00Z',
+      },
+    ],
+    srid: 32718,
+    published_snapshot_id: 3,
+  }
+}
+
+describe('Informe editor', () => {
+  beforeEach(() => {
+    api.fetchFeatureCollection.mockResolvedValue(baseCollection())
+    window.sessionStorage.clear()
+  })
+
+  it('copies a base polygon, pastes it and saves it without geometry', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail())
+    reportsApi.saveReportFeatures.mockResolvedValue({ revision: 2, feature_count: 1, warnings: [] })
+    render(<RealEditor role="operator" reportId={7} />)
+
+    await user.click(await screen.findByRole('button', { name: 'base-1' }))
+    await user.click(screen.getByRole('button', { name: 'Copiar' }))
+    await user.click(screen.getByRole('button', { name: 'Pegar al informe' }))
+    expect(screen.getByText('1 polígono · 0 en el área de manejo')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    expect(reportsApi.saveReportFeatures).toHaveBeenCalledWith(7, 1, [
+      { source_feature_ordinal: 1, in_report: false, attributes: {}, geometry: null },
+    ])
+    expect(await screen.findByText('Informe guardado.')).toBeInTheDocument()
+  })
+
+  it('splits with a line, marks the harvested piece and names it 17-1', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    render(<RealEditor role="operator" reportId={7} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Dividir con línea' }))
+    await user.click(screen.getByRole('button', { name: 'punto-1' }))
+    await user.click(screen.getByRole('button', { name: 'punto-2' }))
+    await user.click(screen.getByRole('button', { name: 'Terminar línea' }))
+    expect(screen.getByText('Toca la parte que se cosecha.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'pieza-A' }))
+    await user.click(screen.getByRole('button', { name: 'Listo' }))
+
+    expect(screen.getByText('2 polígonos · 1 en el área de manejo')).toBeInTheDocument()
+    expect(screen.getByText(/^17-1/)).toBeInTheDocument()
+  })
+
+  it('explains a line that does not cross the rodal and keeps drawing', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    render(<RealEditor role="operator" reportId={7} />)
+    await user.click(await screen.findByRole('button', { name: 'Dividir con línea' }))
+    await user.click(screen.getByRole('button', { name: 'punto-1' }))
+    await user.click(screen.getByRole('button', { name: 'Terminar línea' }))
+    expect(screen.getByText('Haga clic en al menos dos puntos para dibujar la línea.')).toBeInTheDocument()
+  })
+
+  it('undo restores the report before the split', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    render(<RealEditor role="operator" reportId={7} />)
+    await user.click(await screen.findByRole('button', { name: 'Dividir con línea' }))
+    await user.click(screen.getByRole('button', { name: 'punto-1' }))
+    await user.click(screen.getByRole('button', { name: 'punto-2' }))
+    await user.click(screen.getByRole('button', { name: 'Terminar línea' }))
+    await user.click(screen.getByRole('button', { name: 'pieza-A' }))
+    await user.click(screen.getByRole('button', { name: 'Listo' }))
+    await user.click(screen.getByRole('button', { name: 'Deshacer' }))
+    expect(screen.getByText('1 polígono · 1 en el área de manejo')).toBeInTheDocument()
+  })
+
+  it('submits after saving unsaved changes', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport
+      .mockResolvedValueOnce(reportDetail({}, true))
+      .mockResolvedValueOnce(reportDetail({ status: 'enviado', revision: 3 }, true))
+    reportsApi.saveReportFeatures.mockResolvedValue({ revision: 2, feature_count: 1, warnings: [] })
+    reportsApi.transitionReport.mockResolvedValue({ report_id: 7, status: 'enviado', revision: 3 })
+    render(<RealEditor role="operator" reportId={7} />)
+
+    // Unmark and mark again: an unsaved change that keeps a managed polygon.
+    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await user.click(screen.getByRole('checkbox', { name: /Área de manejo/ }))
+    await user.click(screen.getByRole('button', { name: 'Enviar a revisión' }))
+
+    expect(reportsApi.saveReportFeatures).toHaveBeenCalledWith(7, 1, expect.any(Array))
+    expect(reportsApi.transitionReport).toHaveBeenCalledWith(7, 'submit', 2)
+  })
+
+  it('keeps the draft when a save fails and shows the server message', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    reportsApi.saveReportFeatures.mockRejectedValue(
+      new ApiError(422, 'x', 'Dos polígonos del informe se superponen.', 'overlap', 1),
+    )
+    render(<RealEditor role="operator" reportId={7} />)
+    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await user.click(screen.getByRole('button', { name: 'Guardar' }))
+    expect(await screen.findByText('Dos polígonos del informe se superponen.')).toBeInTheDocument()
+    expect(screen.getByText('1 polígono · 0 en el área de manejo')).toBeInTheDocument()
+  })
+
+  it('offers reload on stale_revision', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    reportsApi.saveReportFeatures.mockRejectedValue(
+      new ApiError(409, 'x', 'Otra persona guardó cambios en este informe; recárguelo.', 'stale_revision'),
+    )
+    render(<RealEditor role="operator" reportId={7} />)
+    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await user.click(screen.getByRole('button', { name: 'Guardar' }))
+    expect(await screen.findByRole('button', { name: 'Recargar' })).toBeInTheDocument()
+  })
+
+  it('lets an admin review: change list, then request changes with a note', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'enviado', revision: 3 }, true))
+    reportsApi.transitionReport.mockResolvedValue({
+      report_id: 7,
+      status: 'cambios_solicitados',
+      revision: 4,
+    })
+    render(<RealEditor role="admin" reportId={7} />)
+
+    expect(await screen.findByText('Rodal 17 agregado completo')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Pedir cambios' }))
+    const send = screen.getByRole('button', { name: 'Enviar nota' })
+    expect(send).toBeDisabled()
+    await user.type(screen.getByLabelText('Qué hay que cambiar'), 'Saca el rodal 18.')
+    await user.click(send)
+    expect(reportsApi.transitionReport).toHaveBeenCalledWith(7, 'request-changes', 3, 'Saca el rodal 18.')
+  })
+
+  it('shows the returned note to the editor', async () => {
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'cambios_solicitados', revision: 4 }, true))
+    render(<RealEditor role="operator" reportId={7} />)
+    expect(await screen.findByText('Saca el rodal 18.')).toBeInTheDocument()
+  })
+
+  it('is read-only for a viewer and hides review notes', async () => {
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'aprobado', revision: 5 }, true))
+    render(<RealEditor role="viewer" reportId={7} />)
+    expect(await screen.findByRole('link', { name: 'Shapefile (.zip)' })).toHaveAttribute(
+      'href',
+      '/api/forestry/reports/7/export?format=shp&scope=all',
+    )
+    expect(screen.queryByRole('button', { name: 'Dividir con línea' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Saca el rodal 18.')).not.toBeInTheDocument()
   })
 })

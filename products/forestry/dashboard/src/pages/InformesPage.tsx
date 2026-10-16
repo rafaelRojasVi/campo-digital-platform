@@ -7,25 +7,20 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { canUpload, mutationMessage } from '../api.ts'
 import { Notice, PageShell } from '../components/PageShell.tsx'
+import { ReportStatusChip } from '../components/ReportStatusChip.tsx'
 import { formatDate } from '../lib/format.ts'
 import {
   REPORT_TYPES,
-  STATUS_LABELS,
   TYPE_LABELS,
   createReport,
   fetchReports,
   type ReportList,
-  type ReportStatus,
   type ReportType,
 } from '../reportsApi.ts'
 import { ROUTES, navigate, onLinkClick, reportPath } from '../router.ts'
 import type { ForestryRole } from '../types.ts'
 
 const ha = new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-export function ReportStatusChip({ status }: { status: ReportStatus }) {
-  return <span className={`report-chip report-chip--${status}`}>{STATUS_LABELS[status]}</span>
-}
 
 function currentMonth(): string {
   const now = new Date()
