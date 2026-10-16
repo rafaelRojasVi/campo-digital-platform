@@ -109,9 +109,11 @@ All workflow semantics remain future slices.
   migration 0010 and its deployment steps.
 - [Management reports V1](docs/management-reports-v1.md) — informes de manejo:
   report storage, review lifecycle, geometry rules and SHP/GeoPackage/CSV
-  export (API, migration 0014; screens pending).
+  export (API, migration 0014) and the screens.
 - [Cargar, revisar y publicar](docs/es/carga-y-publicacion.md) — Spanish
   stakeholder summary of the upload workflow.
+- [Informes de manejo](docs/es/informes-de-manejo.md) — Spanish guide to
+  management reports: who does what, the editor steps and the export.
 - [Resumen del visor para Campo Digital](docs/es/dashboard-v1.md) — Spanish
   stakeholder summary of the dashboard.
 - [Preguntas para Javier](docs/es/preguntas-campo-digital.md) — Spanish
