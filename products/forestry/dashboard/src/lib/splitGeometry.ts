@@ -81,3 +81,10 @@ export function lineCrosses(coordinates: Coordinates, line: Position[]): boolean
     return false
   }
 }
+
+/** A point guaranteed inside the polygon (for labels; a centroid can fall outside). */
+export function interiorPoint(coordinates: Coordinates): Position {
+  const written = writer.write(readPolygon(coordinates).getInteriorPoint())
+  const [x, y] = written.coordinates as number[]
+  return [x ?? 0, y ?? 0]
+}

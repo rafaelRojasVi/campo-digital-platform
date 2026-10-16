@@ -20,6 +20,8 @@ export interface ChoosePiece {
   index: number
   coordinates: Coordinates
   label: string
+  /** Where the label goes (UTM), inside the piece. */
+  labelAt: Position
   managed: boolean
 }
 
@@ -64,6 +66,13 @@ function featureStyle(feature: DraftFeature, selected: boolean): L.PathOptions {
   }
 }
 
+/** A click in «Dividir con línea»: one line vertex, in UTM, from wherever it lands. */
+function addLinePoint(event: L.LeafletMouseEvent, onLinePoint: (point: Position) => void): void {
+  L.DomEvent.stopPropagation(event)
+  const [easting, northing] = lonLatToUtm(event.latlng.lng, event.latlng.lat)
+  onLinePoint([easting, northing])
+}
+
 export function ReportMap(props: ReportMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -84,9 +93,7 @@ export function ReportMap(props: ReportMapProps) {
     drawLayerRef.current = L.layerGroup().addTo(map)
 
     map.on('click', (event: L.LeafletMouseEvent) => {
-      if (propsRef.current.mode !== 'split') return
-      const [easting, northing] = lonLatToUtm(event.latlng.lng, event.latlng.lat)
-      propsRef.current.onLinePoint([easting, northing])
+      if (propsRef.current.mode === 'split') addLinePoint(event, propsRef.current.onLinePoint)
     })
     map.on('dblclick', () => {
       if (propsRef.current.mode === 'split') propsRef.current.onFinishLine()
@@ -147,6 +154,10 @@ export function ReportMap(props: ReportMapProps) {
         sticky: true,
       })
       polygon.on('click', (event: L.LeafletMouseEvent) => {
+        if (propsRef.current.mode === 'split') {
+          addLinePoint(event, propsRef.current.onLinePoint)
+          return
+        }
         if (propsRef.current.mode !== 'select') return
         L.DomEvent.stopPropagation(event)
         propsRef.current.onBaseClick(ordinal, event.originalEvent.shiftKey || event.originalEvent.ctrlKey)
@@ -182,7 +193,10 @@ export function ReportMap(props: ReportMapProps) {
         })
         polygon.on('click', (event: L.LeafletMouseEvent) => {
           const mode = propsRef.current.mode
-          if (mode === 'split') return // let the map add a line point
+          if (mode === 'split') {
+            addLinePoint(event, propsRef.current.onLinePoint)
+            return
+          }
           L.DomEvent.stopPropagation(event)
           if (mode === 'select' || mode === 'view') {
             propsRef.current.onFeatureClick(feature.key, event.originalEvent.shiftKey || event.originalEvent.ctrlKey)
@@ -199,12 +213,14 @@ export function ReportMap(props: ReportMapProps) {
         fillColor: piece.managed ? HARVEST : REPORT,
         fillOpacity: piece.managed ? 0.65 : 0.35,
       })
+      const [labelLon, labelLat] = utmToLonLat(piece.labelAt[0], piece.labelAt[1])
       polygon.bindTooltip(piece.label, { permanent: true, direction: 'center', className: 'report-map__piece-label' })
       polygon.on('click', (event: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(event)
         propsRef.current.onPieceClick(piece.featureKey, piece.index)
       })
       polygon.addTo(layer)
+      polygon.openTooltip(L.latLng(labelLat, labelLon))
     }
 
     if (props.linePoints.length > 0) {

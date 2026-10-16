@@ -30,7 +30,8 @@ import {
   type DraftFeature,
   type ReportDraft,
 } from '../lib/reportDraft.ts'
-import { SPLIT_MESSAGES, lineCrosses, splitByPolyline, type Coordinates, type Position } from '../lib/splitGeometry.ts'
+import { multiPolygonAreaSquareMeters } from '../lib/draftGeometry.ts'
+import { SPLIT_MESSAGES, interiorPoint, lineCrosses, splitByPolyline, type Coordinates, type Position } from '../lib/splitGeometry.ts'
 import {
   TYPE_LABELS,
   duplicateReport,
@@ -356,9 +357,17 @@ function Editor({
     let letter = 0
     return pending.pieces.flatMap((group) =>
       group.coordinates.map((coordinates, index) => {
-        const label = String.fromCharCode(65 + letter)
+        const letterLabel = String.fromCharCode(65 + letter)
         letter += 1
-        return { featureKey: group.featureKey, index, coordinates, label, managed: pending.managed.has(`${group.featureKey}:${index}`) }
+        const hectares = ha.format(multiPolygonAreaSquareMeters(coordinates) / 10_000)
+        return {
+          featureKey: group.featureKey,
+          index,
+          coordinates,
+          label: `${letterLabel} · ${hectares} ha`,
+          labelAt: interiorPoint(coordinates),
+          managed: pending.managed.has(`${group.featureKey}:${index}`),
+        }
       }),
     )
   }, [pending])

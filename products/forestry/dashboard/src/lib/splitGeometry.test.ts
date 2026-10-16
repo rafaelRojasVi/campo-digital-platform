@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { multiPolygonAreaSquareMeters } from './draftGeometry.ts'
-import { lineCrosses, splitByPolyline, unionPieces, type Coordinates } from './splitGeometry.ts'
+import { interiorPoint, lineCrosses, splitByPolyline, unionPieces, type Coordinates } from './splitGeometry.ts'
 
 const SQUARE: Coordinates = [[[[0, 0], [0, 100], [100, 100], [100, 0], [0, 0]]]]
 const HOLED: Coordinates = [
@@ -78,5 +78,16 @@ describe('unionPieces and lineCrosses', () => {
   it('tells whether a line touches a polygon', () => {
     expect(lineCrosses(SQUARE, [[50, -10], [50, 110]])).toBe(true)
     expect(lineCrosses(SQUARE, [[200, -10], [200, 110]])).toBe(false)
+  })
+})
+
+describe('interiorPoint', () => {
+  it('places a label inside a concave piece, never in its hole', () => {
+    // A «U»: the centroid falls in the notch, outside the polygon.
+    const u: Coordinates = [[[[0, 0], [0, 100], [30, 100], [30, 30], [70, 30], [70, 100], [100, 100], [100, 0], [0, 0]]]]
+    const [x, y] = interiorPoint(u)
+    const insideNotch = x > 30 && x < 70 && y > 30
+    expect(insideNotch).toBe(false)
+    expect(lineCrosses(u, [[x - 0.01, y], [x + 0.01, y]])).toBe(true)
   })
 })

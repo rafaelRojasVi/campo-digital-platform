@@ -267,7 +267,7 @@ describe('Informe editor', () => {
     await user.click(screen.getByRole('button', { name: 'punto-2' }))
     await user.click(screen.getByRole('button', { name: 'Terminar línea' }))
     expect(screen.getByText('Toca la parte que se cosecha.')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'pieza-A' }))
+    await user.click(screen.getByRole('button', { name: /^pieza-A/ }))
     await user.click(screen.getByRole('button', { name: 'Listo' }))
 
     expect(screen.getByText('2 polígonos · 1 en el área de manejo')).toBeInTheDocument()
@@ -292,7 +292,7 @@ describe('Informe editor', () => {
     await user.click(screen.getByRole('button', { name: 'punto-1' }))
     await user.click(screen.getByRole('button', { name: 'punto-2' }))
     await user.click(screen.getByRole('button', { name: 'Terminar línea' }))
-    await user.click(screen.getByRole('button', { name: 'pieza-A' }))
+    await user.click(screen.getByRole('button', { name: /^pieza-A/ }))
     await user.click(screen.getByRole('button', { name: 'Listo' }))
     await user.click(screen.getByRole('button', { name: 'Deshacer' }))
     expect(screen.getByText('1 polígono · 1 en el área de manejo')).toBeInTheDocument()
