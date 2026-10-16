@@ -20,6 +20,7 @@ from app.deps import get_db_connection
 from app.main import app
 from app.routers.forestry import get_forestry_read_connection, require_forestry_viewer
 from app.routers.forestry import router as forestry_router
+from app.routers.forestry_reports import router as forestry_reports_router
 from app.routers.forestry_workflow import router as forestry_workflow_router
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
@@ -28,7 +29,7 @@ from fastapi.testclient import TestClient
 def _forestry_routes() -> list[APIRoute]:
     return [
         route
-        for router in (forestry_router, forestry_workflow_router)
+        for router in (forestry_router, forestry_workflow_router, forestry_reports_router)
         for route in router.routes
         if isinstance(route, APIRoute)
     ]
@@ -43,16 +44,22 @@ def concrete_forestry_urls() -> list[tuple[str, str]]:
 
     urls = []
     for route in _forestry_routes():
-        url = route.path.replace("{shapefile_snapshot_id}", "1").replace("{feature_ordinal}", "1")
+        url = (
+            route.path.replace("{shapefile_snapshot_id}", "1")
+            .replace("{feature_ordinal}", "1")
+            .replace("{report_id}", "1")
+        )
         if url.endswith("/use-distribution"):
             url += "?field=uso_2024"
+        if url.endswith("/source-polygons"):
+            url += "?ordinals=1"
         for method in sorted(route.methods or ()):
             urls.append((method, url))
     return urls
 
 
 def test_the_forestry_router_is_mounted_with_every_route() -> None:
-    assert len(_forestry_routes()) == 14
+    assert len(_forestry_routes()) == 27
     assert _mounted_forestry_paths() == {route.path for route in _forestry_routes()}
 
 

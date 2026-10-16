@@ -41,6 +41,16 @@ EXPECTED_FORESTRY_PATHS = {
     "/api/forestry/snapshots/{shapefile_snapshot_id}/features",
     "/api/forestry/snapshots/{shapefile_snapshot_id}/features/{feature_ordinal}",
     "/api/forestry/snapshots/{shapefile_snapshot_id}/feature-collection",
+    "/api/forestry/reports",
+    "/api/forestry/reports/features",
+    "/api/forestry/reports/{report_id}",
+    "/api/forestry/reports/{report_id}/source-polygons",
+    "/api/forestry/reports/{report_id}/export",
+    "/api/forestry/reports/{report_id}/submit",
+    "/api/forestry/reports/{report_id}/approve",
+    "/api/forestry/reports/{report_id}/request-changes",
+    "/api/forestry/reports/{report_id}/archive",
+    "/api/forestry/reports/{report_id}/duplicate",
 }
 
 
@@ -84,35 +94,57 @@ def test_quality_flag_parameter_matches_evidence_vocabulary() -> None:
     assert set(get_args(QualityFlag)) == set(KNOWN_QUALITY_FLAGS)
 
 
-FORESTRY_MUTATION_PATHS = {
-    "/api/forestry/uploads",
-    "/api/forestry/snapshots/{shapefile_snapshot_id}/publish",
-    "/api/forestry/snapshots/{shapefile_snapshot_id}/restore",
+FORESTRY_MUTATIONS = {
+    ("POST", "/api/forestry/uploads"),
+    ("POST", "/api/forestry/snapshots/{shapefile_snapshot_id}/publish"),
+    ("POST", "/api/forestry/snapshots/{shapefile_snapshot_id}/restore"),
+    ("POST", "/api/forestry/reports"),
+    ("PUT", "/api/forestry/reports/features"),
+    ("PATCH", "/api/forestry/reports/{report_id}"),
+    ("DELETE", "/api/forestry/reports/{report_id}"),
+    ("POST", "/api/forestry/reports/{report_id}/submit"),
+    ("POST", "/api/forestry/reports/{report_id}/approve"),
+    ("POST", "/api/forestry/reports/{report_id}/request-changes"),
+    ("POST", "/api/forestry/reports/{report_id}/archive"),
+    ("POST", "/api/forestry/reports/{report_id}/duplicate"),
 }
 
 
-def test_forestry_mutations_are_exactly_upload_publish_restore() -> None:
+def test_forestry_mutations_are_exactly_the_listed_ones() -> None:
     routes = forestry_routes()
 
     assert routes
 
     for path, methods in routes.items():
-        expected = {"POST"} if path in FORESTRY_MUTATION_PATHS else {"GET"}
-        assert methods == expected, f"unexpected methods {methods} on {path}"
+        writes = {method for method, mutated in FORESTRY_MUTATIONS if mutated == path}
+        reads = methods - writes
+        assert writes <= methods, f"missing {writes - methods} on {path}"
+        assert reads <= {"GET"}, f"unexpected methods {reads} on {path}"
 
 
 def test_every_forestry_mutation_requires_csrf_and_a_write_permission() -> None:
     from app.csrf import require_csrf
+    from app.routers.forestry import router as forestry_router
+    from app.routers.forestry_reports import router as reports_router
+    from app.routers.forestry_workflow import router as workflow_router
     from fastapi.routing import APIRoute
 
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or route.path not in FORESTRY_MUTATION_PATHS:
+    # app.routes nests included routers, so walk the forestry routers directly
+    # (their routes carry the full /api/forestry path).
+    checked = set()
+    for route in (*forestry_router.routes, *workflow_router.routes, *reports_router.routes):
+        if not isinstance(route, APIRoute):
             continue
-        dependencies = [dependency.call for dependency in route.dependant.dependencies]
-        assert require_csrf in dependencies, route.path
-        # The router-level viewer check plus the route's own UPLOAD/PUBLISH check.
-        assert require_forestry_viewer in dependencies, route.path
-        assert len(dependencies) >= 3, route.path
+        for method in route.methods or ():
+            if (method, route.path) not in FORESTRY_MUTATIONS:
+                continue
+            dependencies = [dependency.call for dependency in route.dependant.dependencies]
+            assert require_csrf in dependencies, route.path
+            # The router-level viewer check plus the route's own write check.
+            assert require_forestry_viewer in dependencies, route.path
+            assert len(dependencies) >= 3, route.path
+            checked.add((method, route.path))
+    assert checked == FORESTRY_MUTATIONS
 
 
 def test_database_unavailable_returns_503_without_leaking_backend_error() -> None:

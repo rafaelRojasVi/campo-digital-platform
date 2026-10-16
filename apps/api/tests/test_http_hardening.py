@@ -300,10 +300,13 @@ def test_main_app_bounds_every_upload_route_and_defaults_small() -> None:
         "/api/transelec/uploads",
         "/ingesta/upload",
         "/api/forestry/uploads",
+        "/api/forestry/reports/features",
     }
     # A Transelec workbook and a Rodales ZIP are bounded far below the LiDAR limit.
     assert UPLOAD_BODY_LIMITS["/api/transelec/uploads"] < 100 * 1024 * 1024
     assert UPLOAD_BODY_LIMITS["/api/forestry/uploads"] < 100 * 1024 * 1024
+    # A management report is JSON geometry, bounded well below a shapefile ZIP.
+    assert UPLOAD_BODY_LIMITS["/api/forestry/reports/features"] == 8 * 1024 * 1024
 
 
 def test_main_app_refuses_anonymous_transelec_upload_without_reading_it() -> None:
