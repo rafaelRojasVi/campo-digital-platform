@@ -35,6 +35,10 @@ class Action(StrEnum):
     # edit) and downloading the planilla with those edits. Distinct from
     # PUBLISH: it changes values, not which version every viewer is served.
     EDIT = "edit"
+    # Approving a Rodales management report, or sending it back with a note.
+    # Admin only: operators prepare reports (EDIT) and already hold PUBLISH,
+    # so approval needs its own action.
+    APPROVE = "approve"
     MANAGE_ACCESS = "manage_access"
 
 
@@ -47,6 +51,7 @@ _ALLOWED: frozenset[tuple[Role, Action]] = frozenset(
         (Role.ADMIN, Action.PUBLISH),
         (Role.ADMIN, Action.EDIT),
         (Role.ADMIN, Action.MANAGE_ACCESS),
+        (Role.ADMIN, Action.APPROVE),
         (Role.OPERATOR, Action.VIEW),
         (Role.OPERATOR, Action.UPLOAD),
         (Role.OPERATOR, Action.PROCESS),
