@@ -7,7 +7,7 @@
  * Edits stay in an immutable draft with undo/redo until «Guardar»;
  * «Enviar a revisión» saves first.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, canUpload, fetchFeatureCollection, mutationMessage } from '../api.ts'
 import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { Header } from '../components/Header.tsx'
@@ -44,7 +44,7 @@ import {
   type ReportDetail,
   type ReportWarning,
 } from '../reportsApi.ts'
-import { ROUTES, navigate, onLinkClick, reportPath } from '../router.ts'
+import { ROUTES, navigate, onLinkClick, reportPath, setLeaveGuard } from '../router.ts'
 import type { FeatureCollection, ForestryRole } from '../types.ts'
 
 const ha = new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -160,10 +160,19 @@ function Editor({
   const editable = canUpload(role) && isEditableStatus(report.status)
   const reviewing = role === 'admin' && report.status === 'enviado'
 
-  const [draft, setDraft] = useState<ReportDraft>(() => draftFromDetail(detail))
+  const [initialDraft] = useState<ReportDraft>(() => draftFromDetail(detail))
+  const [draft, setDraft] = useState<ReportDraft>(initialDraft)
+  // The last draft the server accepted; anything else is unsaved, including
+  // edits made while a save was in flight.
+  const [savedDraft, setSavedDraft] = useState<ReportDraft>(initialDraft)
+  const dirty = draft !== savedDraft
+  // The current draft for async callbacks (save/submit) that outlive a render.
+  const draftRef = useRef(draft)
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
   const [history, setHistory] = useState<History<ReportDraft>>(createHistory)
   const [revision, setRevision] = useState(report.revision)
-  const [dirty, setDirty] = useState(false)
   const [mode, setMode] = useState<MapMode>(editable ? 'select' : 'view')
   const [selectedOrdinals, setSelectedOrdinals] = useState<Set<number>>(new Set())
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
@@ -207,14 +216,18 @@ function Editor({
       event.preventDefault()
     }
     window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
+    // In-app links and Back do not unload the page; the router asks this guard.
+    setLeaveGuard(() => window.confirm('Hay cambios sin guardar. ¿Salir de todos modos?'))
+    return () => {
+      window.removeEventListener('beforeunload', warn)
+      setLeaveGuard(null)
+    }
   }, [dirty])
 
   const change = useCallback(
     (next: ReportDraft) => {
       setHistory((current) => recordHistory(current, draft))
       setDraft(next)
-      setDirty(true)
     },
     [draft],
   )
@@ -224,7 +237,6 @@ function Editor({
     if (step === null) return
     setHistory(step.history)
     setDraft(step.value)
-    setDirty(true)
   }, [history, draft])
 
   const redo = useCallback(() => {
@@ -232,7 +244,6 @@ function Editor({
     if (step === null) return
     setHistory(step.history)
     setDraft(step.value)
-    setDirty(true)
   }, [history, draft])
 
   // --- Selection, copy, paste -------------------------------------------------
@@ -337,7 +348,9 @@ function Editor({
       const result = splitByPolyline(feature.coordinates, linePoints)
       if (!result.ok) {
         if (result.reason === 'not_crossing' && targets.length > 1) continue
-        setMessage({ tone: 'warn', text: SPLIT_MESSAGES[result.reason] })
+        const name = `Rodal ${featureCode(feature) ?? 'sin número'}`
+        const hint = targets.length > 1 ? ' Seleccione solo el rodal que quiere dividir.' : ''
+        setMessage({ tone: 'warn', text: `${name}: ${SPLIT_MESSAGES[result.reason]}${hint}` })
         return
       }
       pieces.push({ featureKey: feature.key, coordinates: result.pieces })
@@ -386,18 +399,25 @@ function Editor({
   const confirmPieces = useCallback(
     (keepNone: boolean) => {
       if (pending === null) return
+      if (!keepNone && pending.managed.size === 0) {
+        setMessage({ tone: 'warn', text: 'Toque al menos una parte, o use «Ninguna por ahora».' })
+        return
+      }
       let next = draft
+      let count = 0
       for (const group of pending.pieces) {
         const managed = keepNone
           ? []
           : group.coordinates.map((_, index) => index).filter((index) => pending.managed.has(`${group.featureKey}:${index}`))
+        // A rodal the line also crossed but where no part was chosen stays whole.
+        if (!keepNone && managed.length === 0) continue
         next = applySplit(next, group.featureKey, group.coordinates, managed)
+        count += 1
       }
       change(next)
       setPending(null)
       setMode('select')
       setSelectedKeys(new Set())
-      const count = pending.pieces.length
       setMessage({ tone: 'success', text: `${plural(count, 'rodal dividido', 'rodales divididos')}.` })
     },
     [pending, draft, change],
@@ -429,16 +449,28 @@ function Editor({
 
   const fail = useCallback((error: unknown, fallback: string) => {
     const stale = error instanceof ApiError && error.reason === 'stale_revision'
-    setMessage({ tone: 'error', text: mutationMessage(error, fallback), stale })
+    let text = mutationMessage(error, fallback)
+    const ordinal = error instanceof ApiError ? error.sourceFeatureOrdinal : null
+    if (ordinal !== null) {
+      // Point at the rodal the server refused.
+      const culprits = draftRef.current.features.filter((f) => f.source_feature_ordinal === ordinal)
+      const first = culprits[0]
+      if (first !== undefined) {
+        text = `Rodal ${featureCode(first) ?? 'sin número'}: ${text}`
+        setSelectedKeys(new Set(culprits.map((f) => f.key)))
+      }
+    }
+    setMessage({ tone: 'error', text, stale })
   }, [])
 
   const save = useCallback(async (): Promise<number | null> => {
     setBusy(true)
+    const sent = draft
     try {
-      const result = await saveReportFeatures(report.report_id, revision, toSaveFeatures(draft))
+      const result = await saveReportFeatures(report.report_id, revision, toSaveFeatures(sent))
       setRevision(result.revision)
       setWarnings(result.warnings)
-      setDirty(false)
+      setSavedDraft(sent)
       setMessage({ tone: 'success', text: 'Informe guardado.' })
       return result.revision
     } catch (error) {
@@ -450,8 +482,13 @@ function Editor({
   }, [report.report_id, revision, draft, fail])
 
   const submit = useCallback(async () => {
+    const before = draftRef.current
     const saved = dirty ? await save() : revision
     if (saved === null) return
+    if (draftRef.current !== before) {
+      setMessage({ tone: 'warn', text: 'Hay cambios nuevos sin guardar. Guárdelos antes de enviar.' })
+      return
+    }
     setBusy(true)
     try {
       await transitionReport(report.report_id, 'submit', saved)
@@ -665,9 +702,9 @@ function Editor({
               </>
             ) : null}
             {canUpload(role) && report.status !== 'archivado' ? (
-              <button type="button" className="button button--ghost" onClick={() => void duplicate()} disabled={busy}>Duplicar como borrador</button>
+              <button type="button" className="button button--ghost" onClick={() => void duplicate()} disabled={busy || dirty} title={dirty ? 'Guarde los cambios antes de duplicar.' : undefined}>Duplicar como borrador</button>
             ) : null}
-            {role === 'admin' && report.status !== 'archivado' && !editable ? (
+            {role === 'admin' && report.status !== 'archivado' && report.status !== 'borrador' ? (
               <button type="button" className="button button--ghost" onClick={() => setDialog('archive')} disabled={busy}>Archivar</button>
             ) : null}
             {editable && report.status === 'borrador' && report.submitted_at === null ? (
@@ -751,6 +788,7 @@ function FeatureRow({
   onToggle: () => void
   onEdit: (name: string, value: string, baseValue: string | null) => void
 }) {
+  const [fieldError, setFieldError] = useState<string | null>(null)
   const code = featureCode(feature) ?? 'Sin rodal'
   const use = feature.attributes.cod_uso === null || feature.attributes.cod_uso === undefined ? '' : ` · ${String(feature.attributes.cod_uso)}`
   return (
@@ -765,21 +803,33 @@ function FeatureRow({
       </label>
       {selected && editable ? (
         <div className="report-feature__fields">
-          {EDITABLE_ATTRIBUTES.map((attribute) => (
-            <label key={attribute.key} className="report-form__field">
-              <span>{attribute.label}</span>
-              <input
-                defaultValue={feature.attributes[attribute.key] === null || feature.attributes[attribute.key] === undefined ? '' : String(feature.attributes[attribute.key])}
-                onBlur={(event) => {
-                  const value = event.target.value
-                  const current = feature.attributes[attribute.key]
-                  if (value.trim() !== (current === null || current === undefined ? '' : String(current))) {
-                    onEdit(attribute.key, value, baseValues[attribute.key] ?? null)
-                  }
-                }}
-              />
-            </label>
-          ))}
+          {EDITABLE_ATTRIBUTES.map((attribute) => {
+            const raw = feature.attributes[attribute.key]
+            const value = raw === null || raw === undefined ? '' : String(raw)
+            return (
+              <label key={attribute.key} className="report-form__field">
+                <span>{attribute.label}</span>
+                <input
+                  // Keyed on the value: undo/redo replaces the shown text.
+                  key={`${attribute.key}:${value}`}
+                  defaultValue={value}
+                  aria-invalid={fieldError === attribute.key}
+                  onBlur={(event) => {
+                    const typed = event.target.value
+                    if (new TextEncoder().encode(typed.trim()).length > attribute.bytes) {
+                      setFieldError(attribute.key)
+                      return
+                    }
+                    setFieldError(null)
+                    if (typed.trim() !== value) onEdit(attribute.key, typed, baseValues[attribute.key] ?? null)
+                  }}
+                />
+                {fieldError === attribute.key ? (
+                  <span className="report-form__error">Texto demasiado largo para este campo.</span>
+                ) : null}
+              </label>
+            )
+          })}
         </div>
       ) : null}
     </li>

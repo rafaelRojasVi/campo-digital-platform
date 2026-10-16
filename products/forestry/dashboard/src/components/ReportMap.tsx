@@ -47,6 +47,7 @@ const SATELLITE_TILE_URL =
 const SATELLITE_ATTRIBUTION =
   'Tiles © Esri — Esri, Maxar, Earthstar Geographics, and the GIS User Community'
 
+const BASE_PANE = 'rodales-base'
 const HARVEST = '#e8a33d'
 const REPORT = '#2f9e6a'
 const SELECTED = '#3b8fd6'
@@ -54,6 +55,16 @@ const CUT = '#ffd84d'
 
 function latLngs(coordinates: Coordinates): [number, number][][][] {
   return multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates })
+}
+
+function baseStyle(selected: boolean): L.PathOptions {
+  return {
+    color: selected ? SELECTED : '#ffffff',
+    weight: selected ? 3 : 1,
+    opacity: selected ? 1 : 0.7,
+    fillColor: selected ? SELECTED : '#ffffff',
+    fillOpacity: selected ? 0.25 : 0.04,
+  }
 }
 
 function featureStyle(feature: DraftFeature, selected: boolean): L.PathOptions {
@@ -77,6 +88,9 @@ export function ReportMap(props: ReportMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const baseLayerRef = useRef<L.LayerGroup | null>(null)
+  const baseRendererRef = useRef<L.Canvas | null>(null)
+  const basePolygonsRef = useRef<Map<number, L.Polygon>>(new Map())
+  const shownSelectionRef = useRef<Set<number>>(new Set())
   const reportLayerRef = useRef<L.LayerGroup | null>(null)
   const drawLayerRef = useRef<L.LayerGroup | null>(null)
   const propsRef = useRef(props)
@@ -88,6 +102,12 @@ export function ReportMap(props: ReportMapProps) {
     if (container === null || mapRef.current !== null) return
     const map = L.map(container, { zoomControl: true, doubleClickZoom: false, preferCanvas: false })
     L.tileLayer(SATELLITE_TILE_URL, { attribution: SATELLITE_ATTRIBUTION, maxZoom: 19 }).addTo(map)
+    // The ~1,600 base polygons draw on one canvas, in a pane under the report
+    // (SVG), so report polygons stay clickable on top.
+    map.createPane(BASE_PANE)
+    const basePane = map.getPane(BASE_PANE)
+    if (basePane !== undefined) basePane.style.zIndex = '350'
+    baseRendererRef.current = L.canvas({ pane: BASE_PANE, padding: 0.5 })
     baseLayerRef.current = L.layerGroup().addTo(map)
     reportLayerRef.current = L.layerGroup().addTo(map)
     drawLayerRef.current = L.layerGroup().addTo(map)
@@ -134,25 +154,25 @@ export function ReportMap(props: ReportMapProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.fitNonce])
 
-  // Base polygons: outlines, selectable in «Seleccionar».
+  // Base polygons: built once per base snapshot, selectable in «Seleccionar».
   useEffect(() => {
     const layer = baseLayerRef.current
-    if (layer === null) return
+    const renderer = baseRendererRef.current
+    if (layer === null || renderer === null) return
     layer.clearLayers()
+    const polygons = new Map<number, L.Polygon>()
     for (const feature of props.base.features) {
       const ordinal = feature.properties.feature_ordinal
-      const selected = props.selectedOrdinals.has(ordinal)
       const polygon = L.polygon(latLngs(feature.geometry.coordinates), {
-        color: selected ? SELECTED : '#ffffff',
-        weight: selected ? 3 : 1,
-        opacity: selected ? 1 : 0.7,
-        fillColor: selected ? SELECTED : '#ffffff',
-        fillOpacity: selected ? 0.25 : 0.04,
+        ...baseStyle(false),
+        renderer,
+        pane: BASE_PANE,
       })
       const rodal = feature.properties.n_rodal
-      polygon.bindTooltip(rodal === null ? `Polígono ${feature.properties.source_objectid ?? ordinal}` : `Rodal ${rodal}`, {
-        sticky: true,
-      })
+      polygon.bindTooltip(
+        rodal === null ? `Polígono ${feature.properties.source_objectid ?? ordinal}` : `Rodal ${rodal}`,
+        { sticky: true },
+      )
       polygon.on('click', (event: L.LeafletMouseEvent) => {
         if (propsRef.current.mode === 'split') {
           addLinePoint(event, propsRef.current.onLinePoint)
@@ -163,8 +183,24 @@ export function ReportMap(props: ReportMapProps) {
         propsRef.current.onBaseClick(ordinal, event.originalEvent.shiftKey || event.originalEvent.ctrlKey)
       })
       polygon.addTo(layer)
+      polygons.set(ordinal, polygon)
     }
-  }, [props.base, props.selectedOrdinals])
+    basePolygonsRef.current = polygons
+    shownSelectionRef.current = new Set()
+  }, [props.base])
+
+  // Selection: restyle only the polygons whose selection changed.
+  useEffect(() => {
+    const polygons = basePolygonsRef.current
+    const shown = shownSelectionRef.current
+    for (const ordinal of shown) {
+      if (!props.selectedOrdinals.has(ordinal)) polygons.get(ordinal)?.setStyle(baseStyle(false))
+    }
+    for (const ordinal of props.selectedOrdinals) {
+      if (!shown.has(ordinal)) polygons.get(ordinal)?.setStyle(baseStyle(true))
+    }
+    shownSelectionRef.current = new Set(props.selectedOrdinals)
+  }, [props.selectedOrdinals, props.base])
 
   // The report's polygons, the overlay of the original base, the line and the pieces.
   useEffect(() => {

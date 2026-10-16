@@ -369,3 +369,9 @@
     border-top: 1px solid var(--border);
   }
 }
+
+.report-form__error {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--danger);
+}
