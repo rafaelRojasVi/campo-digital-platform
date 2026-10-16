@@ -107,8 +107,13 @@ anything is stored; a refusal stores nothing.
 - The features naming one source polygon must together cover it: one
   untouched copy, or the pieces of a split, however nested (symmetric
   difference ≤ 0.01 m²). Overlaps between features: ≤ 0.01 m².
-- A polygon within 1e-6 m of its source, vertex by vertex, is the untouched
-  source (coordinates come back from the browser as JSON numbers).
+- A polygon with the same parts and vertex count as its source and within
+  1e-6 m of it (Hausdorff distance) is the untouched source, whatever vertex
+  a ring starts at (coordinates come back from the browser as JSON numbers).
+- Overlaps are refused only between features of the same source polygon.
+  Neighbouring rodales overlap only where the base already overlaps (masters
+  edited without topology rules carry slivers), which the user cannot fix
+  here.
 - A source polygon invalid in the base may be carried untouched (warning
   `invalid_source_carried`) but not split.
 - Editable attributes: `n_rodal` (10), `n_rodal_te` (3), `cod_uso` (25),
@@ -132,7 +137,7 @@ anything is stored; a refusal stores nothing.
 |---|---|
 | `shp` | ZIP of `.shp/.shx/.dbf/.prj/.cpg`, written with pyshp; `.prj` is the base's exact ESRI WKT for UTM 18S; `.cpg` is `UTF-8` |
 | `gpkg` | GeoPackage 1.3 written with sqlite3: one `MULTIPOLYGON` layer in EPSG:32718 named after the report |
-| `csv` | attributes only; UTF-8 with BOM, comma, CRLF (as the dashboard's CSV) |
+| `csv` | attributes only; UTF-8 with BOM, comma, CRLF (as the dashboard's CSV); text starting with `=`, `+`, `-`, `@`, tab or CR gets a leading `'` so a spreadsheet does not run it as a formula |
 
 Columns: `OBJECTID` (0 for split pieces), `Nom_Predio`, `N_Rodal`, `Sup_ha`,
 `Cod_Uso`, `Editada`, `Uso2024`, `DescUso`, `Cod_Predia`, `N_Rodal_te`,

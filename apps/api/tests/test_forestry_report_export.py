@@ -181,3 +181,25 @@ def test_no_email_addresses_in_any_export() -> None:
     # Geometry bytes may contain 0x40 ("@"), so look for the domain instead.
     for fmt in ("shp", "gpkg", "csv"):
         assert b"campodigital.cl" not in export_report(fmt, REPORT, ROWS)[0]
+
+
+def test_csv_neutralizes_text_that_a_spreadsheet_would_run_as_a_formula() -> None:
+    report = ExportReport("=HYPERLINK(1)", "cosecha", "2027-01", "borrador")
+    rows = [
+        ExportRow(
+            attrs(n_rodal="+17", desc_uso="@SUM(A1)", cod_uso="-Pi06", uso_2024="\tx"),
+            MultiPolygon([HOLED]),
+            True,
+            False,
+        )
+    ]
+    [header, row] = list(csv.reader(io.StringIO(write_csv(report, rows).decode("utf-8-sig"))))
+    cell = dict(zip(header, row, strict=True))
+    assert cell["INFORME"] == "'=HYPERLINK(1)"
+    assert cell["N_Rodal"] == "'+17"
+    assert cell["DescUso"] == "'@SUM(A1)"
+    assert cell["Cod_Uso"] == "'-Pi06"
+    assert cell["Uso2024"] == "'\tx"
+    # Numbers stay numbers.
+    assert cell["Sup_ha"] == "1.0"
+    assert cell["OBJECTID"] == "11"

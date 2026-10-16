@@ -271,8 +271,23 @@ def write_csv(report: ExportReport, rows: Sequence[ExportRow]) -> bytes:
     writer = csv.writer(buffer, lineterminator="\r\n")
     writer.writerow([field.name for field in EXPORT_FIELDS])
     for row in rows:
-        writer.writerow(["" if value is None else value for value in row_values(report, row)])
+        writer.writerow([_csv_cell(value) for value in row_values(report, row)])
     return buffer.getvalue().encode("utf-8-sig")
+
+
+# Text a spreadsheet would evaluate as a formula (CSV injection). The same
+# rule as the Transelec CSV export; kept here so the products stay separate.
+_FORMULA_LEADING_CHARACTERS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_cell(value: object) -> object:
+    """Blank for None; text starting like a formula gets a leading apostrophe."""
+
+    if value is None:
+        return ""
+    if isinstance(value, str) and value.startswith(_FORMULA_LEADING_CHARACTERS):
+        return f"'{value}"
+    return value
 
 
 def export_report(
