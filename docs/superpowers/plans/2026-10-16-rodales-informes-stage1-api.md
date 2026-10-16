@@ -170,7 +170,9 @@ BASE_GEOMETRIES = [
 ]
 
 
-def seed_published_base(connection: Connection, source_root: Path, *, zip_name: str = "base.zip") -> int:
+def seed_published_base(
+    connection: Connection, source_root: Path, *, zip_name: str = "base.zip"
+) -> int:
     """Ingest the synthetic base; publish it if nothing is published. Returns its snapshot id."""
 
     relative = build_zip(source_root, BASE_ROWS, geometries=BASE_GEOMETRIES, zip_name=zip_name)
@@ -221,7 +223,12 @@ from forestry_report_fixtures import seed_published_base, seed_user
 
 
 def _insert_report(
-    connection: Connection, *, snapshot_id: int, user_id: int, name: str, month: str = "2027-01",
+    connection: Connection,
+    *,
+    snapshot_id: int,
+    user_id: int,
+    name: str,
+    month: str = "2027-01",
     status: str = "borrador",
 ) -> int:
     return connection.execute(
@@ -233,7 +240,13 @@ def _insert_report(
             RETURNING id
             """
         ),
-        {"name": name, "month": month, "status": status, "snapshot_id": snapshot_id, "user_id": user_id},
+        {
+            "name": name,
+            "month": month,
+            "status": status,
+            "snapshot_id": snapshot_id,
+            "user_id": user_id,
+        },
     ).scalar_one()
 
 
@@ -247,9 +260,7 @@ def seeded(integration_connection: Connection, tmp_path: Path) -> tuple[int, int
 def test_report_tables_exist(integration_connection: Connection) -> None:
     tables = set(
         integration_connection.execute(
-            text(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'forestry'"
-            )
+            text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'forestry'")
         ).scalars()
     )
     assert {"report", "report_note", "report_feature"} <= tables
@@ -266,7 +277,9 @@ def test_new_report_starts_as_a_draft_at_revision_one(
     integration_connection: Connection, seeded: tuple[int, int]
 ) -> None:
     snapshot_id, user_id = seeded
-    report_id = _insert_report(integration_connection, snapshot_id=snapshot_id, user_id=user_id, name="A")
+    report_id = _insert_report(
+        integration_connection, snapshot_id=snapshot_id, user_id=user_id, name="A"
+    )
     row = integration_connection.execute(
         text("SELECT status, revision FROM forestry.report WHERE id = :id"), {"id": report_id}
     ).one()
@@ -289,18 +302,26 @@ def test_active_names_are_unique_ignoring_case_but_archived_ones_free_the_name(
 ) -> None:
     snapshot_id, user_id = seeded
     _insert_report(
-        integration_connection, snapshot_id=snapshot_id, user_id=user_id, name="Cosecha", status="archivado"
+        integration_connection,
+        snapshot_id=snapshot_id,
+        user_id=user_id,
+        name="Cosecha",
+        status="archivado",
     )
     _insert_report(integration_connection, snapshot_id=snapshot_id, user_id=user_id, name="Cosecha")
     with pytest.raises(IntegrityError), integration_connection.begin_nested():
-        _insert_report(integration_connection, snapshot_id=snapshot_id, user_id=user_id, name="COSECHA")
+        _insert_report(
+            integration_connection, snapshot_id=snapshot_id, user_id=user_id, name="COSECHA"
+        )
 
 
 def test_change_request_note_needs_text(
     integration_connection: Connection, seeded: tuple[int, int]
 ) -> None:
     snapshot_id, user_id = seeded
-    report_id = _insert_report(integration_connection, snapshot_id=snapshot_id, user_id=user_id, name="N")
+    report_id = _insert_report(
+        integration_connection, snapshot_id=snapshot_id, user_id=user_id, name="N"
+    )
     with pytest.raises(IntegrityError), integration_connection.begin_nested():
         integration_connection.execute(
             text(
@@ -315,7 +336,9 @@ def test_deleting_a_report_deletes_its_features_and_notes(
     integration_connection: Connection, seeded: tuple[int, int]
 ) -> None:
     snapshot_id, user_id = seeded
-    report_id = _insert_report(integration_connection, snapshot_id=snapshot_id, user_id=user_id, name="D")
+    report_id = _insert_report(
+        integration_connection, snapshot_id=snapshot_id, user_id=user_id, name="D"
+    )
     integration_connection.execute(
         text(
             """
@@ -334,7 +357,9 @@ def test_deleting_a_report_deletes_its_features_and_notes(
         ),
         {"report_id": report_id, "user_id": user_id},
     )
-    integration_connection.execute(text("DELETE FROM forestry.report WHERE id = :id"), {"id": report_id})
+    integration_connection.execute(
+        text("DELETE FROM forestry.report WHERE id = :id"), {"id": report_id}
+    )
     remaining = integration_connection.execute(
         text(
             "SELECT (SELECT count(*) FROM forestry.report_feature WHERE report_id = :id) "
@@ -425,13 +450,9 @@ def upgrade() -> None:
         _timestamp("submitted_at", nullable=True),
         _timestamp("decided_at", nullable=True),
         sa.Column("decided_by_app_user_id", sa.BigInteger(), nullable=True),
-        sa.CheckConstraint(
-            "btrim(name) <> '' AND char_length(name) <= 120", name="ck_report_name"
-        ),
+        sa.CheckConstraint("btrim(name) <> '' AND char_length(name) <= 120", name="ck_report_name"),
         sa.CheckConstraint(_one_of("report_type", REPORT_TYPES), name="ck_report_type"),
-        sa.CheckConstraint(
-            "report_month ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'", name="ck_report_month"
-        ),
+        sa.CheckConstraint("report_month ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'", name="ck_report_month"),
         sa.CheckConstraint(_one_of("status", REPORT_STATUSES), name="ck_report_status"),
         sa.CheckConstraint("revision >= 1", name="ck_report_revision_positive"),
         sa.ForeignKeyConstraint(
@@ -476,7 +497,10 @@ def upgrade() -> None:
             name="ck_report_note_change_request_has_text",
         ),
         sa.ForeignKeyConstraint(
-            ["report_id"], ["forestry.report.id"], name="fk_report_note_report_id", ondelete="CASCADE"
+            ["report_id"],
+            ["forestry.report.id"],
+            name="fk_report_note_report_id",
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["author_app_user_id"],
@@ -664,7 +688,9 @@ def source(ordinal: int = 1, geometry: Polygon = SQUARE, *, is_valid: bool = Tru
 def feature(
     ordinal: int, geometry: Polygon | None, *, in_report: bool = False, **attributes: Any
 ) -> FeatureInput:
-    return FeatureInput(ordinal, in_report, attributes, None if geometry is None else mapping(geometry))
+    return FeatureInput(
+        ordinal, in_report, attributes, None if geometry is None else mapping(geometry)
+    )
 
 
 def code_of(inputs: list[FeatureInput], sources: dict[int, SourcePolygon]) -> str:
@@ -1605,7 +1631,14 @@ def write_geopackage(report: ExportReport, rows: Sequence[ExportRow]) -> bytes:
                     ("Undefined cartesian SRS", -1, "NONE", -1, "undefined", "undefined cartesian"),
                     ("Undefined geographic SRS", 0, "NONE", 0, "undefined", "undefined geographic"),
                     ("WGS 84 geodetic", 4326, "EPSG", 4326, _WGS84_WKT, "WGS 84"),
-                    ("WGS 84 / UTM zone 18S", _SRS_ID, "EPSG", _SRS_ID, EXPECTED_PRJ_WKT, "Rodales"),
+                    (
+                        "WGS 84 / UTM zone 18S",
+                        _SRS_ID,
+                        "EPSG",
+                        _SRS_ID,
+                        EXPECTED_PRJ_WKT,
+                        "Rodales",
+                    ),
                 ],
             )
             connection.execute(
@@ -1830,7 +1863,9 @@ def test_create_needs_a_published_base(
     assert code(raised) == "no_published_base"
 
 
-@pytest.mark.parametrize(("name", "expected"), [("   ", "invalid_name"), ("x" * 121, "invalid_name")])
+@pytest.mark.parametrize(
+    ("name", "expected"), [("   ", "invalid_name"), ("x" * 121, "invalid_name")]
+)
 def test_create_checks_the_name(
     integration_connection: Connection, ctx: dict[str, int], name: str, expected: str
 ) -> None:
@@ -1839,7 +1874,9 @@ def test_create_checks_the_name(
     assert code(raised) == expected
 
 
-def test_create_refuses_a_bad_month(integration_connection: Connection, ctx: dict[str, int]) -> None:
+def test_create_refuses_a_bad_month(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
     with pytest.raises(ReportError) as raised:
         create_report(
             integration_connection,
@@ -1891,14 +1928,18 @@ def test_save_replaces_the_previous_feature_set(
         expected_revision=2,
         inputs=[FeatureInput(3, True, {}, None)],
     )
-    assert [f.source_feature_ordinal for f in list_report_features(integration_connection, report_id)] == [3]
+    assert [
+        f.source_feature_ordinal for f in list_report_features(integration_connection, report_id)
+    ] == [3]
 
 
 def test_save_with_an_old_revision_is_refused(
     integration_connection: Connection, ctx: dict[str, int]
 ) -> None:
     report_id = new_report(integration_connection, ctx)
-    save_report_features(integration_connection, report_id=report_id, expected_revision=1, inputs=[])
+    save_report_features(
+        integration_connection, report_id=report_id, expected_revision=1, inputs=[]
+    )
     with pytest.raises(ReportError) as raised:
         save_report_features(
             integration_connection, report_id=report_id, expected_revision=1, inputs=[]
@@ -1940,12 +1981,20 @@ def test_polygon_in_another_active_report_warns(
     first = new_report(integration_connection, ctx, "Cosecha")
     second = new_report(integration_connection, ctx, "Reforestación")
     save_report_features(
-        integration_connection, report_id=first, expected_revision=1, inputs=[FeatureInput(2, True, {}, None)]
+        integration_connection,
+        report_id=first,
+        expected_revision=1,
+        inputs=[FeatureInput(2, True, {}, None)],
     )
     outcome = save_report_features(
-        integration_connection, report_id=second, expected_revision=1, inputs=[FeatureInput(2, True, {}, None)]
+        integration_connection,
+        report_id=second,
+        expected_revision=1,
+        inputs=[FeatureInput(2, True, {}, None)],
     )
-    assert [(w.code, w.source_feature_ordinal) for w in outcome.warnings] == [("also_in_other_report", 2)]
+    assert [(w.code, w.source_feature_ordinal) for w in outcome.warnings] == [
+        ("also_in_other_report", 2)
+    ]
     assert "«Cosecha»" in outcome.warnings[0].message
 
 
@@ -1978,28 +2027,57 @@ def test_full_review_cycle_with_notes(
     save_report_features(
         integration_connection, report_id=report_id, expected_revision=1, inputs=split_rodal_17()
     )
-    assert transition_report(
-        integration_connection, report_id=report_id, action="submit", expected_revision=2,
-        actor_app_user_id=ctx["operator"],
-    ) == "enviado"
-    assert transition_report(
-        integration_connection, report_id=report_id, action="request_changes", expected_revision=3,
-        actor_app_user_id=ctx["admin"], note="  Saca el rodal 18.  ",
-    ) == "cambios_solicitados"
+    assert (
+        transition_report(
+            integration_connection,
+            report_id=report_id,
+            action="submit",
+            expected_revision=2,
+            actor_app_user_id=ctx["operator"],
+        )
+        == "enviado"
+    )
+    assert (
+        transition_report(
+            integration_connection,
+            report_id=report_id,
+            action="request_changes",
+            expected_revision=3,
+            actor_app_user_id=ctx["admin"],
+            note="  Saca el rodal 18.  ",
+        )
+        == "cambios_solicitados"
+    )
     save_report_features(
-        integration_connection, report_id=report_id, expected_revision=4, inputs=split_rodal_17()[:2]
+        integration_connection,
+        report_id=report_id,
+        expected_revision=4,
+        inputs=split_rodal_17()[:2],
     )
     transition_report(
-        integration_connection, report_id=report_id, action="submit", expected_revision=5,
+        integration_connection,
+        report_id=report_id,
+        action="submit",
+        expected_revision=5,
         actor_app_user_id=ctx["operator"],
     )
-    assert transition_report(
-        integration_connection, report_id=report_id, action="approve", expected_revision=6,
-        actor_app_user_id=ctx["admin"],
-    ) == "aprobado"
+    assert (
+        transition_report(
+            integration_connection,
+            report_id=report_id,
+            action="approve",
+            expected_revision=6,
+            actor_app_user_id=ctx["admin"],
+        )
+        == "aprobado"
+    )
     report = get_report(integration_connection, report_id)
     assert report is not None
-    assert (report.status, report.revision, report.decided_by_display_name) == ("aprobado", 7, "admin")
+    assert (report.status, report.revision, report.decided_by_display_name) == (
+        "aprobado",
+        7,
+        "admin",
+    )
     assert report.submitted_at is not None and report.decided_at is not None
     notes = list_report_notes(integration_connection, report_id)
     assert [(n.kind, n.body, n.author_display_name) for n in notes] == [
@@ -2007,27 +2085,44 @@ def test_full_review_cycle_with_notes(
     ]
 
 
-def test_submit_needs_a_marked_polygon(integration_connection: Connection, ctx: dict[str, int]) -> None:
+def test_submit_needs_a_marked_polygon(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
     report_id = new_report(integration_connection, ctx)
     save_report_features(
-        integration_connection, report_id=report_id, expected_revision=1,
+        integration_connection,
+        report_id=report_id,
+        expected_revision=1,
         inputs=[FeatureInput(2, False, {}, None)],
     )
     with pytest.raises(ReportError) as raised:
         transition_report(
-            integration_connection, report_id=report_id, action="submit", expected_revision=2,
+            integration_connection,
+            report_id=report_id,
+            action="submit",
+            expected_revision=2,
             actor_app_user_id=ctx["operator"],
         )
     assert code(raised) == "nothing_marked"
 
 
-def test_request_changes_needs_a_note(integration_connection: Connection, ctx: dict[str, int]) -> None:
+def test_request_changes_needs_a_note(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
     report_id = submitted_report(integration_connection, ctx)
-    for note, expected in ((None, "note_required"), ("   ", "note_required"), ("x" * 2001, "note_too_long")):
+    for note, expected in (
+        (None, "note_required"),
+        ("   ", "note_required"),
+        ("x" * 2001, "note_too_long"),
+    ):
         with pytest.raises(ReportError) as raised:
             transition_report(
-                integration_connection, report_id=report_id, action="request_changes",
-                expected_revision=3, actor_app_user_id=ctx["admin"], note=note,
+                integration_connection,
+                report_id=report_id,
+                action="request_changes",
+                expected_revision=3,
+                actor_app_user_id=ctx["admin"],
+                note=note,
             )
         assert code(raised) == expected
 
@@ -2038,7 +2133,10 @@ def test_approve_with_an_old_revision_is_refused(
     report_id = submitted_report(integration_connection, ctx)
     with pytest.raises(ReportError) as raised:
         transition_report(
-            integration_connection, report_id=report_id, action="approve", expected_revision=2,
+            integration_connection,
+            report_id=report_id,
+            action="approve",
+            expected_revision=2,
             actor_app_user_id=ctx["admin"],
         )
     assert code(raised) == "stale_revision"
@@ -2047,15 +2145,23 @@ def test_approve_with_an_old_revision_is_refused(
 def test_approved_report_is_frozen(integration_connection: Connection, ctx: dict[str, int]) -> None:
     report_id = submitted_report(integration_connection, ctx)
     transition_report(
-        integration_connection, report_id=report_id, action="approve", expected_revision=3,
+        integration_connection,
+        report_id=report_id,
+        action="approve",
+        expected_revision=3,
         actor_app_user_id=ctx["admin"],
     )
     with pytest.raises(ReportError) as raised:
-        save_report_features(integration_connection, report_id=report_id, expected_revision=4, inputs=[])
+        save_report_features(
+            integration_connection, report_id=report_id, expected_revision=4, inputs=[]
+        )
     assert code(raised) == "not_editable"
     with pytest.raises(ReportError) as raised:
         transition_report(
-            integration_connection, report_id=report_id, action="submit", expected_revision=4,
+            integration_connection,
+            report_id=report_id,
+            action="submit",
+            expected_revision=4,
             actor_app_user_id=ctx["operator"],
         )
     assert code(raised) == "invalid_transition"
@@ -2065,8 +2171,12 @@ def test_duplicate_copies_features_into_a_new_draft(
     integration_connection: Connection, ctx: dict[str, int]
 ) -> None:
     report_id = submitted_report(integration_connection, ctx)
-    copy_id = duplicate_report(integration_connection, report_id=report_id, actor_app_user_id=ctx["operator"])
-    second_copy = duplicate_report(integration_connection, report_id=report_id, actor_app_user_id=ctx["operator"])
+    copy_id = duplicate_report(
+        integration_connection, report_id=report_id, actor_app_user_id=ctx["operator"]
+    )
+    second_copy = duplicate_report(
+        integration_connection, report_id=report_id, actor_app_user_id=ctx["operator"]
+    )
     copy = get_report(integration_connection, copy_id)
     assert copy is not None
     assert (copy.name, copy.status, copy.revision) == ("Cosecha 2027 (copia)", "borrador", 1)
@@ -2080,14 +2190,25 @@ def test_header_update_checks_revision_and_name(
     report_id = new_report(integration_connection, ctx)
     new_report(integration_connection, ctx, "Otro")
     revision = update_report_header(
-        integration_connection, report_id=report_id, expected_revision=1,
-        name="Raleo", report_type="manejo", report_month="2026-12",
+        integration_connection,
+        report_id=report_id,
+        expected_revision=1,
+        name="Raleo",
+        report_type="manejo",
+        report_month="2026-12",
     )
     report = get_report(integration_connection, report_id)
     assert report is not None
-    assert (revision, report.name, report.report_type, report.report_month) == (2, "Raleo", "manejo", "2026-12")
+    assert (revision, report.name, report.report_type, report.report_month) == (
+        2,
+        "Raleo",
+        "manejo",
+        "2026-12",
+    )
     with pytest.raises(ReportError) as raised:
-        update_report_header(integration_connection, report_id=report_id, expected_revision=2, name="otro")
+        update_report_header(
+            integration_connection, report_id=report_id, expected_revision=2, name="otro"
+        )
     assert code(raised) == "name_taken"
 
 
@@ -2115,16 +2236,22 @@ def test_list_orders_submitted_first_and_filters(
 def test_source_polygons_come_from_the_given_snapshot(
     integration_connection: Connection, ctx: dict[str, int]
 ) -> None:
-    sources = load_source_polygons(integration_connection, snapshot_id=ctx["snapshot"], ordinals=[1, 4, 99])
+    sources = load_source_polygons(
+        integration_connection, snapshot_id=ctx["snapshot"], ordinals=[1, 4, 99]
+    )
     assert sorted(sources) == [1, 4]
     assert sources[4].is_valid is False
     assert sources[1].attributes["n_rodal"] == "17"
 
 
-def test_missing_report_is_not_found(integration_connection: Connection, ctx: dict[str, int]) -> None:
+def test_missing_report_is_not_found(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
     assert get_report(integration_connection, 999_999) is None
     with pytest.raises(ReportError) as raised:
-        save_report_features(integration_connection, report_id=999_999, expected_revision=1, inputs=[])
+        save_report_features(
+            integration_connection, report_id=999_999, expected_revision=1, inputs=[]
+        )
     assert code(raised) == "not_found"
 
 
@@ -2132,9 +2259,14 @@ def submitted_report(connection: Connection, ctx: dict[str, int]) -> int:
     """A report with the rodal-17 split, submitted (revision 3)."""
 
     report_id = new_report(connection, ctx)
-    save_report_features(connection, report_id=report_id, expected_revision=1, inputs=split_rodal_17())
+    save_report_features(
+        connection, report_id=report_id, expected_revision=1, inputs=split_rodal_17()
+    )
     transition_report(
-        connection, report_id=report_id, action="submit", expected_revision=2,
+        connection,
+        report_id=report_id,
+        action="submit",
+        expected_revision=2,
         actor_app_user_id=ctx["operator"],
     )
     return report_id
@@ -2338,7 +2470,9 @@ def _report(row: Any) -> Report:
 # ---------------------------------------------------------------------------
 
 
-def list_reports(connection: Connection, *, statuses: Collection[str] | None = None) -> list[Report]:
+def list_reports(
+    connection: Connection, *, statuses: Collection[str] | None = None
+) -> list[Report]:
     """Reports, submitted ones first, then most recently changed."""
 
     where = " WHERE r.status = ANY(:statuses)" if statuses is not None else ""
@@ -2448,9 +2582,7 @@ def list_report_notes(connection: Connection, report_id: int) -> list[ReportNote
         ),
         {"id": report_id},
     )
-    return [
-        ReportNote(row.kind, row.body, row.author_display_name, row.created_at) for row in rows
-    ]
+    return [ReportNote(row.kind, row.body, row.author_display_name, row.created_at) for row in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -2881,7 +3013,9 @@ def client(integration_engine: Engine) -> Generator[TestClient, None, None]:
 def _isolated_tables(integration_engine: Engine) -> Generator[None, None, None]:
     yield
     with integration_engine.begin() as connection:
-        connection.execute(text("UPDATE forestry.publication_state SET published_snapshot_id = NULL"))
+        connection.execute(
+            text("UPDATE forestry.publication_state SET published_snapshot_id = NULL")
+        )
         for table in (
             "forestry.report_note",
             "forestry.report_feature",
@@ -2940,14 +3074,20 @@ def create(client: TestClient, name: str = "Cosecha pino enero 2027") -> int:
 
 
 SPLIT: list[dict[str, Any]] = [
-    {"source_feature_ordinal": 1, "in_report": True, "attributes": {"n_rodal": "17-1"},
-     "geometry": square_geojson(0, 0, 60, 100)},
+    {
+        "source_feature_ordinal": 1,
+        "in_report": True,
+        "attributes": {"n_rodal": "17-1"},
+        "geometry": square_geojson(0, 0, 60, 100),
+    },
     {"source_feature_ordinal": 1, "in_report": False, "geometry": square_geojson(60, 0, 40, 100)},
     {"source_feature_ordinal": 2, "in_report": False, "geometry": None},
 ]
 
 
-def save(client: TestClient, report_id: int, revision: int, features: list[dict[str, Any]]) -> Response:
+def save(
+    client: TestClient, report_id: int, revision: int, features: list[dict[str, Any]]
+) -> Response:
     return client.put(
         "/api/forestry/reports/features",
         json={"report_id": report_id, "revision": revision, "features": features},
@@ -2955,7 +3095,9 @@ def save(client: TestClient, report_id: int, revision: int, features: list[dict[
     )
 
 
-def act(client: TestClient, report_id: int, action: str, revision: int, note: str | None = None) -> Response:
+def act(
+    client: TestClient, report_id: int, action: str, revision: int, note: str | None = None
+) -> Response:
     return client.post(
         f"/api/forestry/reports/{report_id}/{action}",
         json={"revision": revision, "note": note},
@@ -3003,7 +3145,9 @@ def test_full_flow_from_draft_to_approved_export(
     assert approved.json()["status"] == "aprobado"
 
     sign_in(client, integration_engine, "dueno", Role.VIEWER)
-    assert [r["report_id"] for r in client.get("/api/forestry/reports").json()["reports"]] == [report_id]
+    assert [r["report_id"] for r in client.get("/api/forestry/reports").json()["reports"]] == [
+        report_id
+    ]
     exported = client.get(f"/api/forestry/reports/{report_id}/export?format=shp")
     assert exported.status_code == 200
     assert exported.headers["content-type"] == "application/zip"
@@ -3094,7 +3238,9 @@ def test_validation_errors_carry_a_code_and_the_polygon(
     }
 
 
-def test_stale_revision_is_a_conflict(client: TestClient, integration_engine: Engine, base: int) -> None:
+def test_stale_revision_is_a_conflict(
+    client: TestClient, integration_engine: Engine, base: int
+) -> None:
     sign_in(client, integration_engine, "marco", Role.OPERATOR)
     report_id = create(client)
     assert save(client, report_id, 1, []).status_code == 200
@@ -3103,10 +3249,14 @@ def test_stale_revision_is_a_conflict(client: TestClient, integration_engine: En
     assert stale.json()["detail"]["code"] == "stale_revision"
 
 
-def test_warnings_are_returned_on_save(client: TestClient, integration_engine: Engine, base: int) -> None:
+def test_warnings_are_returned_on_save(
+    client: TestClient, integration_engine: Engine, base: int
+) -> None:
     sign_in(client, integration_engine, "marco", Role.OPERATOR)
     report_id = create(client)
-    response = save(client, report_id, 1, [{"source_feature_ordinal": 4, "in_report": True, "geometry": None}])
+    response = save(
+        client, report_id, 1, [{"source_feature_ordinal": 4, "in_report": True, "geometry": None}]
+    )
     assert response.status_code == 200
     assert [w["code"] for w in response.json()["warnings"]] == ["invalid_source_carried"]
 
@@ -3168,7 +3318,11 @@ def test_audit_and_exports_carry_no_email(
         content = client.get(f"/api/forestry/reports/{report_id}/export?format={fmt}").content
         assert b"campodigital.cl" not in content  # geometry bytes may contain 0x40
     with integration_engine.connect() as connection:
-        metadata = connection.execute(text("SELECT metadata::text FROM platform.audit_event")).scalars().all()
+        metadata = (
+            connection.execute(text("SELECT metadata::text FROM platform.audit_event"))
+            .scalars()
+            .all()
+        )
     assert all("@" not in value for value in metadata)
 
 
@@ -3539,7 +3693,9 @@ def get_report_detail(
         ],
         notes=[
             NoteModel(
-                kind=n.kind, body=n.body, author_display_name=n.author_display_name,
+                kind=n.kind,
+                body=n.body,
+                author_display_name=n.author_display_name,
                 created_at=n.created_at,
             )
             for n in list_report_notes(connection, report_id)
@@ -3601,8 +3757,13 @@ def export_report_file(
         ExportReport(report.name, report.report_type, report.report_month, report.status),
         rows,
     )
-    _audit(engine, user, "forestry.report.exported", report_id,
-           {"format": format, "scope": scope, "row_count": len(rows)})
+    _audit(
+        engine,
+        user,
+        "forestry.report.exported",
+        report_id,
+        {"format": format, "scope": scope, "row_count": len(rows)},
+    )
     return Response(
         content=content,
         media_type=media_type,
@@ -3616,7 +3777,9 @@ def export_report_file(
 
 
 @router.post("", response_model=CreatedResponse, status_code=201, dependencies=_EDIT)
-def post_report(request: CreateReportRequest, user: CurrentUser, engine: DatabaseEngine) -> CreatedResponse:
+def post_report(
+    request: CreateReportRequest, user: CurrentUser, engine: DatabaseEngine
+) -> CreatedResponse:
     """«Nuevo informe» against the published base."""
 
     try:
@@ -3713,7 +3876,11 @@ def patch_report(
 
 
 def _transition(
-    report_id: int, request: TransitionRequest, user: AppUser, engine: Engine, action: TransitionAction
+    report_id: int,
+    request: TransitionRequest,
+    user: AppUser,
+    engine: Engine,
+    action: TransitionAction,
 ) -> StatusResponse:
     try:
         with engine.begin() as connection:
@@ -3776,7 +3943,9 @@ def archive_report(
 @router.post(
     "/{report_id}/duplicate", response_model=CreatedResponse, status_code=201, dependencies=_EDIT
 )
-def duplicate(report_id: ReportIdPath, user: CurrentUser, engine: DatabaseEngine) -> CreatedResponse:
+def duplicate(
+    report_id: ReportIdPath, user: CurrentUser, engine: DatabaseEngine
+) -> CreatedResponse:
     """«Duplicar como borrador»."""
 
     try:

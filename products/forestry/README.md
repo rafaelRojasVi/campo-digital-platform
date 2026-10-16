@@ -107,6 +107,9 @@ All workflow semantics remain future slices.
 - [Upload, review, publish V1](docs/upload-review-publish-v1.md) — shapefile
   ZIP upload, review against the published version, Publicar/Restaurar,
   migration 0010 and its deployment steps.
+- [Management reports V1](docs/management-reports-v1.md) — informes de manejo:
+  report storage, review lifecycle, geometry rules and SHP/GeoPackage/CSV
+  export (API, migration 0014; screens pending).
 - [Cargar, revisar y publicar](docs/es/carga-y-publicacion.md) — Spanish
   stakeholder summary of the upload workflow.
 - [Resumen del visor para Campo Digital](docs/es/dashboard-v1.md) — Spanish

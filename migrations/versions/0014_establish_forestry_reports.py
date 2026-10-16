@@ -25,6 +25,7 @@ working against this schema.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
 import sqlalchemy as sa
 from alembic import op
@@ -44,7 +45,7 @@ def _one_of(column: str, values: Sequence[str]) -> str:
     return f"{column} IN ({', '.join(repr(value) for value in values)})"
 
 
-def _timestamp(name: str, *, nullable: bool = False) -> sa.Column[object]:
+def _timestamp(name: str, *, nullable: bool = False) -> sa.Column[datetime]:
     if nullable:
         return sa.Column(name, sa.DateTime(timezone=True), nullable=True)
     return sa.Column(

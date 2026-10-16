@@ -411,7 +411,9 @@ def test_duplicate_copies_features_into_a_new_draft(
     copy = get_report(integration_connection, copy_id)
     assert copy is not None
     assert (copy.name, copy.status, copy.revision) == ("Cosecha 2027 (copia)", "borrador", 1)
-    assert get_report(integration_connection, second_copy).name == "Cosecha 2027 (copia 2)"  # type: ignore[union-attr]
+    second = get_report(integration_connection, second_copy)
+    assert second is not None
+    assert second.name == "Cosecha 2027 (copia 2)"
     assert len(list_report_features(integration_connection, copy_id)) == 3
 
 
