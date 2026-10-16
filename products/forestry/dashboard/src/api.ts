@@ -30,17 +30,25 @@ export class ApiError extends Error {
   readonly status: number
   readonly detail: string | null
   readonly reason: string | null
+  readonly sourceFeatureOrdinal: number | null
 
-  constructor(status: number, message: string, detail: string | null = null, reason: string | null = null) {
+  constructor(
+    status: number,
+    message: string,
+    detail: string | null = null,
+    reason: string | null = null,
+    sourceFeatureOrdinal: number | null = null,
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.detail = detail
     this.reason = reason
+    this.sourceFeatureOrdinal = sourceFeatureOrdinal
   }
 }
 
-async function getJson<T>(path: string): Promise<T> {
+export async function getJson<T>(path: string): Promise<T> {
   let response: Response
 
   try {
@@ -176,7 +184,9 @@ export function resetCsrfForTests(): void {
   csrf = null
 }
 
-async function mutate<T>(path: string, init: RequestInit, retried = false): Promise<T> {
+type MutationInit = RequestInit & { method?: 'POST' | 'PUT' | 'PATCH' | 'DELETE' }
+
+export async function mutate<T>(path: string, init: MutationInit, retried = false): Promise<T> {
   const token = await csrfHeader()
   const headers = new Headers(init.headers)
   headers.set(token.header, token.token)
@@ -184,21 +194,42 @@ async function mutate<T>(path: string, init: RequestInit, retried = false): Prom
 
   let response: Response
   try {
-    response = await fetch(`${API_BASE}${path}`, { ...init, method: 'POST', headers })
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      method: init.method ?? 'POST',
+      headers,
+    })
   } catch {
     throw new ApiError(0, 'network unreachable')
   }
 
   if (response.ok) {
+    if (response.status === 204) return undefined as T
     return (await response.json()) as T
   }
 
   let detail: string | null = null
   let reason: string | null = null
+  let sourceFeatureOrdinal: number | null = null
   try {
     const body = (await response.json()) as { detail?: unknown; reason?: unknown }
-    detail = typeof body.detail === 'string' ? body.detail : null
-    reason = typeof body.reason === 'string' ? body.reason : null
+    if (typeof body.detail === 'string') {
+      detail = body.detail
+    } else if (typeof body.detail === 'object' && body.detail !== null) {
+      // Management reports answer {code, message, source_feature_ordinal?}.
+      const structured = body.detail as {
+        code?: unknown
+        message?: unknown
+        source_feature_ordinal?: unknown
+      }
+      detail = typeof structured.message === 'string' ? structured.message : null
+      reason = typeof structured.code === 'string' ? structured.code : null
+      sourceFeatureOrdinal =
+        typeof structured.source_feature_ordinal === 'number'
+          ? structured.source_feature_ordinal
+          : null
+    }
+    if (reason === null && typeof body.reason === 'string') reason = body.reason
   } catch {
     // Not JSON (a proxy error page): keep the status only.
   }
@@ -209,7 +240,13 @@ async function mutate<T>(path: string, init: RequestInit, retried = false): Prom
     return mutate<T>(path, init, true)
   }
 
-  throw new ApiError(response.status, `request failed (${response.status})`, detail, reason)
+  throw new ApiError(
+    response.status,
+    `request failed (${response.status})`,
+    detail,
+    reason,
+    sourceFeatureOrdinal,
+  )
 }
 
 export function uploadShapefileZip(file: File): Promise<UploadResult> {
