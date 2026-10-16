@@ -13,6 +13,7 @@ MATRIX: dict[tuple[Role, Action], bool] = {
     (Role.ADMIN, Action.PUBLISH): True,
     (Role.ADMIN, Action.EDIT): True,
     (Role.ADMIN, Action.MANAGE_ACCESS): True,
+    (Role.ADMIN, Action.APPROVE): True,
     (Role.OPERATOR, Action.VIEW): True,
     (Role.OPERATOR, Action.UPLOAD): True,
     (Role.OPERATOR, Action.PROCESS): True,
@@ -20,6 +21,7 @@ MATRIX: dict[tuple[Role, Action], bool] = {
     (Role.OPERATOR, Action.PUBLISH): True,
     (Role.OPERATOR, Action.EDIT): True,
     (Role.OPERATOR, Action.MANAGE_ACCESS): False,
+    (Role.OPERATOR, Action.APPROVE): False,
     (Role.VIEWER, Action.VIEW): True,
     (Role.VIEWER, Action.UPLOAD): False,
     (Role.VIEWER, Action.PROCESS): False,
@@ -27,6 +29,7 @@ MATRIX: dict[tuple[Role, Action], bool] = {
     (Role.VIEWER, Action.PUBLISH): False,
     (Role.VIEWER, Action.EDIT): False,
     (Role.VIEWER, Action.MANAGE_ACCESS): False,
+    (Role.VIEWER, Action.APPROVE): False,
 }
 
 

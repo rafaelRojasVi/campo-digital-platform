@@ -58,22 +58,37 @@ def snapshot_id(integration_connection: Connection, tmp_path: Path) -> int:
 _UPLOADER_READS = {"/api/forestry/snapshots/{shapefile_snapshot_id}/review"}
 
 
-def _forestry_urls(snapshot_id: int, *, include_uploader_reads: bool = True) -> list[str]:
+# Management-report reads (``/api/forestry/reports``) refuse anonymous and
+# ungranted callers like every other route, but answer per report and role
+# (404 for a missing report, source polygons for editors only); their role
+# behaviour is covered in test_forestry_reports_router.py.
+_REPORT_PREFIX = "/api/forestry/reports"
+
+
+def _forestry_urls(
+    snapshot_id: int, *, include_uploader_reads: bool = True, include_reports: bool = True
+) -> list[str]:
     paths = [
         path
         for path, operations in app.openapi()["paths"].items()
         if path.startswith("/api/forestry")
         and "get" in operations
         and (include_uploader_reads or path not in _UPLOADER_READS)
+        and (include_reports or not path.startswith(_REPORT_PREFIX))
     ]
-    assert len(paths) == (11 if include_uploader_reads else 10)
+    snapshot_reads = 11 if include_uploader_reads else 10
+    assert len(paths) == snapshot_reads + (4 if include_reports else 0)
     urls = []
     for path in paths:
-        url = path.replace("{shapefile_snapshot_id}", str(snapshot_id)).replace(
-            "{feature_ordinal}", "1"
+        url = (
+            path.replace("{shapefile_snapshot_id}", str(snapshot_id))
+            .replace("{feature_ordinal}", "1")
+            .replace("{report_id}", "1")
         )
         if url.endswith("/use-distribution"):
             url += "?field=uso_2024"
+        if url.endswith("/source-polygons"):
+            url += "?ordinals=1"
         urls.append(url)
     return urls
 
@@ -137,7 +152,7 @@ def test_every_forestry_role_reads_every_route(
 ) -> None:
     _sign_in(client, integration_connection, f"forestry-{role.value}", (("forestry", role),))
 
-    for url in _forestry_urls(snapshot_id, include_uploader_reads=False):
+    for url in _forestry_urls(snapshot_id, include_uploader_reads=False, include_reports=False):
         assert client.get(url).status_code == 200, url
 
     review = client.get(f"/api/forestry/snapshots/{snapshot_id}/review").status_code
@@ -158,7 +173,7 @@ def test_a_viewer_cannot_see_a_pending_snapshot(
 
     _sign_in(client, integration_connection, "viewer", (("forestry", Role.VIEWER),))
 
-    for url in _forestry_urls(pending, include_uploader_reads=False):
+    for url in _forestry_urls(pending, include_uploader_reads=False, include_reports=False):
         if url.endswith(("/snapshots", "/snapshots/published", "/versions")):
             continue
         response = client.get(url)
