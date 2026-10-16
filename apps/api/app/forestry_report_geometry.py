@@ -261,16 +261,30 @@ def _to_multipolygon(geometry: BaseGeometry) -> MultiPolygon:
 
 
 def _same_shape(candidate: BaseGeometry, source: BaseGeometry) -> bool:
-    return bool(
-        shapely.equals_exact(
-            shapely.normalize(candidate),
-            shapely.normalize(_to_multipolygon(source)),
-            tolerance=UNTOUCHED_TOLERANCE_M,
-        )
-    )
+    """Same polygon up to float noise, whatever vertex a ring starts at.
+
+    ``normalize`` + ``equals_exact`` is order-sensitive: noise on one of two
+    vertices tied for the lowest x changes where a normalized ring starts.
+    Comparing vertex counts and the Hausdorff distance is not.
+    """
+
+    target = _to_multipolygon(source)
+    if shapely.get_num_geometries(candidate) != shapely.get_num_geometries(target):
+        return False
+    if shapely.get_num_coordinates(candidate) != shapely.get_num_coordinates(target):
+        return False
+    return bool(shapely.hausdorff_distance(candidate, target) <= UNTOUCHED_TOLERANCE_M)
 
 
 def _reject_overlaps(features: Sequence[ResolvedFeature]) -> None:
+    """Refuse overlapping features that come from the same source polygon.
+
+    Features from different source polygons overlap only where their sources
+    already overlap in the base (the coverage rule keeps every piece inside
+    its source); masters edited without topology rules carry such slivers,
+    and the user cannot fix them here, so they are not refused.
+    """
+
     if len(features) < 2:
         return
     # An untouched source may be invalid (a bowtie); measure overlaps on
@@ -280,6 +294,8 @@ def _reject_overlaps(features: Sequence[ResolvedFeature]) -> None:
     left, right = tree.query(geometries, predicate="intersects")
     for i, j in zip(left.tolist(), right.tolist(), strict=True):
         if i >= j:
+            continue
+        if features[i].source_feature_ordinal != features[j].source_feature_ordinal:
             continue
         if shapely.intersection(geometries[i], geometries[j]).area > OVERLAP_TOLERANCE_M2:
             raise ReportValidationError(

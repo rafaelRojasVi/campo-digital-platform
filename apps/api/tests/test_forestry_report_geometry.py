@@ -199,3 +199,37 @@ def test_messages_are_spanish() -> None:
     with pytest.raises(ReportValidationError) as raised:
         resolve_features([feature(1, box(0, 0, 60, 100))], {1: source()})
     assert "rodal" in raised.value.message
+
+
+def test_noise_on_one_vertex_where_lowest_x_vertices_tie_keeps_it_untouched() -> None:
+    # Two vertices share the lowest x; noise on one changes which one a
+    # normalized ring starts at, which must not matter.
+    rectangle = box(0.0, 0.0, 100.0, 50.0)
+    coords = list(rectangle.exterior.coords)
+    noisy = Polygon([(x - 1e-9, y) if (x, y) == (0.0, 50.0) else (x, y) for x, y in coords])
+    [only] = resolve_features([feature(1, noisy)], {1: source(1, rectangle)}).features
+    assert only.geometry_changed is False
+    assert only.attributes["sup_ha"] == 1.0
+    assert only.attributes["editada"] is None
+
+
+def test_noise_on_an_invalid_source_keeps_it_carried_untouched() -> None:
+    coords = list(BOWTIE.exterior.coords)
+    noisy = Polygon([(x - 1e-9, y) if (x, y) == (0.0, 100.0) else (x, y) for x, y in coords])
+    result = resolve_features([feature(1, noisy)], {1: source(1, BOWTIE, is_valid=False)})
+    assert result.features[0].geometry_changed is False
+    assert [w.code for w in result.warnings] == ["invalid_source_carried"]
+
+
+def test_neighbours_that_already_overlap_in_the_base_can_both_be_included() -> None:
+    # ArcMap masters without topology rules can carry slivers between rodales.
+    sources = {1: source(1, box(0, 0, 100, 100)), 2: source(2, box(99, 0, 200, 100))}
+    result = resolve_features([feature(1, None), feature(2, None)], sources)
+    assert len(result.features) == 2
+
+
+def test_a_split_next_to_an_overlapping_neighbour_is_accepted() -> None:
+    sources = {1: source(1, box(0, 0, 100, 100)), 2: source(2, box(99, 0, 200, 100))}
+    pieces = [box(0, 0, 50, 100), box(50, 0, 100, 100)]
+    inputs = [feature(1, piece) for piece in pieces] + [feature(2, None)]
+    assert len(resolve_features(inputs, sources).features) == 3
