@@ -14,6 +14,8 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
+from app.conaf import ConafClient
+from app.conaf_refresh import refresh_enabled, run_conaf_refresh
 from app.config import get_settings
 from app.dashboard_static import (
     DEFAULT_PORTAL_DIST,
@@ -107,6 +109,10 @@ security_recorder = SecurityEventRecorder(
 )
 
 
+# CONAF's public consulta page, read for Transelec and Rodales (Estado CONAF).
+conaf_client = ConafClient()
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start the staging-only in-process execution backend, if applicable."""
@@ -133,6 +139,13 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         if APP_ENV == "test"
         else lambda: purge_expired_security_events(get_database_engine(), now=datetime.now(UTC))
     )
+    conaf_refresh = (
+        asyncio.create_task(
+            run_conaf_refresh(get_database_engine, conaf_client, stop=stop_maintenance)
+        )
+        if refresh_enabled(APP_ENV, os.environ)
+        else None
+    )
     maintenance = asyncio.create_task(
         run_maintenance(security_recorder, purge=purge, stop=stop_maintenance)
     )
@@ -141,6 +154,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         stop_maintenance.set()
         await maintenance
+        if conaf_refresh is not None:
+            await conaf_refresh
         if _execution_backend is not None:
             await _execution_backend.stop()
 
