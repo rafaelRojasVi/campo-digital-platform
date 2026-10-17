@@ -2,13 +2,17 @@
 
 ## Status
 
-Stage 1 (data, API, export) implemented 2026-10-16 on branch
-`feat/rodales-informes`; not merged or deployed. Migration `0014` is part of
-this change. Stage 2 (the editor, the list and the review screens) has its
-own plan. Design:
+- Stage 1 (data, API, export): merged 2026-10-16 as PR #103 (`997270e`);
+  migration `0014`. Not deployed yet.
+- Stage 2 (screens): implemented 2026-10-16 on branch
+  `feat/rodales-informes-ui`; not merged or deployed.
+
+Design:
 [spec](../../../docs/superpowers/specs/2026-10-16-rodales-informes-de-manejo-design.md);
-plan:
-[stage 1](../../../docs/superpowers/plans/2026-10-16-rodales-informes-stage1-api.md).
+plans:
+[stage 1](../../../docs/superpowers/plans/2026-10-16-rodales-informes-stage1-api.md),
+[stage 2](../../../docs/superpowers/plans/2026-10-16-rodales-informes-stage2-ui.md).
+Spanish guide: [Informes de manejo](es/informes-de-manejo.md).
 
 ## What a report is
 
@@ -72,6 +76,37 @@ message.
 
 A feature sent without `geometry` is an untouched copy of its source polygon
 (how «Pegar» works); the server copies the base geometry exactly.
+
+## Screens (stage 2)
+
+- **«Informes»** (`/rodales/informes`): the list; submitted reports first;
+  «Pendientes de revisión: N» for admins; «Nuevo informe» (name, type,
+  month) for editors. Viewers see approved reports only.
+- **Editor** (`/rodales/informes/editar?informe=<id>`), layout A of the
+  design: toolbar («Seleccionar», «Copiar», «Pegar al informe», «Dividir con
+  línea», «Quitar del informe», «Deshacer», «Rehacer»), map of the report's
+  own base snapshot, and the report panel (rows with the «Área de manejo»
+  mark and editable fields, totals, «Guardar», «Enviar a revisión»,
+  export links).
+- **Split:** JSTS (`lib/splitGeometry.ts`) nodes the polyline with the
+  polygon boundary and polygonizes in EPSG:32718; pieces are labelled with a
+  letter and hectares at an interior point; the chosen pieces become one
+  managed feature with the next free code (`766` → `766-1`) and the rest
+  keeps the code. One line splits every report polygon it crosses.
+- **Review** (admin, `enviado`): the same layout read-only, a plain-Spanish
+  change list (`lib/reportChanges.ts`), «Mostrar base original», «Pedir
+  cambios» (note required) and «Aprobar».
+- **DECISION:** viewers never see review notes (the user's question is
+  open; the API still returns them).
+- **DECISION:** «Copiar» keeps the selection in the browser session, keyed
+  by base snapshot, so polygons can be pasted into another report on the
+  same base; paste skips polygons already in the report.
+- **RESULT (2026-10-16, local stack, real Degenfeld base):** create → paste
+  rodal 766 → polyline split → 766-1 (132,21 ha) and 766 (295,35 ha) →
+  save accepted by the server → submit → request changes → resubmit →
+  approve → Shapefile export; also checked at 800 px width.
+- **LIMITATION:** no snapping, vertex editing or new polygons (out of
+  scope); editing is not optimized for touch.
 
 ## Rules on save
 

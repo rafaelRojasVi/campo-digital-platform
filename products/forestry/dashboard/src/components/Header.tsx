@@ -19,6 +19,7 @@ interface HeaderProps {
 const NAV: { route: Route; href: string; label: string; uploadersOnly: boolean }[] = [
   { route: ROUTES.mapa, href: mapPath(), label: 'Mapa', uploadersOnly: false },
   { route: ROUTES.versiones, href: ROUTES.versiones, label: 'Versiones', uploadersOnly: false },
+  { route: ROUTES.informes, href: ROUTES.informes, label: 'Informes', uploadersOnly: false },
   { route: ROUTES.importar, href: ROUTES.importar, label: 'Cargar versión', uploadersOnly: true },
 ]
 
@@ -51,7 +52,12 @@ export function Header({ active, role, snapshot, summary, preview = false }: Hea
               key={item.route}
               className="header__nav-link"
               href={item.href}
-              aria-current={item.route === active ? 'page' : undefined}
+              aria-current={
+                item.route === active ||
+                (item.route === ROUTES.informes && active === ROUTES.informe)
+                  ? 'page'
+                  : undefined
+              }
               onClick={(event) => onLinkClick(event, item.href)}
             >
               {item.label}

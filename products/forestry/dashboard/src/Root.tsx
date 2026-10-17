@@ -8,9 +8,11 @@ import App from './App.tsx'
 import { ApiError, devLogin, fetchForestryRole } from './api.ts'
 import { ErrorView, ForbiddenView, LoadingView, SignedOutView } from './components/StatusViews.tsx'
 import { ImportarPage } from './pages/ImportarPage.tsx'
+import { InformeEditorPage } from './pages/InformeEditorPage.tsx'
+import { InformesPage } from './pages/InformesPage.tsx'
 import { RevisionPage } from './pages/RevisionPage.tsx'
 import { VersionesPage } from './pages/VersionesPage.tsx'
-import { ROUTES, useLocation, versionParam } from './router.ts'
+import { ROUTES, reportParam, useLocation, versionParam } from './router.ts'
 import { PLATFORM_FRONT_DOOR_PATH, platformFrontDoorEnabled } from './runtime/frontDoor.ts'
 import type { ForestryRole } from './types.ts'
 
@@ -75,6 +77,16 @@ export default function Root() {
           role={role}
           versionId={versionParam(location.search)}
           uploadStatus={location.search.get('cargada')}
+        />
+      )
+    case ROUTES.informes:
+      return <InformesPage role={role} />
+    case ROUTES.informe:
+      return (
+        <InformeEditorPage
+          key={location.search.toString()}
+          role={role}
+          reportId={reportParam(location.search)}
         />
       )
     default:

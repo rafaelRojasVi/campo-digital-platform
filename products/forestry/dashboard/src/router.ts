@@ -13,6 +13,8 @@ export const ROUTES = {
   versiones: '/rodales/versiones',
   importar: '/rodales/importar',
   revision: '/rodales/revision',
+  informes: '/rodales/informes',
+  informe: '/rodales/informes/editar',
 } as const
 
 export type Route = (typeof ROUTES)[keyof typeof ROUTES]
@@ -30,8 +32,32 @@ function current(): Location {
 
 const NAVIGATION_EVENT = 'rodales:navigate'
 
+/**
+ * A page with unsaved work (the report editor) registers a guard; every
+ * in-app navigation asks it first. `beforeunload` only covers real page
+ * unloads, not these history changes.
+ */
+type LeaveGuard = () => boolean
+let leaveGuard: LeaveGuard | null = null
+
+export function setLeaveGuard(guard: LeaveGuard | null): void {
+  leaveGuard = guard
+}
+
+function mayLeave(): boolean {
+  return leaveGuard === null || leaveGuard()
+}
+
+function currentHref(): string {
+  return `${window.location.pathname}${window.location.search}`
+}
+
+let lastHref = typeof window === 'undefined' ? '' : currentHref()
+
 export function navigate(to: string): void {
+  if (!mayLeave()) return
   window.history.pushState(null, '', to)
+  lastHref = currentHref()
   window.dispatchEvent(new Event(NAVIGATION_EVENT))
   window.scrollTo(0, 0)
 }
@@ -41,10 +67,19 @@ export function useLocation(): Location {
 
   useEffect(() => {
     const update = () => setLocation(current())
-    window.addEventListener('popstate', update)
+    const onPopState = () => {
+      // Back/forward already changed the URL: undo it if the page says stay.
+      if (!mayLeave()) {
+        window.history.pushState(null, '', lastHref)
+        return
+      }
+      lastHref = currentHref()
+      update()
+    }
+    window.addEventListener('popstate', onPopState)
     window.addEventListener(NAVIGATION_EVENT, update)
     return () => {
-      window.removeEventListener('popstate', update)
+      window.removeEventListener('popstate', onPopState)
       window.removeEventListener(NAVIGATION_EVENT, update)
     }
   }, [])
@@ -57,6 +92,17 @@ export function versionParam(search: URLSearchParams): number | null {
   const raw = search.get('version')
   if (raw === null || !/^[1-9][0-9]*$/.test(raw)) return null
   return Number(raw)
+}
+
+/** `?informe=<id>` as a positive integer, or null. */
+export function reportParam(search: URLSearchParams): number | null {
+  const raw = search.get('informe')
+  if (raw === null || !/^[1-9][0-9]*$/.test(raw)) return null
+  return Number(raw)
+}
+
+export function reportPath(reportId: number): string {
+  return `${ROUTES.informe}?informe=${reportId}`
 }
 
 export function reviewPath(snapshotId: number): string {
