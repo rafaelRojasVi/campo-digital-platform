@@ -24,6 +24,7 @@ import shapely
 from shapely.geometry import MultiPolygon
 from sqlalchemy import Connection, text
 
+from app.conaf import normalize_solicitud
 from app.forestry_publication import read_published_snapshot_id
 from app.forestry_report_geometry import (
     FeatureInput,
@@ -42,6 +43,8 @@ MAX_NOTE_LENGTH = 2000
 MONTH_PATTERN = r"^[0-9]{4}-(0[1-9]|1[0-2])$"
 _STORAGE_SRID = 32718
 _MAX_COPY_SUFFIX = 50
+# update_report_header: «not given» differs from «clear» (None).
+_UNSET = object()
 
 _TRANSITIONS: dict[str, tuple[frozenset[str], ReportStatus]] = {
     "submit": (frozenset({"borrador", "cambios_solicitados"}), "enviado"),
@@ -68,6 +71,7 @@ REPORT_ERROR_MESSAGES: dict[str, str] = {
     "note_required": "Escriba qué hay que cambiar.",
     "note_too_long": "La nota no puede superar 2.000 caracteres.",
     "cannot_delete": "Sólo se puede borrar un borrador que nunca se envió; archívelo.",
+    "invalid_conaf": "El N.º de solicitud CONAF debe tener solo dígitos (hasta 9).",
 }
 WARNING_MESSAGES: dict[str, str] = {
     "base_outdated": (
@@ -104,6 +108,7 @@ class Report:
     feature_count: int
     managed_feature_count: int
     managed_area_ha: float
+    conaf_solicitud: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,7 +153,8 @@ SELECT
     count(f.id) AS feature_count,
     count(f.id) FILTER (WHERE f.in_report) AS managed_feature_count,
     COALESCE(sum((f.attributes ->> 'sup_ha')::float8) FILTER (WHERE f.in_report), 0)
-        AS managed_area_ha
+        AS managed_area_ha,
+    r.conaf_solicitud
 FROM forestry.report r
 JOIN platform.app_user creator ON creator.id = r.created_by_app_user_id
 LEFT JOIN platform.app_user decider ON decider.id = r.decided_by_app_user_id
@@ -176,6 +182,7 @@ def _report(row: Any) -> Report:
         feature_count=int(row.feature_count),
         managed_feature_count=int(row.managed_feature_count),
         managed_area_ha=float(row.managed_area_ha),
+        conaf_solicitud=row.conaf_solicitud,
     )
 
 
@@ -409,6 +416,7 @@ def update_report_header(
     name: str | None = None,
     report_type: str | None = None,
     report_month: str | None = None,
+    conaf_solicitud: object = _UNSET,
 ) -> int:
     locked = _lock(connection, report_id)
     if locked.status not in EDITABLE_STATUSES:
@@ -420,17 +428,31 @@ def update_report_header(
         _ensure_name_free(connection, clean, except_id=report_id)
     if report_month is not None:
         _check_month(report_month)
+    set_conaf = conaf_solicitud is not _UNSET
+    conaf: str | None = None
+    if set_conaf and conaf_solicitud is not None and str(conaf_solicitud).strip():
+        conaf = normalize_solicitud(str(conaf_solicitud))
+        if conaf is None:
+            raise ReportError("invalid_conaf")
     connection.execute(
         text(
             """
             UPDATE forestry.report
             SET name = COALESCE(:name, name),
                 report_type = COALESCE(:report_type, report_type),
-                report_month = COALESCE(:report_month, report_month)
+                report_month = COALESCE(:report_month, report_month),
+                conaf_solicitud = CASE WHEN :set_conaf THEN :conaf ELSE conaf_solicitud END
             WHERE id = :id
             """
         ),
-        {"name": clean, "report_type": report_type, "report_month": report_month, "id": report_id},
+        {
+            "name": clean,
+            "report_type": report_type,
+            "report_month": report_month,
+            "set_conaf": set_conaf,
+            "conaf": conaf,
+            "id": report_id,
+        },
     )
     return _bump(connection, report_id)
 
@@ -514,8 +536,9 @@ def duplicate_report(connection: Connection, *, report_id: int, actor_app_user_i
             text(
                 """
                 INSERT INTO forestry.report
-                    (name, report_type, report_month, base_snapshot_id, created_by_app_user_id)
-                SELECT :name, report_type, report_month, base_snapshot_id, :actor
+                    (name, report_type, report_month, base_snapshot_id, created_by_app_user_id,
+                     conaf_solicitud)
+                SELECT :name, report_type, report_month, base_snapshot_id, :actor, conaf_solicitud
                 FROM forestry.report WHERE id = :id
                 RETURNING id
                 """

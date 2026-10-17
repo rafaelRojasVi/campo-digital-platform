@@ -101,6 +101,7 @@ _STATUS_FOR_CODE = {
     "note_required": 422,
     "note_too_long": 422,
     "cannot_delete": 409,
+    "invalid_conaf": 422,
 }
 _AUDIT_FOR_ACTION: dict[str, str] = {
     "submit": "forestry.report.submitted",
@@ -132,6 +133,7 @@ class ReportModel(BaseModel):
     feature_count: int
     managed_feature_count: int
     managed_area_ha: float
+    conaf_solicitud: str | None
 
 
 class ReportListResponse(BaseModel):
@@ -187,6 +189,7 @@ class UpdateReportRequest(BaseModel):
     name: str | None = Field(default=None, max_length=500)
     report_type: ReportType | None = None
     report_month: str | None = Field(default=None, pattern=MONTH_PATTERN)
+    conaf_solicitud: str | None = Field(default=None, max_length=50)
 
 
 class FeatureInputModel(BaseModel):
@@ -247,6 +250,7 @@ def _report_model(report: Report) -> ReportModel:
         feature_count=report.feature_count,
         managed_feature_count=report.managed_feature_count,
         managed_area_ha=report.managed_area_ha,
+        conaf_solicitud=report.conaf_solicitud,
     )
 
 
@@ -508,6 +512,12 @@ def patch_report(
                 name=request.name,
                 report_type=request.report_type,
                 report_month=request.report_month,
+                # Only when sent: «null» clears the number, leaving it out keeps it.
+                **(
+                    {"conaf_solicitud": request.conaf_solicitud}
+                    if "conaf_solicitud" in request.model_fields_set
+                    else {}
+                ),
             )
             record_audit_event(
                 connection,

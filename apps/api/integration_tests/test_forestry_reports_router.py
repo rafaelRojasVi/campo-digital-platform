@@ -380,3 +380,41 @@ def test_save_route_accepts_bodies_over_the_default_limit(
         headers={**_ORIGIN, "Content-Type": "application/json"},
     )
     assert response.status_code == 200, response.text
+
+
+def test_report_conaf_number_can_be_set_and_cleared(
+    client: TestClient, integration_engine: Engine, base: int
+) -> None:
+    sign_in(client, integration_engine, "marco", Role.OPERATOR)
+    report_id = create(client)
+    set_number = client.patch(
+        f"/api/forestry/reports/{report_id}",
+        json={"revision": 1, "conaf_solicitud": " 90663 "},
+        headers=_ORIGIN,
+    )
+    assert set_number.status_code == 200, set_number.text
+    detail = client.get(f"/api/forestry/reports/{report_id}").json()["report"]
+    assert detail["conaf_solicitud"] == "090663"
+    bad = client.patch(
+        f"/api/forestry/reports/{report_id}",
+        json={"revision": 2, "conaf_solicitud": "12/34-5/26"},
+        headers=_ORIGIN,
+    )
+    assert bad.status_code == 422
+    assert bad.json()["detail"]["code"] == "invalid_conaf"
+    cleared = client.patch(
+        f"/api/forestry/reports/{report_id}",
+        json={"revision": 2, "conaf_solicitud": None},
+        headers=_ORIGIN,
+    )
+    assert cleared.status_code == 200
+    assert (
+        client.get(f"/api/forestry/reports/{report_id}").json()["report"]["conaf_solicitud"] is None
+    )
+    renamed = client.patch(
+        f"/api/forestry/reports/{report_id}", json={"revision": 3, "name": "Otro"}, headers=_ORIGIN
+    )
+    assert renamed.status_code == 200
+    assert (
+        client.get(f"/api/forestry/reports/{report_id}").json()["report"]["conaf_solicitud"] is None
+    )
