@@ -585,6 +585,17 @@ describe('Estado CONAF in Rodales', () => {
     expect(await screen.findByText('En evaluación')).toBeInTheDocument()
   })
 
+  it('lets the number be added to an approved report, not an archived one', async () => {
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'aprobado', revision: 6 }, true))
+    const { unmount } = render(<RealEditor role="operator" reportId={7} />)
+    expect(await screen.findByLabelText('N.º solicitud CONAF')).toBeInTheDocument()
+    unmount()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'archivado', revision: 7 }, true))
+    render(<RealEditor role="admin" reportId={7} />)
+    expect(await screen.findByText('Sin N.º de solicitud CONAF.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('N.º solicitud CONAF')).not.toBeInTheDocument()
+  })
+
   it('refuses a number CONAF cannot answer before saving', async () => {
     const user = userEvent.setup()
     reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))

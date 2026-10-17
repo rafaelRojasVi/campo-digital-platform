@@ -53,8 +53,10 @@ Editada = wb.
 En el informe, la sección **«Estado en CONAF»** (al final del panel) tiene
 el campo **«N.º solicitud CONAF»**. Escriba el número y presione
 **«Guardar N.º»**: se guarda solo el número, sin tocar los polígonos que
-esté editando. Se puede cambiar mientras el informe está en borrador o con
-cambios pedidos.
+esté editando. Operadores y administradores pueden escribirlo o cambiarlo en
+cualquier estado salvo archivado, también con el informe ya aprobado (el
+número suele existir recién después de aprobar); el informe aprobado sigue
+fijo.
 
 Con el número guardado, la plataforma lee la consulta pública de CONAF y
 muestra el estado (Aprobada, En evaluación, Rechazada, No vigente u Otro

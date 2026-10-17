@@ -572,6 +572,8 @@ function Editor({
   const changes = useMemo(() => describeChanges(draft.features, detail.sources), [draft.features, detail.sources])
   const latestChangeNote = [...detail.notes].reverse().find((n) => n.kind === 'cambios_solicitados')
   const showNotes = canUpload(role)
+  // The number arrives after approval and never touches polygons (server rule).
+  const conafEditable = canUpload(role) && report.status !== 'archivado'
   const overlay = useMemo(
     () => (showBase ? detail.sources.map((s) => ({ ordinal: s.source_feature_ordinal, coordinates: s.geometry.coordinates })) : []),
     [showBase, detail.sources],
@@ -743,7 +745,7 @@ function Editor({
 
           <section className="report-section report-conaf" aria-labelledby="report-conaf-title">
             <h3 id="report-conaf-title" className="report-section__title">Estado en CONAF</h3>
-            {editable ? (
+            {conafEditable ? (
               <form
                 className="report-conaf__form"
                 onSubmit={(event) => {

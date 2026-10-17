@@ -419,7 +419,13 @@ def update_report_header(
     conaf_solicitud: object = _UNSET,
 ) -> int:
     locked = _lock(connection, report_id)
-    if locked.status not in EDITABLE_STATUSES:
+    # The CONAF number exists only once the plan is filed, after approval, and
+    # it never changes the polygons: alone, it is editable until archived.
+    only_conaf = name is None and report_type is None and report_month is None
+    if only_conaf and conaf_solicitud is not _UNSET:
+        if locked.status == "archivado":
+            raise ReportError("not_editable")
+    elif locked.status not in EDITABLE_STATUSES:
         raise ReportError("not_editable")
     if locked.revision != expected_revision:
         raise ReportError("stale_revision")

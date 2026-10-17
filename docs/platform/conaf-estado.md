@@ -57,6 +57,11 @@ notes (Spanish):
 - `GET /api/conaf/solicitudes?numeros=…`: stored data only, up to 500.
 - All routes need VIEW on `transelect` or `forestry`.
 - Rodales reports gain `conaf_solicitud` (PATCH; `null` clears it).
+  **DECISION (2026-10-16, Rafael):** a PATCH that carries only
+  `conaf_solicitud` is accepted in every status except `archivado`, because
+  the solicitud number exists only after internal approval and it never
+  changes the polygons. Other header fields stay limited to `borrador` and
+  `cambios_solicitados`.
 - The Consola export gains a `conaf` block, plus alerts `conaf_down` and
   `conaf_no_run`.
 

@@ -418,3 +418,44 @@ def test_report_conaf_number_can_be_set_and_cleared(
     assert (
         client.get(f"/api/forestry/reports/{report_id}").json()["report"]["conaf_solicitud"] is None
     )
+
+
+def test_conaf_number_can_be_added_after_approval_but_not_when_archived(
+    client: TestClient, integration_engine: Engine, base: int
+) -> None:
+    # The solicitud number exists only once the plan is filed, after approval.
+    sign_in(client, integration_engine, "marco", Role.OPERATOR)
+    report_id = create(client)
+    save(client, report_id, 1, SPLIT)
+    act(client, report_id, "submit", 2)
+    sign_in(client, integration_engine, "javier", Role.ADMIN)
+    assert act(client, report_id, "approve", 3).status_code == 200
+
+    def revision() -> int:
+        return int(client.get(f"/api/forestry/reports/{report_id}").json()["report"]["revision"])
+
+    sign_in(client, integration_engine, "marco", Role.OPERATOR)
+    numbered = client.patch(
+        f"/api/forestry/reports/{report_id}",
+        json={"revision": revision(), "conaf_solicitud": "90663"},
+        headers=_ORIGIN,
+    )
+    assert numbered.status_code == 200, numbered.text
+    detail = client.get(f"/api/forestry/reports/{report_id}").json()["report"]
+    assert detail["conaf_solicitud"] == "090663"
+    assert detail["status"] == "aprobado"
+    renamed = client.patch(
+        f"/api/forestry/reports/{report_id}",
+        json={"revision": revision(), "name": "Otro"},
+        headers=_ORIGIN,
+    )
+    assert renamed.json()["detail"]["code"] == "not_editable"
+
+    sign_in(client, integration_engine, "javier", Role.ADMIN)
+    assert act(client, report_id, "archive", revision()).status_code == 200
+    archived = client.patch(
+        f"/api/forestry/reports/{report_id}",
+        json={"revision": revision(), "conaf_solicitud": None},
+        headers=_ORIGIN,
+    )
+    assert archived.json()["detail"]["code"] == "not_editable"
