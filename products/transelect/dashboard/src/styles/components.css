@@ -2097,3 +2097,45 @@ td .web-chip,
 .conaf-warn {
   color: #8a6100;
 }
+
+.conaf-card {
+  display: grid;
+  gap: var(--s-3);
+}
+
+.conaf-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.conaf-card__raw {
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+  letter-spacing: 0.02em;
+}
+
+.conaf-card__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--s-2) var(--s-4);
+  margin: 0;
+}
+
+.conaf-card__facts dt {
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+}
+
+.conaf-card__facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.conaf-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+}

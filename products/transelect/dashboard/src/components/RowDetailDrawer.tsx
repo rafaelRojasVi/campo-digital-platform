@@ -61,6 +61,7 @@ import { EditableFieldsSection, type EditState } from './EditableFieldsSection'
 import { AlertBanner, LoadingBlock } from './StateViews'
 import { Fact } from './Fact'
 import { OficinaVirtualLink } from './OficinaVirtualLink'
+import { ConafCard } from './ConafCard'
 import { PlazoDrawerNotice, PlazoDrawerSection, type PlazoDrawerStatus } from './PlazoDrawerSection'
 import { SourceDate } from './SourceDate'
 import { StatusPill } from './StatusPill'
@@ -548,6 +549,13 @@ export function RowDetailDrawer({
             <Fact label="Empresa">{cell(current.empresa, 'Sin información')}</Fact>
             <Fact label="Propietario">{cell(current.tipo_propietario, 'Sin información')}</Fact>
           </dl>
+        </section>
+        <section className="drawer-section" aria-labelledby="drawer-conaf">
+          <h3 id="drawer-conaf">Estado en CONAF</h3>
+          <ConafCard
+            key={current.numero_ingreso_2 ?? current.numero_ingreso ?? ''}
+            numero={current.numero_ingreso_2 ?? current.numero_ingreso}
+          />
         </section>
 
         {!canEdit && editables}
