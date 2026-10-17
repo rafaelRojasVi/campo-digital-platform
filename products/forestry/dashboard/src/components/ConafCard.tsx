@@ -41,6 +41,8 @@ export function ConafCard({ numero }: { numero: string | null }) {
   const [state, setState] = useState<State>({ status: 'loading' })
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  // Bumped by «Reintentar» to read again after a failed first read.
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (normalized === null) return
@@ -57,7 +59,7 @@ export function ConafCard({ numero }: { numero: string | null }) {
     return () => {
       cancelled = true
     }
-  }, [normalized])
+  }, [normalized, attempt])
 
   if (normalized === null) {
     return <p className="muted">Este N.º no se puede consultar en CONAF (solo dígitos).</p>
@@ -79,7 +81,25 @@ export function ConafCard({ numero }: { numero: string | null }) {
   }
 
   if (state.status === 'loading') return <p className="muted">Consultando CONAF…</p>
-  if (state.status === 'error') return <p className="conaf-warn">{state.error}</p>
+  if (state.status === 'error') {
+    return (
+      <div className="conaf-card">
+        <p className="conaf-warn">{state.error}</p>
+        <div className="conaf-card__foot">
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={() => {
+              setState({ status: 'loading' })
+              setAttempt((n) => n + 1)
+            }}
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const { record } = state
   const message = conafMessage(record)

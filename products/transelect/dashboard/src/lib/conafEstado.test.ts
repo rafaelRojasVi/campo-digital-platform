@@ -98,7 +98,21 @@ describe('conafEstado', () => {
   it('says when a refresh only repeated the stored answer', () => {
     const before = record()
     expect(refreshNotice(before, record({ checked_at: '2026-10-16T14:59:30Z' }))).toBe('Estado actualizado desde CONAF.')
-    expect(refreshNotice(before, record())).toBe('CONAF se consultó hace un momento; se muestra ese resultado.')
+    const recent = record({ checked_at: '2026-10-16T14:59:30Z' })
+    expect(refreshNotice(recent, recent, NOW)).toBe('CONAF se consultó hace un momento; se muestra ese resultado.')
     expect(refreshNotice(before, record({ lookup_status: 'unavailable', checked_at: '2026-10-16T14:59:30Z' }))).toBeNull()
+  })
+
+  it('never shows a refused approval as approved', () => {
+    expect(conafTone(record({ estado: 'DESAPROBADA' }))).toBe('danger')
+    expect(conafTone(record({ estado: 'NO APROBADA' }))).toBe('danger')
+    expect(conafTone(record({ estado: 'APROBADA' }))).toBe('ok')
+  })
+
+  it('says CONAF was busy when the refresh returned an old answer', () => {
+    const old = record({ checked_at: '2026-10-13T15:00:00Z' })
+    expect(refreshNotice(old, old, NOW)).toBe('CONAF está ocupado; se muestra el último dato.')
+    const recent = record({ checked_at: '2026-10-16T14:59:30Z' })
+    expect(refreshNotice(recent, recent, NOW)).toBe('CONAF se consultó hace un momento; se muestra ese resultado.')
   })
 })

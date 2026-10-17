@@ -39,4 +39,14 @@ describe('ConafEstadoCell', () => {
     render(<ConafEstadoCell numero="090663" record={undefined} />)
     expect(screen.getByText('Sin consultar')).toBeInTheDocument()
   })
+
+  it('does not blame the number when CONAF did not answer', () => {
+    render(
+      <ConafEstadoCell
+        numero="090663"
+        record={{ ...base, lookup_status: 'unavailable', found_at: null, estado: null, stale: true }}
+      />,
+    )
+    expect(screen.getByText('CONAF no respondió')).toBeInTheDocument()
+  })
 })

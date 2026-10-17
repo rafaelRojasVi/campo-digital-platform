@@ -35,7 +35,7 @@ export function normalizeSolicitud(raw: string | null | undefined): string | nul
 export function conafTone(record: ConafSolicitud): ConafTone {
   const estado = (record.estado ?? '').toUpperCase()
   if (estado.includes('NO VIGENTE')) return 'muted'
-  if (/RECHAZ|DENEG|DESIST|CADUC/.test(estado)) return 'danger'
+  if (/RECHAZ|DENEG|DESIST|CADUC|DESAPROB|\bNO APROB/.test(estado)) return 'danger'
   if (estado.includes('APROB')) return 'ok'
   if (/EVALUAC|TRAMIT|INGRES|REVISI|RECURSO/.test(estado)) return 'progress'
   return 'neutral'
@@ -80,11 +80,21 @@ export function rawEstado(record: ConafSolicitud): string | null {
   return plain(record.estado) === plain(TONE_LABELS[conafTone(record)]) ? null : record.estado
 }
 
-/** The notice after «Actualizar»; the server answers from storage within 60 s. */
-export function refreshNotice(before: ConafSolicitud | null, after: ConafSolicitud): string | null {
+/**
+ * The notice after «Actualizar». An unchanged `checked_at` means the server
+ * answered from storage: within its 60 s guard, or because CONAF was busy.
+ */
+export function refreshNotice(
+  before: ConafSolicitud | null,
+  after: ConafSolicitud,
+  now: Date = new Date(),
+): string | null {
   if (after.lookup_status !== 'found') return null
   if (before !== null && before.checked_at === after.checked_at) {
-    return 'CONAF se consultó hace un momento; se muestra ese resultado.'
+    const age = now.getTime() - new Date(after.checked_at).getTime()
+    return age <= 90_000
+      ? 'CONAF se consultó hace un momento; se muestra ese resultado.'
+      : 'CONAF está ocupado; se muestra el último dato.'
   }
   return 'Estado actualizado desde CONAF.'
 }

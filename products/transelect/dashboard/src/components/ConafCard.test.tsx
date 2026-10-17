@@ -75,4 +75,14 @@ describe('ConafCard', () => {
       'CONAF se consultó hace un momento; se muestra ese resultado.',
     )
   })
+
+  it('offers a retry when the first read fails', async () => {
+    const user = userEvent.setup()
+    api.getConafSolicitud
+      .mockResolvedValueOnce({ ok: false, status: 503, error: 'CONAF está ocupado; intente de nuevo en un momento.' })
+      .mockResolvedValueOnce({ ok: true, data: found })
+    render(<ConafCard numero="090663" />)
+    await user.click(await screen.findByRole('button', { name: 'Reintentar' }))
+    expect(await screen.findByText('En evaluación')).toBeInTheDocument()
+  })
 })

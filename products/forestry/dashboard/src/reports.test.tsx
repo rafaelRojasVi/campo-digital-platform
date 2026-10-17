@@ -551,6 +551,40 @@ describe('Estado CONAF in Rodales', () => {
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeEnabled()
   })
 
+  it('never saves the number and the draft at the same time', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    reportsApi.saveReportFeatures.mockReturnValue(new Promise(() => {}))
+    render(<RealEditor role="operator" reportId={7} />)
+    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await user.type(screen.getByLabelText('N.º solicitud CONAF'), '90663')
+    await user.click(screen.getByRole('button', { name: 'Guardar' }))
+    expect(screen.getByRole('button', { name: 'Guardar N.º' })).toBeDisabled()
+  })
+
+  it('blocks the draft buttons while the number is saving', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    reportsApi.updateReport.mockReturnValue(new Promise(() => {}))
+    render(<RealEditor role="operator" reportId={7} />)
+    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await user.type(screen.getByLabelText('N.º solicitud CONAF'), '90663')
+    await user.click(screen.getByRole('button', { name: 'Guardar N.º' }))
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Enviar a revisión' })).toBeDisabled()
+  })
+
+  it('offers a retry when CONAF cannot be read at first', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({ conaf_solicitud: '090663' }, true))
+    reportsApi.fetchConafSolicitud
+      .mockRejectedValueOnce(new Error('busy'))
+      .mockResolvedValueOnce(conafFound())
+    render(<RealEditor role="operator" reportId={7} />)
+    await user.click(await screen.findByRole('button', { name: 'Reintentar' }))
+    expect(await screen.findByText('En evaluación')).toBeInTheDocument()
+  })
+
   it('refuses a number CONAF cannot answer before saving', async () => {
     const user = userEvent.setup()
     reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))

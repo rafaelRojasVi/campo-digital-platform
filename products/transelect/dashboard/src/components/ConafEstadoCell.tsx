@@ -24,7 +24,12 @@ export function ConafEstadoCell({
   if (normalizeSolicitud(numero) === null) return <span className="hint">Sin N.º consultable</span>
   if (!record) return <span className="hint">Sin consultar</span>
   if (!hasData(record)) {
-    const text = record.lookup_status === 'not_found' ? 'No existe en CONAF' : 'Revisar N.º'
+    const text =
+      record.lookup_status === 'not_found'
+        ? 'No existe en CONAF'
+        : record.lookup_status === 'unavailable'
+          ? 'CONAF no respondió'
+          : 'Revisar N.º'
     return <span className="hint conaf-warn">{text}</span>
   }
   const tone = conafTone(record)

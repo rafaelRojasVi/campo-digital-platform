@@ -720,8 +720,8 @@ function Editor({
           <div className="report-actions">
             {editable ? (
               <>
-                <button type="button" className="button button--ghost" onClick={() => void save()} disabled={busy || !dirty}>Guardar</button>
-                <button type="button" className="button" onClick={() => void submit()} disabled={busy || summary.managedCount === 0}>Enviar a revisión</button>
+                <button type="button" className="button button--ghost" onClick={() => void save()} disabled={busy || conafBusy || !dirty}>Guardar</button>
+                <button type="button" className="button" onClick={() => void submit()} disabled={busy || conafBusy || summary.managedCount === 0}>Enviar a revisión</button>
               </>
             ) : null}
             {reviewing ? (
@@ -769,7 +769,7 @@ function Editor({
                 <button
                   type="submit"
                   className="button button--ghost"
-                  disabled={conafBusy || conafInput.trim() === (conafNumero ?? '')}
+                  disabled={conafBusy || busy || conafInput.trim() === (conafNumero ?? '')}
                 >
                   {conafBusy ? 'Guardando…' : 'Guardar N.º'}
                 </button>
