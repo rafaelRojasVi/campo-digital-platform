@@ -97,6 +97,18 @@ Container packaging: **built and locally verified** (this document).
   from `X-Real-IP`, Consola health section) as deployment `7c11215c`
   (`SUCCESS`; no migration). The Consola shows this deployment and the
   client IP check below.
+- **FACT (2026-10-17 15:00 UTC):** `main` at `87338cb` (PR #102 deploy
+  records, PR #104 Rodales informes screens, PR #105 Estado CONAF; stage 1
+  PR #103 was already on `main`) as deployment `f6baf244` (`SUCCESS`,
+  `7c11215c` `REMOVED`), redeployed by hand with `railway redeploy
+  --from-source --yes`. The pre-deploy log shows `Running upgrade 0013 ->
+  0014` (Rodales management reports) and `Running upgrade 0014 -> 0015`
+  (Estado CONAF), then `Application startup complete`; no error lines.
+  `/ready` answers `200`; `/api/conaf/solicitudes` and
+  `/api/forestry/reports` answer `401` signed out. From this deploy the
+  nightly CONAF refresh runs in production (after 03:00 Chile, one lookup
+  per second). No backup was taken just before it (both migrations only add
+  tables and one nullable column).
 - **FACT (2026-10-05 15:19 UTC, until `523d1f19`):** production served
   `main` at `b478a73` (PR #91:
   the web edits pill, log and history), Railway deployment `20c79b8c`. It

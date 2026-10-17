@@ -7,7 +7,7 @@ server, nightly refresh, API, Consola block, and screens in Transelec (Estado
 column, PMF drawer card) and Rodales (report field and card, Informes list
 column). Verified in a local browser against one real public lookup
 (`090663`); the Transelec screens were verified by component tests only.
-Not merged or deployed. Design:
+Merged (PR #105, `87338cb`) and deployed 2026-10-17 (Railway `f6baf244`). Design:
 [spec](../superpowers/specs/2026-10-16-conaf-estado-design.md); plans:
 [server](../superpowers/plans/2026-10-16-conaf-estado-server.md),
 [screens](../superpowers/plans/2026-10-16-conaf-estado-screens.md). User
