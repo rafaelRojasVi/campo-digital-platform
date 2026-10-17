@@ -15,6 +15,7 @@ import {
   layoutReportFromFailure,
   logout,
   publishImport,
+  getConafSolicitudes,
   resetApiClientState,
   transelecRole,
   uploadWorkbook,
@@ -465,5 +466,22 @@ describe('filenameFromDisposition', () => {
     expect(filenameFromDisposition('attachment; filename="plain.xlsx"', 'x.xlsx')).toBe('plain.xlsx')
     expect(filenameFromDisposition('attachment; filename=bare.xlsx', 'x.xlsx')).toBe('bare.xlsx')
     expect(filenameFromDisposition(null, 'x.xlsx')).toBe('x.xlsx')
+  })
+})
+
+describe('Estado CONAF bulk read', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('reads in chunks of 500', async () => {
+    resetApiClientState()
+    const fetchMock = vi.fn(async (_url: string) => jsonResponse({ solicitudes: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const numeros = Array.from({ length: 1001 }, (_, index) => String(index + 1).padStart(6, '0'))
+    const result = await getConafSolicitudes(numeros)
+    expect(result.ok).toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/conaf/solicitudes?numeros=')
   })
 })

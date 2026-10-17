@@ -23,7 +23,9 @@ import {
   type LifecycleRow,
   type ResumenRow,
   type TranselecLifecycle,
+  type ConafSolicitud,
   type TranselecPlazos,
+  getConafSolicitudes,
   getLifecycle,
   getPlazos,
 } from '../api'
@@ -37,6 +39,8 @@ import { activeFilterChips, withoutChip } from '../lib/filterUrl'
 import { lifecycleGroupSegments, lifecycleStepSegments } from '../lib/lifecycle'
 import { indexPlazos, plazoDetail } from '../lib/plazo'
 import { plazoColumn } from '../lib/plazoColumn'
+import { conafColumn, conafNumero } from '../lib/conafColumn'
+import { normalizeSolicitud } from '../lib/conafEstado'
 import { useReads, type FilterController } from '../lib/useFilters'
 import { PENDING_QUEUE_HASH, useRouter } from '../router'
 import { CompositionBar } from '../ui/CompositionBar'
@@ -80,6 +84,29 @@ export function EstadoPage({
     [key],
   )
   const plazoIndex = useMemo(() => indexPlazos(plazos.data), [plazos.data])
+
+  // Stored CONAF results for the rows on screen (never calls CONAF); a
+  // failed read leaves the column at «Sin consultar».
+  const conafNumeros = useMemo(
+    () =>
+      (data?.rows ?? [])
+        .map((row) => normalizeSolicitud(conafNumero(row)))
+        .filter((numero): numero is string => numero !== null),
+    [data],
+  )
+  const conafKey = conafNumeros.join(',')
+  const conaf = useReads<ConafSolicitud[]>(
+    useCallback(
+      () => getConafSolicitudes(conafNumeros),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [conafKey],
+    ),
+    [conafKey],
+  )
+  const conafIndex = useMemo(
+    () => new Map((conaf.data ?? []).map((record) => [record.numero, record])),
+    [conaf.data],
+  )
 
   const [openRow, setOpenRow] = useState<ResumenRow | null>(null)
   const [soloVencidos, setSoloVencidos] = useState(false)
@@ -252,7 +279,7 @@ export function EstadoPage({
               rows={rows}
               selectedRow={openRow?.source_row_number ?? null}
               onOpen={setOpenRow}
-              extraColumns={[plazoColumn(plazoIndex, plazos.loading)]}
+              extraColumns={[plazoColumn(plazoIndex, plazos.loading), conafColumn(conafIndex)]}
               emptyText={soloVencidos ? 'Ningún PMF del alcance superó el plazo.' : undefined}
             />
           </section>

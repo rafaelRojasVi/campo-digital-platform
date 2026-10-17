@@ -16,10 +16,12 @@ vi.mock('../api', async (importOriginal) => {
     getPlazos: vi.fn(),
     getPmfDetail: vi.fn(),
     getAef: vi.fn(),
+    getConafSolicitudes: vi.fn(),
   }
 })
 
-const { getLifecycle, getPending, getPlazos, getPmfDetail, getAef } = await import('../api')
+const { getLifecycle, getPending, getPlazos, getPmfDetail, getAef, getConafSolicitudes } =
+  await import('../api')
 
 const controller: FilterController = {
   filters: EMPTY_FILTERS,
@@ -52,6 +54,8 @@ describe('EstadoPage', () => {
       status: 404,
       error: 'No se encontró el PMF solicitado en la versión activa.',
     })
+    vi.mocked(getConafSolicitudes).mockReset()
+    vi.mocked(getConafSolicitudes).mockResolvedValue({ ok: true, data: [] })
     vi.mocked(getAef).mockReset()
     vi.mocked(getAef).mockResolvedValue({ ok: true, data: { pmfs: [] } as unknown as TranselecAef })
   })
@@ -180,5 +184,19 @@ describe('EstadoPage', () => {
     expect(
       screen.getByRole('button', { name: '¿Qué PMF superaron los 90 días hábiles?' }),
     ).toBeDisabled()
+  })
+})
+
+describe('EstadoPage — Estado CONAF column', () => {
+  it('adds the column and never sends planilla-style numbers', async () => {
+    vi.mocked(getLifecycle).mockResolvedValue({ ok: true, data: makeLifecycle() })
+    vi.mocked(getPlazos).mockResolvedValue({ ok: true, data: makePlazos() })
+    vi.mocked(getConafSolicitudes).mockResolvedValue({ ok: true, data: [] })
+    renderPage()
+    expect(await screen.findByRole('columnheader', { name: 'Estado CONAF' })).toBeInTheDocument()
+    expect((await screen.findAllByText('Sin N.º consultable')).length).toBeGreaterThan(0)
+    for (const [numeros] of vi.mocked(getConafSolicitudes).mock.calls) {
+      expect(numeros.every((numero) => /^[0-9]{6,9}$/.test(numero))).toBe(true)
+    }
   })
 })
