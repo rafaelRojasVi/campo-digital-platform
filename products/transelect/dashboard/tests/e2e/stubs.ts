@@ -383,6 +383,30 @@ export async function stubPlatform(page: Page, options: StubOptions = {}): Promi
   await page.route('**/api/auth/csrf', (route) =>
     json(route, { csrf_token: 'nonce.signature', header_name: 'X-CSRF-Token' }),
   )
+  // Estado CONAF: nothing stored yet (bulk), and a synthetic found solicitud
+  // for the drawer card. Never reaches CONAF.
+  await page.route('**/api/conaf/solicitudes**', (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname.endsWith('/solicitudes')) return json(route, { solicitudes: [] })
+    const numero = url.pathname.split('/').filter(Boolean).pop() ?? '000000'
+    const now = new Date().toISOString()
+    return json(route, {
+      numero,
+      lookup_status: 'found',
+      tipo: 'PLAN DE MANEJO',
+      estado: 'EN EVALUACION',
+      superficie_ha: 1.5,
+      fecha_ingreso: '2026-09-01',
+      fecha_resolucion: null,
+      returned_solicitud: null,
+      checked_at: now,
+      found_at: now,
+      estado_changed_at: null,
+      stale: false,
+      recently_changed: false,
+      conaf_url: `https://oficinavirtual.conaf.cl/consultas/action.php?nsolicitud=${numero}`,
+    })
+  })
 
   const fail = options.readStatus
   const failBody = { detail: options.readDetail ?? 'No hay una versión publicada de Transelec.' }
