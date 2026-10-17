@@ -81,6 +81,22 @@ Container packaging: **built and locally verified** (this document).
   `200`.
 - **FACT (2026-10-15):** `/ready` answers `GET` with `200` and `HEAD` with
   `405`. An uptime monitor must use `GET`.
+- **FACT (2026-10-15 17:59 UTC):** `railway redeploy --from-source` built
+  `main` at `25b4014` (PR #98: Rodales straight-line cut on every valid
+  polygon, polygon opacity, inline help; also PRs #97 and #99) as
+  deployment `94172cf4` (`SUCCESS`; no migration). The served Rodales
+  bundle carries the opacity control.
+- **FACT (2026-10-15 20:44 UTC):** `main` at `a67ba20` (PR #100: security
+  events and the operator's Consola, see
+  [Security events and the Consola](#security-events-and-the-consola)) as
+  deployment `bb87e433` (`SUCCESS`). The pre-deploy log shows
+  `Running upgrade 0012 -> 0013`. `/ready` answers `200`; API routes answer
+  `401` signed out. No backup was taken just before it (the migration only
+  adds a table).
+- **FACT (2026-10-15 21:11 UTC):** `main` at `de0c565` (PR #101: client IP
+  from `X-Real-IP`, Consola health section) as deployment `7c11215c`
+  (`SUCCESS`; no migration). The Consola shows this deployment and the
+  client IP check below.
 - **FACT (2026-10-05 15:19 UTC, until `523d1f19`):** production served
   `main` at `b478a73` (PR #91:
   the web edits pill, log and history), Railway deployment `20c79b8c`. It
@@ -338,10 +354,14 @@ account is needed and nothing new is exposed). Spec:
     address. A caller-supplied `X-Forwarded-For` was not recorded.
   - **DECISION:** follow Railway staff guidance that the edge overwrites
     `X-Real-IP` and `X-Forwarded-For` and puts the client first.
-  - **OPEN QUESTION:** confirm after deploying this rule that the Consola
-    shows the `srcIp` value and never a spoofed header. Railway does not
-    document its proxy range; if peers leave `100.64.0.0/10`, the Consola
-    shows edge addresses again.
+  - **RESULT (2026-10-15 21:13 UTC, deploy 7c11215c):** three signed-out
+    requests from the operator's machine were recorded with the address
+    Railway's HTTP log shows as `srcIp`. Two of them carried spoofed
+    headers (`X-Forwarded-For: 203.0.113.9`, `X-Real-IP: 198.51.100.7`);
+    neither spoofed address was recorded.
+  - **LIMITATION:** Railway does not document its proxy range. If peers
+    leave `100.64.0.0/10`, the Consola shows edge addresses again; recheck
+    against `srcIp` if the IPs look like Railway's.
 - **LIMITATION:** in-memory aggregation assumes one replica (the volume
   already requires it).
 - **LIMITATION:** IP addresses are personal data; they are kept 90 days and
