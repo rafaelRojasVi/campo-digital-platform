@@ -199,7 +199,7 @@ function renderUsage(rows, generatedAt) {
     box.append(el("div", { class: "usage-row" }, el("h3", {}, `${PRODUCTS[product] || product} `, el("span", { class: "chip" }, cats)), bars));
   }
 }
-function renderHealth(deployments, error) {
+function renderHealth(deployments, error, conaf) {
   const box = $("health"); box.replaceChildren();
   const d = deployments[0];
   if (error) box.append(el("div", { class: "empty" }, error));
@@ -207,6 +207,13 @@ function renderHealth(deployments, error) {
     const tone = d.status === "SUCCESS" ? "ok" : (d.status === "FAILED" || d.status === "CRASHED") ? "critical" : "warning";
     box.append(el("span", { class: `status ${tone}` }, DEPLOY_STATUS[d.status] || d.status), el("span", { translate: "no" }, `Deploy ${d.id} · commit ${d.commit} · ${when(d.created_at)}`));
   } else if (!error) box.append(el("span", { class: "empty" }, "Sin datos de Railway"));
+  if (conaf) {
+    const run = conaf.last_run;
+    const text = run && run.finished_at
+      ? `CONAF: última consulta nocturna ${when(run.finished_at)} · ${run.checked} revisadas · ${run.changed} cambios`
+      : "CONAF: sin consultas nocturnas todavía";
+    box.append(el("span", { class: run && run.stopped_reason === "conaf_unavailable" ? "status warning" : "conaf-line" }, text));
+  }
   box.append(el("a", { href: "https://origenlab.sentry.io/issues/", target: "_blank", rel: "noreferrer" }, "Errores en Sentry"),
              el("a", { href: "https://railway.com/dashboard", target: "_blank", rel: "noreferrer" }, "Railway"));
 }
@@ -234,7 +241,7 @@ async function load(refresh) {
     const r = snap.report;
     if (r) { renderAlerts(r.alerts); renderActivity(r.activity); renderIps(r.suspicious_ips); renderUsage(r.usage, r.generated_at); }
     else renderUnavailable();
-    renderHealth(snap.deployments || [], snap.deployments_error); setStatus(r ? r.alerts : [], snap.error || (r ? null : "Sin datos"));
+    renderHealth(snap.deployments || [], snap.deployments_error, r ? r.conaf : null); setStatus(r ? r.alerts : [], snap.error || (r ? null : "Sin datos"));
     $("updated").textContent = `Actualizado ${when(snap.fetched_at)}`;
   } catch (e) {
     $("banner").hidden = false; $("banner").className = "banner error"; $("banner").textContent = "La Consola local no respondió. ¿Sigue abierta la terminal?";
