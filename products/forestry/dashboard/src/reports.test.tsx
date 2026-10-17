@@ -84,6 +84,7 @@ function listedReport(overrides: Partial<import('./reportsApi.ts').Report> = {})
     feature_count: 2,
     managed_feature_count: 1,
     managed_area_ha: 4.05,
+    conaf_solicitud: null,
     ...overrides,
   }
 }

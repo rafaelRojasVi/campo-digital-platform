@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest'
+import type { ConafSolicitud } from '../reportsApi'
+import { conafMessage, conafTone, freshness, normalizeSolicitud, TONE_LABELS } from './conafEstado'
+
+const NOW = new Date('2026-10-16T15:00:00Z')
+
+function record(overrides: Partial<ConafSolicitud> = {}): ConafSolicitud {
+  return {
+    numero: '090663',
+    lookup_status: 'found',
+    tipo: 'PLAN DE MANEJO',
+    estado: 'EN EVALUACION',
+    superficie_ha: 3,
+    fecha_ingreso: '2026-09-01',
+    fecha_resolucion: null,
+    returned_solicitud: null,
+    checked_at: '2026-10-16T12:00:00Z',
+    found_at: '2026-10-16T12:00:00Z',
+    estado_changed_at: null,
+    stale: false,
+    recently_changed: false,
+    conaf_url: 'https://oficinavirtual.conaf.cl/consultas/action.php?nsolicitud=090663',
+    ...overrides,
+  }
+}
+
+describe('conafEstado', () => {
+  it('normalizes like the server', () => {
+    expect(normalizeSolicitud(' 90663 ')).toBe('090663')
+    expect(normalizeSolicitud('123456789')).toBe('123456789')
+    expect(normalizeSolicitud('12/34-5/26')).toBeNull()
+    expect(normalizeSolicitud('1234567890')).toBeNull()
+    expect(normalizeSolicitud(null)).toBeNull()
+  })
+
+  it.each([
+    ['P.M. APROBADA', 'ok'],
+    ['APROBADA', 'ok'],
+    ['P.M. APROBADA NO VIGENTE', 'muted'],
+    ['EN EVALUACION', 'progress'],
+    ['EN TRAMITE', 'progress'],
+    ['RECHAZADA', 'danger'],
+    ['DENEGADA', 'danger'],
+    ['DESISTIDA', 'danger'],
+    ['ALGO NUEVO', 'neutral'],
+  ])('tone of %s is %s', (estado, tone) => {
+    expect(conafTone(record({ estado }))).toBe(tone)
+  })
+
+  it('labels every tone with text, not colour alone', () => {
+    expect(TONE_LABELS).toEqual({
+      ok: 'Aprobada',
+      progress: 'En evaluación',
+      danger: 'Rechazada',
+      muted: 'No vigente',
+      neutral: 'Otro estado',
+    })
+  })
+
+  it('says how fresh the data is', () => {
+    expect(freshness(record(), NOW)).toBe('Consultado hace 3 h')
+    expect(freshness(record({ checked_at: '2026-10-16T14:58:00Z' }), NOW)).toBe('Consultado hace 2 min')
+    expect(freshness(record({ checked_at: '2026-10-16T14:59:40Z' }), NOW)).toBe('Consultado hace un momento')
+    expect(freshness(record({ checked_at: '2026-10-13T15:00:00Z' }), NOW)).toBe('Consultado hace 3 días')
+  })
+
+  it('explains each non-found result', () => {
+    expect(conafMessage(record({ lookup_status: 'not_found', estado: null }))).toBe(
+      'CONAF no encuentra esa solicitud.',
+    )
+    expect(conafMessage(record({ lookup_status: 'mismatch', returned_solicitud: '069025' }))).toBe(
+      'CONAF respondió otra solicitud (069025); revise el número.',
+    )
+    expect(conafMessage(record({ lookup_status: 'unavailable', found_at: null, estado: null }))).toBe(
+      'No se pudo consultar CONAF ahora.',
+    )
+    expect(conafMessage(record({ lookup_status: 'unavailable' }))).toBe(
+      'No se pudo actualizar; se muestra el último dato.',
+    )
+    expect(conafMessage(record())).toBeNull()
+  })
+})

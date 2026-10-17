@@ -3,7 +3,7 @@
  * /api/forestry/reports (stage 1 API, products/forestry/docs/management-reports-v1.md).
  * Geometry is EPSG:32718 metres, exactly as served.
  */
-import { getJson, mutate } from './api.ts'
+import { getConafJson, getJson, mutate, mutateAbsolute } from './api.ts'
 import type { MultiPolygonGeometry } from './types.ts'
 
 export type ReportType = 'cosecha' | 'manejo' | 'reforestacion' | 'plantacion' | 'otro'
@@ -66,6 +66,25 @@ export interface Report {
   feature_count: number
   managed_feature_count: number
   managed_area_ha: number
+  conaf_solicitud: string | null
+}
+
+/** One CONAF solicitud as the platform last read it (Estado CONAF). */
+export interface ConafSolicitud {
+  numero: string
+  lookup_status: 'found' | 'not_found' | 'mismatch' | 'unavailable'
+  tipo: string | null
+  estado: string | null
+  superficie_ha: number | null
+  fecha_ingreso: string | null
+  fecha_resolucion: string | null
+  returned_solicitud: string | null
+  checked_at: string
+  found_at: string | null
+  estado_changed_at: string | null
+  stale: boolean
+  recently_changed: boolean
+  conaf_url: string
 }
 
 export interface ReportList {
@@ -167,7 +186,12 @@ export function saveReportFeatures(
 export function updateReport(
   reportId: number,
   revision: number,
-  changes: { name?: string; report_type?: ReportType; report_month?: string },
+  changes: {
+    name?: string
+    report_type?: ReportType
+    report_month?: string
+    conaf_solicitud?: string | null
+  },
 ): Promise<StatusResult> {
   return mutate<StatusResult>(`/reports/${reportId}`, {
     method: 'PATCH',
@@ -199,4 +223,27 @@ export function deleteReport(reportId: number): Promise<void> {
 
 export function exportUrl(reportId: number, format: ExportFormat, scope: ExportScope): string {
   return `/api/forestry/reports/${reportId}/export?format=${format}&scope=${scope}`
+}
+
+// Estado CONAF (shared routes, /api/conaf).
+
+export function fetchConafSolicitud(numero: string): Promise<ConafSolicitud> {
+  return getConafJson<ConafSolicitud>(`/api/conaf/solicitudes/${encodeURIComponent(numero)}`)
+}
+
+export async function refreshConafSolicitud(numero: string): Promise<ConafSolicitud> {
+  return mutateAbsolute<ConafSolicitud>(`/api/conaf/solicitudes/${encodeURIComponent(numero)}/refresh`)
+}
+
+export async function fetchConafSolicitudes(numeros: string[]): Promise<ConafSolicitud[]> {
+  const unique = [...new Set(numeros)]
+  const all: ConafSolicitud[] = []
+  for (let start = 0; start < unique.length; start += 500) {
+    const chunk = unique.slice(start, start + 500).join(',')
+    const body = await getConafJson<{ solicitudes: ConafSolicitud[] }>(
+      `/api/conaf/solicitudes?numeros=${encodeURIComponent(chunk)}`,
+    )
+    all.push(...body.solicitudes)
+  }
+  return all
 }
