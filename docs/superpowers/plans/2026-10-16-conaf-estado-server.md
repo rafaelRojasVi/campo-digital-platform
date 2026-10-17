@@ -226,7 +226,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name="pk_conaf_cambio"),
         schema="platform",
     )
-    op.create_index("ix_conaf_cambio_observed_at", "conaf_cambio", ["observed_at"], schema="platform")
+    op.create_index(
+        "ix_conaf_cambio_observed_at", "conaf_cambio", ["observed_at"], schema="platform"
+    )
     op.create_table(
         "conaf_run",
         sa.Column("id", sa.BigInteger(), sa.Identity(), nullable=False),
@@ -247,7 +249,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name="pk_conaf_run"),
         schema="platform",
     )
-    op.add_column("report", sa.Column("conaf_solicitud", sa.Text(), nullable=True), schema="forestry")
+    op.add_column(
+        "report", sa.Column("conaf_solicitud", sa.Text(), nullable=True), schema="forestry"
+    )
     op.create_check_constraint(
         "ck_report_conaf_solicitud",
         "report",
@@ -307,9 +311,7 @@ HEADER = (
 
 
 def page(*rows: tuple[str, ...]) -> bytes:
-    body = "".join(
-        "<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "\n</tr>" for row in rows
-    )
+    body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "\n</tr>" for row in rows)
     html = (
         "<html><body><h3>Consulta estado de solicitudes</h3>"
         f"<table class='tabla'>{HEADER}{body}</table>"
@@ -318,8 +320,16 @@ def page(*rows: tuple[str, ...]) -> bytes:
     return html.encode("iso-8859-1")
 
 
-FOUND = page(("090663", "PLAN DE MANEJO  PLAN DE MANEJO", "3", "16/04/1996",
-              "P.M. APROBADA NO VIGENTE", "11/06/1996"))
+FOUND = page(
+    (
+        "090663",
+        "PLAN DE MANEJO  PLAN DE MANEJO",
+        "3",
+        "16/04/1996",
+        "P.M. APROBADA NO VIGENTE",
+        "11/06/1996",
+    )
+)
 NOT_FOUND = (
     "<html><body><p>ATENCI\xd3N</p><p>La solicitud indicada no existe.</p></body></html>"
 ).encode("iso-8859-1")
@@ -784,7 +794,13 @@ def test_collect_known_numbers_normalizes_and_skips_planilla_style(
                 "base_snapshot_id, created_by_app_user_id, conaf_solicitud) "
                 "VALUES (:name, 'cosecha', '2027-01', :status, :snapshot, :user, :numero)"
             ),
-            {"name": name, "status": status, "snapshot": snapshot_id, "user": user_id, "numero": numero},
+            {
+                "name": name,
+                "status": status,
+                "snapshot": snapshot_id,
+                "user": user_id,
+                "numero": numero,
+            },
         )
     assert collect_known_numbers(integration_connection) == ["123456"]
 
@@ -986,7 +1002,9 @@ def is_stale(record: ConafRecord, now: datetime) -> bool:
 
 
 def recently_changed(record: ConafRecord, now: datetime) -> bool:
-    return record.estado_changed_at is not None and now - record.estado_changed_at <= CHANGED_BADGE_FOR
+    return (
+        record.estado_changed_at is not None and now - record.estado_changed_at <= CHANGED_BADGE_FOR
+    )
 
 
 def collect_known_numbers(connection: Connection) -> list[str]:
@@ -1027,7 +1045,9 @@ def due_numbers(connection: Connection, numeros: Collection[str], *, now: dateti
 def start_run(connection: Connection, *, now: datetime, due: int) -> int:
     return int(
         connection.execute(
-            text("INSERT INTO platform.conaf_run (started_at, due) VALUES (:now, :due) RETURNING id"),
+            text(
+                "INSERT INTO platform.conaf_run (started_at, due) VALUES (:now, :due) RETURNING id"
+            ),
             {"now": now, "due": due},
         ).scalar_one()
     )
@@ -1051,7 +1071,12 @@ def finish_run(
             WHERE id = :id
             """
         ),
-        {"now": now, "id": run_id, "stopped": stopped_reason, **{k: int(v) for k, v in counts.items()}},
+        {
+            "now": now,
+            "id": run_id,
+            "stopped": stopped_reason,
+            **{k: int(v) for k, v in counts.items()},
+        },
     )
 
 
@@ -1149,9 +1174,14 @@ def test_refresh_checks_due_numbers_and_records_a_run(integration_engine: Engine
     with integration_engine.begin() as connection:
         save_lookup(connection, found("111111", "EN EVALUACION"), now=NOW - timedelta(days=2))
         save_lookup(connection, found("222222", "EN EVALUACION"), now=NOW - timedelta(hours=1))
-    conaf = FakeConaf({"111111": found("111111", "APROBADA"), "333333": found("333333", "APROBADA")})
+    conaf = FakeConaf(
+        {"111111": found("111111", "APROBADA"), "333333": found("333333", "APROBADA")}
+    )
     summary = refresh_due(
-        integration_engine, conaf, now=NOW, clock=lambda: NOW,
+        integration_engine,
+        conaf,
+        now=NOW,
+        clock=lambda: NOW,
         collect=lambda _connection: ["111111", "222222", "333333"],
     )
     assert conaf.asked == ["111111", "333333"]  # 222222 was checked an hour ago
@@ -1174,7 +1204,9 @@ def test_refresh_stops_after_five_unavailable_and_keeps_data(integration_engine:
     assert summary.stopped_reason == "conaf_unavailable"
     with integration_engine.connect() as connection:
         kept = read_record(connection, "000001")
-        assert kept is not None and kept.estado == "APROBADA" and kept.lookup_status == "unavailable"
+        assert (
+            kept is not None and kept.estado == "APROBADA" and kept.lookup_status == "unavailable"
+        )
 
 
 def test_refresh_respects_the_limit(integration_engine: Engine) -> None:
@@ -1286,7 +1318,13 @@ def refresh_due(
         summary.stopped_reason = "limit"
 
     with engine.begin() as connection:
-        finish_run(connection, run_id, now=clock(), counts=summary.counts, stopped_reason=summary.stopped_reason)
+        finish_run(
+            connection,
+            run_id,
+            now=clock(),
+            counts=summary.counts,
+            stopped_reason=summary.stopped_reason,
+        )
     logger.info("CONAF refresh: %s (stopped: %s)", summary.counts, summary.stopped_reason)
     return summary
 
@@ -1322,13 +1360,11 @@ async def run_conaf_refresh(
 In `apps/api/app/main.py`: import `import os` (if absent), `from app.conaf import ConafClient`, `from app.conaf_refresh import refresh_enabled, run_conaf_refresh`; add a module-level `conaf_client = ConafClient()`; inside `_lifespan` after the `maintenance` task:
 
 ```python
-    conaf_refresh = (
-        asyncio.create_task(
-            run_conaf_refresh(get_database_engine, conaf_client, stop=stop_maintenance)
-        )
-        if refresh_enabled(APP_ENV, os.environ)
-        else None
-    )
+conaf_refresh = (
+    asyncio.create_task(run_conaf_refresh(get_database_engine, conaf_client, stop=stop_maintenance))
+    if refresh_enabled(APP_ENV, os.environ)
+    else None
+)
 ```
 
 and in `finally`, after `await maintenance`: `if conaf_refresh is not None: await conaf_refresh`.
@@ -1412,11 +1448,16 @@ def _clean(integration_engine: Engine) -> Generator[None, None, None]:
             connection.execute(text(f"DELETE FROM {table}"))
 
 
-def sign_in(client: TestClient, engine: Engine, name: str, grants: tuple[tuple[str, Role], ...]) -> None:
+def sign_in(
+    client: TestClient, engine: Engine, name: str, grants: tuple[tuple[str, Role], ...]
+) -> None:
     with engine.begin() as connection:
         user = resolve_or_create_app_user(
-            connection, identity_kind="google", identity_key=f"sub-{name}",
-            display_name=name, email=f"{name}@campodigital.cl",
+            connection,
+            identity_kind="google",
+            identity_key=f"sub-{name}",
+            display_name=name,
+            email=f"{name}@campodigital.cl",
         )
         for product, role in grants:
             grant_product_role(connection, app_user_id=user.id, product_key=product, role=role)
@@ -1574,7 +1615,9 @@ def require_conaf_viewer(
     return user
 
 
-router = APIRouter(prefix="/api/conaf", tags=["conaf"], dependencies=[Depends(require_conaf_viewer)])
+router = APIRouter(
+    prefix="/api/conaf", tags=["conaf"], dependencies=[Depends(require_conaf_viewer)]
+)
 
 DatabaseEngine = Annotated[Engine, Depends(get_database_engine)]
 Client = Annotated[Lookup, Depends(get_conaf_client)]
@@ -1723,12 +1766,16 @@ def test_report_conaf_number_can_be_set_and_cleared(
         headers=_ORIGIN,
     )
     assert cleared.status_code == 200
-    assert client.get(f"/api/forestry/reports/{report_id}").json()["report"]["conaf_solicitud"] is None
+    assert (
+        client.get(f"/api/forestry/reports/{report_id}").json()["report"]["conaf_solicitud"] is None
+    )
     renamed = client.patch(
         f"/api/forestry/reports/{report_id}", json={"revision": 3, "name": "Otro"}, headers=_ORIGIN
     )
     assert renamed.status_code == 200
-    assert client.get(f"/api/forestry/reports/{report_id}").json()["report"]["conaf_solicitud"] is None
+    assert (
+        client.get(f"/api/forestry/reports/{report_id}").json()["report"]["conaf_solicitud"] is None
+    )
 ```
 
 - [ ] **Step 2: Implement**
@@ -1784,13 +1831,17 @@ def test_conaf_block_and_alerts(integration_connection: Connection) -> None:
 
 ```python
 def _conaf(connection: Connection, now: datetime) -> dict[str, Any]:
-    last = connection.execute(
-        text(
-            "SELECT started_at, finished_at, due, checked, found, not_found, mismatch, "
-            "unavailable, changed, stopped_reason FROM platform.conaf_run "
-            "ORDER BY started_at DESC, id DESC LIMIT 1"
+    last = (
+        connection.execute(
+            text(
+                "SELECT started_at, finished_at, due, checked, found, not_found, mismatch, "
+                "unavailable, changed, stopped_reason FROM platform.conaf_run "
+                "ORDER BY started_at DESC, id DESC LIMIT 1"
+            )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     changes = connection.execute(
         text("SELECT count(*) FROM platform.conaf_cambio WHERE observed_at >= :since"),
         {"since": now - timedelta(hours=24)},
@@ -1814,15 +1865,29 @@ def _conaf(connection: Connection, now: datetime) -> dict[str, Any]:
 In `build_report`: `conaf = _conaf(connection, now)`; append to the alerts list (after `_alerts(...)`):
 
 ```python
-    alerts = _alerts(connection, day_ago)
-    last_run = conaf["last_run"]
-    if last_run is not None and last_run["stopped_reason"] == "conaf_unavailable":
-        alerts.append({"code": "conaf_down", "severity": "warning", "count": 1,
-                       "message": "La consulta nocturna a CONAF se detuvo: CONAF no respondía"})
-    finished = None if last_run is None else last_run["finished_at"]
-    if conaf["known_numbers"] and (finished is None or finished < (now - timedelta(hours=48)).isoformat()):
-        alerts.append({"code": "conaf_no_run", "severity": "warning", "count": 1,
-                       "message": "No hay consulta nocturna a CONAF terminada en 48 h"})
+alerts = _alerts(connection, day_ago)
+last_run = conaf["last_run"]
+if last_run is not None and last_run["stopped_reason"] == "conaf_unavailable":
+    alerts.append(
+        {
+            "code": "conaf_down",
+            "severity": "warning",
+            "count": 1,
+            "message": "La consulta nocturna a CONAF se detuvo: CONAF no respondía",
+        }
+    )
+finished = None if last_run is None else last_run["finished_at"]
+if conaf["known_numbers"] and (
+    finished is None or finished < (now - timedelta(hours=48)).isoformat()
+):
+    alerts.append(
+        {
+            "code": "conaf_no_run",
+            "severity": "warning",
+            "count": 1,
+            "message": "No hay consulta nocturna a CONAF terminada en 48 h",
+        }
+    )
 ```
 
 and return `"alerts": alerts, "conaf": conaf`. (Import `timedelta` if absent.)

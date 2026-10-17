@@ -21,6 +21,7 @@ Product-specific implementation truth remains inside each product boundary. Plat
 - [Source ingestion](source-ingestion.md)
 - [Client data organization](client-data-organization.md)
 - [Security model](security-model.md)
+- [Estado CONAF](conaf-estado.md) — live CONAF solicitud status for Transelec and Rodales
 - [Entra ID app registration — handoff for tenant admin](entra-app-registration-handoff.md)
 - [Platform roadmap](roadmap.md)
 
