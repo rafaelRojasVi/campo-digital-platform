@@ -34,8 +34,8 @@ export function normalizeSolicitud(raw: string | null | undefined): string | nul
 
 export function conafTone(record: ConafSolicitud): ConafTone {
   const estado = (record.estado ?? '').toUpperCase()
-  if (estado.includes('NO VIGENTE')) return 'muted'
-  if (/RECHAZ|DENEG|DESIST|CADUC|DESAPROB|\bNO APROB/.test(estado)) return 'danger'
+  if (/NO VIGENTE|DESIST|CADUC/.test(estado)) return 'muted'
+  if (/RECHAZ|DENEG|DESAPROB|\bNO APROB/.test(estado)) return 'danger'
   if (estado.includes('APROB')) return 'ok'
   if (/EVALUAC|TRAMIT|INGRES|REVISI|RECURSO/.test(estado)) return 'progress'
   return 'neutral'

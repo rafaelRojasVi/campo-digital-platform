@@ -4,6 +4,7 @@ import {
   createReport,
   deleteReport,
   exportUrl,
+  fetchConafSolicitudes,
   fetchReports,
   saveReportFeatures,
   transitionReport,
@@ -107,5 +108,14 @@ describe('reports API', () => {
     expect(exportUrl(7, 'csv', 'marked')).toBe(
       '/api/forestry/reports/7/export?format=csv&scope=marked',
     )
+  })
+
+  it('reads CONAF in chunks of 500 and keeps the chunks that answered', async () => {
+    const numeros = Array.from({ length: 600 }, (_, i) => String(100000 + i))
+    fetchMock.mockResolvedValueOnce(json({ solicitudes: [{ numero: '100000' }] }))
+    fetchMock.mockResolvedValueOnce(json({ detail: 'boom' }, 500))
+    const records = await fetchConafSolicitudes(numeros)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(records.map((record) => record.numero)).toEqual(['100000'])
   })
 })

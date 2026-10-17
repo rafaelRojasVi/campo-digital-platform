@@ -3,6 +3,17 @@
 Nota para Campo Digital, Javier y Marianne. El detalle técnico, en inglés,
 está en [Estado CONAF](../../../../docs/platform/conaf-estado.md).
 
+## En pausa desde el 17 de octubre
+
+La primera consulta en producción no encontró ninguna solicitud. La
+mayoría de los «N Ingreso» de la planilla tienen la forma `123/456-7/25`
+(con barras) y otros son números de 8 dígitos que empiezan con 10; ninguno
+corresponde al N.º de solicitud de 6 dígitos que usa la consulta pública
+de CONAF. Para no mostrar avisos «No existe en CONAF» que no corresponden,
+la columna y la sección del detalle están **ocultas** hasta saber dónde
+está el N.º de solicitud de cada PMF. Lo que sigue describe cómo se verá
+cuando se active.
+
 ## Qué cambia
 
 Hasta ahora el panel solo enlazaba a la consulta pública de CONAF. Ahora la

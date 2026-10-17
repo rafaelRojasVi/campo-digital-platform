@@ -49,7 +49,7 @@ describe('conafEstado', () => {
     ['EN TRAMITE', 'progress'],
     ['RECHAZADA', 'danger'],
     ['DENEGADA', 'danger'],
-    ['DESISTIDA', 'danger'],
+    ['DESISTIDA', 'muted'],
     ['ALGO NUEVO', 'neutral'],
   ])('tone of %s is %s', (estado, tone) => {
     expect(conafTone(record({ estado }))).toBe(tone)
@@ -114,5 +114,11 @@ describe('conafEstado', () => {
     expect(refreshNotice(old, old, NOW)).toBe('CONAF está ocupado; se muestra el último dato.')
     const recent = record({ checked_at: '2026-10-16T14:59:30Z' })
     expect(refreshNotice(recent, recent, NOW)).toBe('CONAF se consultó hace un momento; se muestra ese resultado.')
+  })
+
+  it('reads withdrawn or expired solicitudes as no longer in force, not rejected', () => {
+    expect(conafTone(record({ estado: 'DESISTIDA' }))).toBe('muted')
+    expect(conafTone(record({ estado: 'CADUCADA' }))).toBe('muted')
+    expect(conafTone(record({ estado: 'RECHAZADA' }))).toBe('danger')
   })
 })

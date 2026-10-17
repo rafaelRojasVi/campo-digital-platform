@@ -188,15 +188,14 @@ describe('EstadoPage', () => {
 })
 
 describe('EstadoPage — Estado CONAF column', () => {
-  it('adds the column and never sends planilla-style numbers', async () => {
+  // Hidden until Campo Digital confirms which planilla number is CONAF's
+  // solicitud (2026-10-17: no N Ingreso shape matched CONAF's consulta).
+  it('is hidden and never reads CONAF results', async () => {
     vi.mocked(getLifecycle).mockResolvedValue({ ok: true, data: makeLifecycle() })
     vi.mocked(getPlazos).mockResolvedValue({ ok: true, data: makePlazos() })
-    vi.mocked(getConafSolicitudes).mockResolvedValue({ ok: true, data: [] })
     renderPage()
-    expect(await screen.findByRole('columnheader', { name: 'Estado CONAF' })).toBeInTheDocument()
-    expect((await screen.findAllByText('Sin N.º consultable')).length).toBeGreaterThan(0)
-    for (const [numeros] of vi.mocked(getConafSolicitudes).mock.calls) {
-      expect(numeros.every((numero) => /^[0-9]{6,9}$/.test(numero))).toBe(true)
-    }
+    expect(await screen.findByRole('columnheader', { name: 'Plazo CONAF' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Estado CONAF' })).not.toBeInTheDocument()
+    expect(getConafSolicitudes).not.toHaveBeenCalled()
   })
 })

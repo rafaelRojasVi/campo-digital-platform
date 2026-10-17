@@ -618,6 +618,24 @@ describe('Estado CONAF in Rodales', () => {
     expect(reportsApi.fetchConafSolicitudes).toHaveBeenCalledWith(['090663'])
   })
 
+  it('flags a number CONAF no longer finds, even over an older reading', async () => {
+    reportsApi.fetchReports.mockResolvedValue({
+      reports: [
+        listedReport({ report_id: 1, name: 'Uno', conaf_solicitud: '090663' }),
+        listedReport({ report_id: 2, name: 'Dos', conaf_solicitud: '090664' }),
+      ],
+      pending_review_count: 0,
+    })
+    reportsApi.fetchConafSolicitudes.mockResolvedValue([
+      { ...conafFound(), lookup_status: 'not_found' },
+      { ...conafFound(), numero: '090664', lookup_status: 'mismatch', returned_solicitud: '069025' },
+    ])
+    render(<RealInformesPage role="viewer" />)
+    expect(await screen.findByText('No existe en CONAF')).toBeInTheDocument()
+    expect(screen.getByText('Revisar N.º')).toBeInTheDocument()
+    expect(screen.queryByText('En evaluación')).not.toBeInTheDocument()
+  })
+
   it('keeps the CONAF section below the report work', async () => {
     reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
     render(<RealEditor role="operator" reportId={7} />)

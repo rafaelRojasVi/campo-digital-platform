@@ -39,7 +39,7 @@ import { activeFilterChips, withoutChip } from '../lib/filterUrl'
 import { lifecycleGroupSegments, lifecycleStepSegments } from '../lib/lifecycle'
 import { indexPlazos, plazoDetail } from '../lib/plazo'
 import { plazoColumn } from '../lib/plazoColumn'
-import { conafColumn, conafNumero } from '../lib/conafColumn'
+import { CONAF_ESTADO_ENABLED, conafColumn, conafNumero } from '../lib/conafColumn'
 import { normalizeSolicitud } from '../lib/conafEstado'
 import { useReads, type FilterController } from '../lib/useFilters'
 import { PENDING_QUEUE_HASH, useRouter } from '../router'
@@ -89,7 +89,7 @@ export function EstadoPage({
   // failed read leaves the column at «Sin consultar».
   const conafNumeros = useMemo(
     () =>
-      (data?.rows ?? [])
+      (CONAF_ESTADO_ENABLED ? (data?.rows ?? []) : [])
         .map((row) => normalizeSolicitud(conafNumero(row)))
         .filter((numero): numero is string => numero !== null),
     [data],
@@ -97,7 +97,10 @@ export function EstadoPage({
   const conafKey = conafNumeros.join(',')
   const conaf = useReads<ConafSolicitud[]>(
     useCallback(
-      () => getConafSolicitudes(conafNumeros),
+      () =>
+        conafNumeros.length === 0
+          ? Promise.resolve({ ok: true as const, data: [] as ConafSolicitud[] })
+          : getConafSolicitudes(conafNumeros),
       // eslint-disable-next-line react-hooks/exhaustive-deps
       [conafKey],
     ),
@@ -279,7 +282,10 @@ export function EstadoPage({
               rows={rows}
               selectedRow={openRow?.source_row_number ?? null}
               onOpen={setOpenRow}
-              extraColumns={[plazoColumn(plazoIndex, plazos.loading), conafColumn(conafIndex)]}
+              extraColumns={[
+                plazoColumn(plazoIndex, plazos.loading),
+                ...(CONAF_ESTADO_ENABLED ? [conafColumn(conafIndex)] : []),
+              ]}
               emptyText={soloVencidos ? 'Ningún PMF del alcance superó el plazo.' : undefined}
             />
           </section>
