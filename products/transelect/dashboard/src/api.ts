@@ -304,6 +304,24 @@ export type PlazoEstado =
 export type PlazoCruce = 'coincide' | 'difiere' | 'sin_dato' | 'sin_calculo'
 
 /** One PMF's CONAF term. Dates are ISO `YYYY-MM-DD`; days are business days. */
+/** One CONAF solicitud as the platform last read it (Estado CONAF). */
+export interface ConafSolicitud {
+  numero: string
+  lookup_status: 'found' | 'not_found' | 'mismatch' | 'unavailable'
+  tipo: string | null
+  estado: string | null
+  superficie_ha: number | null
+  fecha_ingreso: string | null
+  fecha_resolucion: string | null
+  returned_solicitud: string | null
+  checked_at: string
+  found_at: string | null
+  estado_changed_at: string | null
+  stale: boolean
+  recently_changed: boolean
+  conaf_url: string
+}
+
 export interface PlazoPmf {
   pmf: string
   /** The PMF's first row in the filtered scope (the Estado table's row). */
@@ -939,6 +957,37 @@ export function getLifecycle(filters: TranselecFilterState): Promise<ApiResult<T
 /** `GET /transelec/plazos` — CONAF's 90 business days per PMF. */
 export function getPlazos(filters: TranselecFilterState): Promise<ApiResult<TranselecPlazos>> {
   return request<TranselecPlazos>(withParams('/api/transelec/plazos', filterParams(filters)))
+}
+
+/** `GET /conaf/solicitudes/{n}` — refreshed from CONAF when the stored result is old. */
+export function getConafSolicitud(numero: string): Promise<ApiResult<ConafSolicitud>> {
+  return request<ConafSolicitud>(`/api/conaf/solicitudes/${encodeURIComponent(numero)}`)
+}
+
+/** `POST /conaf/solicitudes/{n}/refresh` — «Actualizar desde CONAF». */
+export function refreshConafSolicitud(numero: string): Promise<ApiResult<ConafSolicitud>> {
+  return request<ConafSolicitud>(`/api/conaf/solicitudes/${encodeURIComponent(numero)}/refresh`, {
+    method: 'POST',
+  })
+}
+
+const CONAF_BULK_LIMIT = 500
+
+/** Stored results for many numbers (never calls CONAF), in chunks of 500. */
+export async function getConafSolicitudes(
+  numeros: readonly string[],
+): Promise<ApiResult<ConafSolicitud[]>> {
+  const unique = [...new Set(numeros)]
+  const all: ConafSolicitud[] = []
+  for (let start = 0; start < unique.length; start += CONAF_BULK_LIMIT) {
+    const chunk = unique.slice(start, start + CONAF_BULK_LIMIT)
+    const result = await request<{ solicitudes: ConafSolicitud[] }>(
+      withParams('/api/conaf/solicitudes', new URLSearchParams({ numeros: chunk.join(',') })),
+    )
+    if (!result.ok) return result
+    all.push(...result.data.solicitudes)
+  }
+  return { ok: true, data: all }
 }
 
 export function getOwnerStatus(
