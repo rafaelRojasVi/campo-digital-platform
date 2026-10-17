@@ -41,6 +41,7 @@ function detail(): ReportDetail {
       feature_count: 1,
       managed_feature_count: 0,
       managed_area_ha: 0,
+      conaf_solicitud: null,
     },
     features: [
       {

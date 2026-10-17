@@ -87,6 +87,68 @@ def _alerts(connection: Connection, since: datetime) -> list[dict[str, Any]]:
     ]
 
 
+def _conaf(connection: Connection, now: datetime) -> dict[str, Any]:
+    """The nightly CONAF refresh (Estado CONAF): last run, changes, stale numbers."""
+
+    last = (
+        connection.execute(
+            text(
+                "SELECT started_at, finished_at, due, checked, found, not_found, mismatch, "
+                "unavailable, changed, stopped_reason FROM platform.conaf_run "
+                "ORDER BY started_at DESC, id DESC LIMIT 1"
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    changes = connection.execute(
+        text("SELECT count(*) FROM platform.conaf_cambio WHERE observed_at >= :since"),
+        {"since": now - timedelta(hours=24)},
+    ).scalar_one()
+    stale = connection.execute(
+        text(
+            "SELECT count(*) FROM platform.conaf_solicitud "
+            "WHERE checked_at < :since OR lookup_status = 'unavailable'"
+        ),
+        {"since": now - timedelta(days=3)},
+    ).scalar_one()
+    known = connection.execute(text("SELECT count(*) FROM platform.conaf_solicitud")).scalar_one()
+    return {
+        "last_run": None if last is None else {key: _iso(value) for key, value in last.items()},
+        "changes_24h": int(changes),
+        "stale_numbers": int(stale),
+        "known_numbers": int(known),
+    }
+
+
+def _conaf_alerts(conaf: dict[str, Any], now: datetime) -> list[dict[str, Any]]:
+    alerts: list[dict[str, Any]] = []
+    last_run = conaf["last_run"]
+    if last_run is not None and last_run["stopped_reason"] == "conaf_unavailable":
+        alerts.append(
+            {
+                "code": "conaf_down",
+                "severity": "warning",
+                "count": 1,
+                "message": "La consulta nocturna a CONAF se detuvo: CONAF no respondía",
+            }
+        )
+    finished = None if last_run is None else last_run["finished_at"]
+    recent = finished is not None and datetime.fromisoformat(str(finished)) >= now - timedelta(
+        hours=48
+    )
+    if conaf["known_numbers"] and not recent:
+        alerts.append(
+            {
+                "code": "conaf_no_run",
+                "severity": "warning",
+                "count": 1,
+                "message": "No hay una consulta nocturna a CONAF terminada en las últimas 48 h",
+            }
+        )
+    return alerts
+
+
 def build_report(connection: Connection, *, now: datetime) -> dict[str, Any]:
     day_ago = now - timedelta(days=1)
     week_ago = now - timedelta(days=7)
@@ -164,13 +226,16 @@ def build_report(connection: Connection, *, now: datetime) -> dict[str, Any]:
         .all()
     )
 
+    conaf = _conaf(connection, now)
+
     def rows(result: Any) -> list[dict[str, Any]]:
         return [{key: _iso(value) for key, value in row.items()} for row in result]
 
     return {
         "generated_at": now.isoformat(),
         "read_only": read_only,
-        "alerts": _alerts(connection, day_ago),
+        "alerts": [*_alerts(connection, day_ago), *_conaf_alerts(conaf, now)],
+        "conaf": conaf,
         "activity": rows(activity),
         "suspicious_ips": [
             {

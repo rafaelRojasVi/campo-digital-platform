@@ -375,3 +375,47 @@
   font-size: 12px;
   color: var(--danger);
 }
+
+/* Estado CONAF */
+.conaf-pill {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.conaf-pill--ok { background: var(--green-tint); color: var(--green-900); border-color: var(--green-line); }
+.conaf-pill--progress { background: #fbefd9; color: #7a4f00; border-color: #e6c48a; }
+.conaf-pill--danger { background: var(--flag-tint); color: var(--flag-ink); border-color: #e3b8ad; }
+.conaf-pill--muted { background: var(--panel-2); color: var(--ink-3); border-color: var(--border-strong); }
+.conaf-pill--neutral { background: var(--panel-2); color: var(--ink-2); border-color: var(--border); }
+
+.conaf-card { display: grid; gap: 8px; font-size: 13px; }
+.conaf-card__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.conaf-card__raw { color: var(--ink-2); font-size: 12px; }
+.conaf-card__facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 0; }
+.conaf-card__facts dt { color: var(--ink-3); font-size: 12px; }
+.conaf-card__facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.conaf-card__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.conaf-changed { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #e3f0f8; color: #0b5c8c; }
+.conaf-warn { color: #8a5300; }
+.conaf-card__link { color: var(--green-700); font-weight: 600; }
+.conaf-list-cell { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.conaf-list-cell__numero { color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.report-conaf__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.report-conaf__form .report-form__field {
+  flex: 1 1 160px;
+}
+
+.report-conaf__form .report-form__error {
+  flex-basis: 100%;
+}

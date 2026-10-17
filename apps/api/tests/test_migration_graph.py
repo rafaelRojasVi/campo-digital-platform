@@ -153,7 +153,7 @@ def test_migration_0013_extends_0012() -> None:
     assert down_revision == "0012"
 
 
-def test_migration_0014_extends_0013_as_the_single_head() -> None:
+def test_migration_0014_extends_0013() -> None:
     """0014 (Rodales management reports) extends 0013 directly."""
 
     root = Path(__file__).resolve().parents[3]
@@ -163,6 +163,17 @@ def test_migration_0014_extends_0013_as_the_single_head() -> None:
     down_revision, _ = revisions["0014"]
     assert down_revision == "0013"
 
+
+def test_migration_0015_extends_0014_as_the_single_head() -> None:
+    """0015 (CONAF status) extends 0014 directly."""
+
+    root = Path(__file__).resolve().parents[3]
+    revisions = _load_all_migrations(root)
+
+    assert "0015" in revisions, "Expected migration 0015 to be present."
+    down_revision, _ = revisions["0015"]
+    assert down_revision == "0014"
+
     down_revisions = {down for down, _ in revisions.values() if down is not None}
     heads = set(revisions) - down_revisions
-    assert heads == {"0014"}
+    assert heads == {"0015"}

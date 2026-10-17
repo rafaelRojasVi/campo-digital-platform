@@ -14,6 +14,7 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
+from app.conaf_refresh import refresh_enabled, run_conaf_refresh
 from app.config import get_settings
 from app.dashboard_static import (
     DEFAULT_PORTAL_DIST,
@@ -40,6 +41,8 @@ from app.identity_safety import require_production_identity_configuration
 from app.object_store import LocalObjectStore, ObjectStoreError, ObjectStoreNotConfiguredError
 from app.observability import init_error_reporting
 from app.routers.access_admin import router as access_admin_router
+from app.routers.conaf import get_conaf_client
+from app.routers.conaf import router as conaf_router
 from app.routers.csrf import router as csrf_router
 from app.routers.entra_auth import router as entra_auth_router
 from app.routers.forestry import router as forestry_router
@@ -133,6 +136,13 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         if APP_ENV == "test"
         else lambda: purge_expired_security_events(get_database_engine(), now=datetime.now(UTC))
     )
+    conaf_refresh = (
+        asyncio.create_task(
+            run_conaf_refresh(get_database_engine, get_conaf_client(), stop=stop_maintenance)
+        )
+        if refresh_enabled(APP_ENV, os.environ)
+        else None
+    )
     maintenance = asyncio.create_task(
         run_maintenance(security_recorder, purge=purge, stop=stop_maintenance)
     )
@@ -141,6 +151,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         stop_maintenance.set()
         await maintenance
+        if conaf_refresh is not None:
+            await conaf_refresh
         if _execution_backend is not None:
             await _execution_backend.stop()
 
@@ -310,6 +322,7 @@ if APP_ENV == "development":
 app.include_router(forestry_router)
 app.include_router(forestry_workflow_router)
 app.include_router(forestry_reports_router)
+app.include_router(conaf_router)
 
 # Second mount under /api for the routers a browser bundle actually calls at
 # that prefix (see products/transelect/dashboard/src/api.ts). Every frontend

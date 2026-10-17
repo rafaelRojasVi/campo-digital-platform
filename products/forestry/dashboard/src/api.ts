@@ -49,10 +49,19 @@ export class ApiError extends Error {
 }
 
 export async function getJson<T>(path: string): Promise<T> {
+  return getUrl<T>(`${API_BASE}${path}`)
+}
+
+/** A GET outside `/api/forestry` (the shared Estado CONAF routes). */
+export async function getConafJson<T>(url: string): Promise<T> {
+  return getUrl<T>(url)
+}
+
+async function getUrl<T>(url: string): Promise<T> {
   let response: Response
 
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    response = await fetch(url, {
       headers: { Accept: 'application/json' },
     })
   } catch {
@@ -186,7 +195,16 @@ export function resetCsrfForTests(): void {
 
 type MutationInit = RequestInit & { method?: 'POST' | 'PUT' | 'PATCH' | 'DELETE' }
 
-export async function mutate<T>(path: string, init: MutationInit, retried = false): Promise<T> {
+export async function mutate<T>(path: string, init: MutationInit): Promise<T> {
+  return mutateUrl<T>(`${API_BASE}${path}`, init)
+}
+
+/** A POST outside `/api/forestry` (the shared Estado CONAF routes), with CSRF. */
+export async function mutateAbsolute<T>(url: string): Promise<T> {
+  return mutateUrl<T>(url, {})
+}
+
+async function mutateUrl<T>(url: string, init: MutationInit, retried = false): Promise<T> {
   const token = await csrfHeader()
   const headers = new Headers(init.headers)
   headers.set(token.header, token.token)
@@ -194,7 +212,7 @@ export async function mutate<T>(path: string, init: MutationInit, retried = fals
 
   let response: Response
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    response = await fetch(url, {
       ...init,
       method: init.method ?? 'POST',
       headers,
@@ -237,7 +255,7 @@ export async function mutate<T>(path: string, init: MutationInit, retried = fals
   // A token minted for an earlier session: fetch a fresh one once.
   if (response.status === 403 && detail === CSRF_REJECTED && !retried) {
     csrf = null
-    return mutate<T>(path, init, true)
+    return mutateUrl<T>(url, init, true)
   }
 
   throw new ApiError(

@@ -131,6 +131,7 @@ def test_export_runs_in_a_read_only_transaction(integration_engine: Engine) -> N
         "activity",
         "suspicious_ips",
         "usage",
+        "conaf",
     }
 
 
@@ -163,3 +164,26 @@ def test_burst_alert_sums_paths_and_split_flushes_per_ip_minute(
 
     codes = {alert["code"]: alert for alert in build_report(c, now=NOW)["alerts"]}
     assert codes["auth_burst"]["count"] == 1
+
+
+def test_conaf_block_and_alerts(integration_connection: Connection) -> None:
+    integration_connection.execute(
+        text(
+            "INSERT INTO platform.conaf_run (started_at, finished_at, due, checked, found, "
+            "unavailable, changed, stopped_reason) VALUES (:start, :end, 9, 5, 0, 5, 0, "
+            "'conaf_unavailable')"
+        ),
+        {"start": NOW - timedelta(hours=8), "end": NOW - timedelta(hours=8)},
+    )
+    integration_connection.execute(
+        text(
+            "INSERT INTO platform.conaf_solicitud "
+            "(numero, lookup_status, estado, checked_at, found_at) "
+            "VALUES ('090663', 'found', 'APROBADA', :old, :old)"
+        ),
+        {"old": NOW - timedelta(days=4)},
+    )
+    report = build_report(integration_connection, now=NOW)
+    assert report["conaf"]["last_run"]["stopped_reason"] == "conaf_unavailable"
+    assert report["conaf"]["stale_numbers"] == 1
+    assert "conaf_down" in [alert["code"] for alert in report["alerts"]]
