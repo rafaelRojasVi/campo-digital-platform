@@ -401,3 +401,18 @@
 .conaf-card__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .conaf-changed { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #e3f0f8; color: #0b5c8c; }
 .conaf-warn { color: #8a5300; }
+
+.report-conaf__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.report-conaf__form .report-form__field {
+  flex: 1 1 160px;
+}
+
+.report-conaf__form .report-form__error {
+  flex-basis: 100%;
+}

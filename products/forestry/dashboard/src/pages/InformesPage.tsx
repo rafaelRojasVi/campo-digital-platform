@@ -13,11 +13,14 @@ import {
   REPORT_TYPES,
   TYPE_LABELS,
   createReport,
+  fetchConafSolicitudes,
   fetchReports,
+  type ConafSolicitud,
   type ReportList,
   type ReportType,
 } from '../reportsApi.ts'
 import { ROUTES, navigate, onLinkClick, reportPath } from '../router.ts'
+import { conafTone, TONE_LABELS, TONE_PILL } from '../lib/conafEstado.ts'
 import type { ForestryRole } from '../types.ts'
 
 const ha = new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -33,12 +36,23 @@ export function InformesPage({ role }: { role: ForestryRole }) {
   const [load, setLoad] = useState<Load>({ status: 'loading' })
   const [creating, setCreating] = useState(false)
   const [nonce, setNonce] = useState(0)
+  const [conaf, setConaf] = useState<Map<string, ConafSolicitud>>(new Map())
 
   useEffect(() => {
     let cancelled = false
     fetchReports()
       .then((list) => {
-        if (!cancelled) setLoad({ status: 'ready', list })
+        if (cancelled) return
+        setLoad({ status: 'ready', list })
+        // Stored CONAF results only (never calls CONAF); a failure leaves «—».
+        const numeros = list.reports.flatMap((r) => (r.conaf_solicitud ? [r.conaf_solicitud] : []))
+        if (numeros.length > 0) {
+          fetchConafSolicitudes(numeros)
+            .then((records) => {
+              if (!cancelled) setConaf(new Map(records.map((record) => [record.numero, record])))
+            })
+            .catch(() => undefined)
+        }
       })
       .catch(() => {
         if (!cancelled) setLoad({ status: 'error' })
@@ -98,6 +112,7 @@ export function InformesPage({ role }: { role: ForestryRole }) {
                     <th>Tipo · mes</th>
                     <th>Estado</th>
                     <th>Creado por</th>
+                    <th>CONAF</th>
                     <th className="numeric">Área de manejo</th>
                     <th>Actualizado</th>
                   </tr>
@@ -118,6 +133,9 @@ export function InformesPage({ role }: { role: ForestryRole }) {
                         <ReportStatusChip status={report.status} />
                       </td>
                       <td>{report.created_by_display_name}</td>
+                      <td>
+                        <ConafListCell record={report.conaf_solicitud ? conaf.get(report.conaf_solicitud) : undefined} />
+                      </td>
                       <td className="numeric">{`${ha.format(report.managed_area_ha)} ha`}</td>
                       <td>{formatDate(report.updated_at)}</td>
                     </tr>
@@ -131,6 +149,16 @@ export function InformesPage({ role }: { role: ForestryRole }) {
 
       {creating ? <NewReportDialog onCancel={() => setCreating(false)} /> : null}
     </PageShell>
+  )
+}
+
+function ConafListCell({ record }: { record: ConafSolicitud | undefined }) {
+  if (record === undefined || record.estado === null) return <span className="muted">—</span>
+  const tone = conafTone(record)
+  return (
+    <span className={TONE_PILL[tone]} title={record.estado}>
+      {TONE_LABELS[tone]}
+    </span>
   )
 }
 

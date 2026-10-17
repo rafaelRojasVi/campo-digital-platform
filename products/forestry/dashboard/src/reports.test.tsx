@@ -58,6 +58,9 @@ vi.mock('./reportsApi.ts', async (importOriginal) => {
     updateReport: vi.fn(),
     duplicateReport: vi.fn(),
     deleteReport: vi.fn(),
+    fetchConafSolicitud: vi.fn(),
+    fetchConafSolicitudes: vi.fn(),
+    refreshConafSolicitud: vi.fn(),
   }
 })
 
@@ -504,5 +507,66 @@ describe('Informe editor — review fixes', () => {
     reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'cambios_solicitados', revision: 4 }, true))
     render(<RealEditor role="admin" reportId={7} />)
     expect(await screen.findByRole('button', { name: 'Archivar' })).toBeInTheDocument()
+  })
+})
+
+function conafFound(): import('./reportsApi.ts').ConafSolicitud {
+  return {
+    numero: '090663',
+    lookup_status: 'found',
+    tipo: 'PLAN DE MANEJO',
+    estado: 'EN EVALUACION',
+    superficie_ha: 3,
+    fecha_ingreso: '2026-09-01',
+    fecha_resolucion: null,
+    returned_solicitud: null,
+    checked_at: new Date().toISOString(),
+    found_at: new Date().toISOString(),
+    estado_changed_at: null,
+    stale: false,
+    recently_changed: false,
+    conaf_url: 'https://oficinavirtual.conaf.cl/consultas/action.php?nsolicitud=090663',
+  }
+}
+
+describe('Estado CONAF in Rodales', () => {
+  beforeEach(() => {
+    api.fetchFeatureCollection.mockResolvedValue(baseCollection())
+  })
+
+  it('saves the number without touching the draft', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    reportsApi.updateReport.mockResolvedValue({ report_id: 7, status: 'borrador', revision: 2 })
+    reportsApi.fetchConafSolicitud.mockResolvedValue(conafFound())
+    render(<RealEditor role="operator" reportId={7} />)
+    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await user.type(screen.getByLabelText('N.º solicitud CONAF'), '90663')
+    await user.click(screen.getByRole('button', { name: 'Guardar N.º' }))
+    expect(reportsApi.updateReport).toHaveBeenCalledWith(7, 1, { conaf_solicitud: '090663' })
+    expect(await screen.findByText('En evaluación')).toBeInTheDocument()
+    // The unsaved mark is still unsaved.
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeEnabled()
+  })
+
+  it('refuses a number CONAF cannot answer before saving', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    render(<RealEditor role="operator" reportId={7} />)
+    await user.type(await screen.findByLabelText('N.º solicitud CONAF'), '12/34')
+    await user.click(screen.getByRole('button', { name: 'Guardar N.º' }))
+    expect(screen.getByText('Solo dígitos, hasta 9.')).toBeInTheDocument()
+    expect(reportsApi.updateReport).not.toHaveBeenCalled()
+  })
+
+  it('shows the CONAF column in the list from stored data', async () => {
+    reportsApi.fetchReports.mockResolvedValue({
+      reports: [listedReport({ conaf_solicitud: '090663' })],
+      pending_review_count: 0,
+    })
+    reportsApi.fetchConafSolicitudes.mockResolvedValue([conafFound()])
+    render(<RealInformesPage role="viewer" />)
+    expect(await screen.findByText('En evaluación')).toBeInTheDocument()
+    expect(reportsApi.fetchConafSolicitudes).toHaveBeenCalledWith(['090663'])
   })
 })

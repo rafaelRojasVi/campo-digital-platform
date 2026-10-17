@@ -13,7 +13,9 @@ import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { Header } from '../components/Header.tsx'
 import { Notice } from '../components/PageShell.tsx'
 import { ReportMap, type ChoosePiece, type MapMode } from '../components/ReportMap.tsx'
+import { ConafCard } from '../components/ConafCard.tsx'
 import { ReportStatusChip } from '../components/ReportStatusChip.tsx'
+import { normalizeSolicitud } from '../lib/conafEstado.ts'
 import { createHistory, recordHistory, redoHistory, undoHistory, type History } from '../lib/history.ts'
 import { describeChanges } from '../lib/reportChanges.ts'
 import {
@@ -34,6 +36,7 @@ import { multiPolygonAreaSquareMeters } from '../lib/draftGeometry.ts'
 import { SPLIT_MESSAGES, interiorPoint, lineCrosses, splitByPolyline, type Coordinates, type Position } from '../lib/splitGeometry.ts'
 import {
   TYPE_LABELS,
+  updateReport,
   duplicateReport,
   deleteReport,
   exportUrl,
@@ -173,6 +176,12 @@ function Editor({
   }, [draft])
   const [history, setHistory] = useState<History<ReportDraft>>(createHistory)
   const [revision, setRevision] = useState(report.revision)
+  // The CONAF number is saved on its own (PATCH of the header), so it never
+  // touches the polygon draft or its unsaved state.
+  const [conafNumero, setConafNumero] = useState<string | null>(report.conaf_solicitud)
+  const [conafInput, setConafInput] = useState(report.conaf_solicitud ?? '')
+  const [conafError, setConafError] = useState<string | null>(null)
+  const [conafBusy, setConafBusy] = useState(false)
   const [mode, setMode] = useState<MapMode>(editable ? 'select' : 'view')
   const [selectedOrdinals, setSelectedOrdinals] = useState<Set<number>>(new Set())
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
@@ -463,6 +472,26 @@ function Editor({
     setMessage({ tone: 'error', text, stale })
   }, [])
 
+  const saveConaf = useCallback(async () => {
+    const trimmed = conafInput.trim()
+    const normalized = trimmed === '' ? null : normalizeSolicitud(trimmed)
+    if (trimmed !== '' && normalized === null) {
+      setConafError('Solo dígitos, hasta 9.')
+      return
+    }
+    setConafBusy(true)
+    try {
+      const result = await updateReport(report.report_id, revision, { conaf_solicitud: normalized })
+      setRevision(result.revision)
+      setConafNumero(normalized)
+      setConafInput(normalized ?? '')
+    } catch (error) {
+      setConafError(mutationMessage(error, 'No fue posible guardar el N.º.'))
+    } finally {
+      setConafBusy(false)
+    }
+  }, [conafInput, report.report_id, revision])
+
   const save = useCallback(async (): Promise<number | null> => {
     setBusy(true)
     const sent = draft
@@ -616,6 +645,44 @@ function Editor({
               <ReportStatusChip status={report.status} />
             </p>
           </div>
+
+          <section className="report-section report-conaf" aria-labelledby="report-conaf-title">
+            <h3 id="report-conaf-title" className="report-section__title">Estado en CONAF</h3>
+            {editable ? (
+              <form
+                className="report-conaf__form"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void saveConaf()
+                }}
+              >
+                <label className="report-form__field" htmlFor="report-conaf">
+                  <span>N.º solicitud CONAF</span>
+                  <input
+                    id="report-conaf"
+                    inputMode="numeric"
+                    maxLength={9}
+                    value={conafInput}
+                    aria-invalid={conafError !== null}
+                    aria-describedby={conafError !== null ? 'report-conaf-error' : undefined}
+                    onChange={(event) => {
+                      setConafInput(event.target.value)
+                      setConafError(null)
+                    }}
+                  />
+                </label>
+                <button type="submit" className="button button--ghost" disabled={conafBusy}>
+                  {conafBusy ? 'Guardando…' : 'Guardar N.º'}
+                </button>
+                {conafError !== null ? (
+                  <span id="report-conaf-error" className="report-form__error">{conafError}</span>
+                ) : null}
+              </form>
+            ) : (
+              <p className="muted">{conafNumero === null ? 'Sin N.º de solicitud CONAF.' : `N.º ${conafNumero}`}</p>
+            )}
+            {conafNumero !== null ? <ConafCard key={conafNumero} numero={conafNumero} /> : null}
+          </section>
 
           {showNotes && latestChangeNote !== undefined && report.status === 'cambios_solicitados' ? (
             <Notice tone="warn" title={`${latestChangeNote.author_display_name} pidió cambios`}>
