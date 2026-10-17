@@ -45,7 +45,6 @@ export default defineRailway(() => {
       GOOGLE_CLIENT_SECRET: preserve(),
       GOOGLE_REDIRECT_BASE_URL: preserve(),
       GOOGLE_WORKSPACE_DOMAIN: preserve(),
-      PLATFORM_BOOTSTRAP_ADMINS: preserve(),
       PLATFORM_TOKEN_ENCRYPTION_KEY: preserve(),
       POSTGRES_DB: preserve(),
       POSTGRES_HOST: preserve(),
@@ -53,6 +52,7 @@ export default defineRailway(() => {
       POSTGRES_PORT: preserve(),
       POSTGRES_USER: preserve(),
       RAILWAY_RUN_UID: preserve(),
+      SENTRY_DSN: preserve(),
       TRANSELEC_BOOTSTRAP_ADMIN_EMAIL: preserve(),
     },
   });

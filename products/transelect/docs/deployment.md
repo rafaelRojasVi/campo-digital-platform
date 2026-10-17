@@ -820,6 +820,15 @@ and clear the source and builder. Once the service is declared, an apply
 treats the file as the whole truth for it. Anything left out is removed,
 not left alone.
 
+**RESULT (2026-10-17, `railway config plan` against production):** the
+plan wanted to **delete `SENTRY_DSN`**, which was added in the dashboard on
+2026-10-15 and never declared. `PLATFORM_BOOTSTRAP_ADMINS` was declared but
+no longer exists in Railway. Both were fixed in the file, and the SDK was
+moved from `3.12.0` to `3.13.1`; the plan then reported "already up to
+date". **LIMITATION:** the SDK checks the CLI version through `$_`, so the
+plan fails with "requires Railway CLI 5.42.1 or newer" when it runs under a
+wrapper such as `timeout`; run `railway config plan` directly.
+
 So a variable added in the dashboard must also be added to the file as
 `preserve()`, or the next apply deletes it. `apps/api/tests/test_railway_config.py`
 keeps the start command equal to the Dockerfile's and fails if a variable
