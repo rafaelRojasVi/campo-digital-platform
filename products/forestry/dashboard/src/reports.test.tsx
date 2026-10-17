@@ -545,6 +545,8 @@ describe('Estado CONAF in Rodales', () => {
     await user.click(screen.getByRole('button', { name: 'Guardar N.º' }))
     expect(reportsApi.updateReport).toHaveBeenCalledWith(7, 1, { conaf_solicitud: '090663' })
     expect(await screen.findByText('En evaluación')).toBeInTheDocument()
+    // Saved: nothing new to save until the number changes.
+    expect(screen.getByRole('button', { name: 'Guardar N.º' })).toBeDisabled()
     // The unsaved mark is still unsaved.
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeEnabled()
   })
@@ -567,6 +569,15 @@ describe('Estado CONAF in Rodales', () => {
     reportsApi.fetchConafSolicitudes.mockResolvedValue([conafFound()])
     render(<RealInformesPage role="viewer" />)
     expect(await screen.findByText('En evaluación')).toBeInTheDocument()
+    expect(screen.getByText('090663')).toBeInTheDocument()
     expect(reportsApi.fetchConafSolicitudes).toHaveBeenCalledWith(['090663'])
+  })
+
+  it('keeps the CONAF section below the report work', async () => {
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    render(<RealEditor role="operator" reportId={7} />)
+    const heading = await screen.findByRole('heading', { name: 'Estado en CONAF' })
+    const submit = screen.getByRole('button', { name: 'Enviar a revisión' })
+    expect(submit.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

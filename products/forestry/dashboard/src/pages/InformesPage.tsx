@@ -134,7 +134,10 @@ export function InformesPage({ role }: { role: ForestryRole }) {
                       </td>
                       <td>{report.created_by_display_name}</td>
                       <td>
-                        <ConafListCell record={report.conaf_solicitud ? conaf.get(report.conaf_solicitud) : undefined} />
+                        <ConafListCell
+                          numero={report.conaf_solicitud}
+                          record={report.conaf_solicitud ? conaf.get(report.conaf_solicitud) : undefined}
+                        />
                       </td>
                       <td className="numeric">{`${ha.format(report.managed_area_ha)} ha`}</td>
                       <td>{formatDate(report.updated_at)}</td>
@@ -152,12 +155,19 @@ export function InformesPage({ role }: { role: ForestryRole }) {
   )
 }
 
-function ConafListCell({ record }: { record: ConafSolicitud | undefined }) {
-  if (record === undefined || record.estado === null) return <span className="muted">—</span>
-  const tone = conafTone(record)
+function ConafListCell({ numero, record }: { numero: string | null; record: ConafSolicitud | undefined }) {
+  if (numero === null) return <span className="muted">—</span>
+  const tone = record !== undefined && record.estado !== null ? conafTone(record) : null
   return (
-    <span className={TONE_PILL[tone]} title={record.estado}>
-      {TONE_LABELS[tone]}
+    <span className="conaf-list-cell">
+      {tone !== null && record !== undefined ? (
+        <span className={TONE_PILL[tone]} title={record.estado ?? undefined}>
+          {TONE_LABELS[tone]}
+        </span>
+      ) : (
+        <span className="muted">Sin consultar</span>
+      )}
+      <span className="conaf-list-cell__numero">{numero}</span>
     </span>
   )
 }

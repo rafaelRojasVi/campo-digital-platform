@@ -12,6 +12,8 @@ import {
   freshness,
   hasData,
   normalizeSolicitud,
+  rawEstado,
+  refreshNotice,
   TONE_LABELS,
   TONE_PILL,
 } from '../lib/conafEstado.ts'
@@ -65,9 +67,10 @@ export function ConafCard({ numero }: { numero: string | null }) {
     setBusy(true)
     setNotice(null)
     try {
+      const before = state.status === 'ready' ? state.record : null
       const record = await refreshConafSolicitud(normalized)
       setState({ status: 'ready', record })
-      setNotice(record.lookup_status === 'found' ? 'Estado actualizado desde CONAF.' : null)
+      setNotice(refreshNotice(before, record))
     } catch (error) {
       setNotice(mutationMessage(error, 'No se pudo consultar CONAF ahora.'))
     } finally {
@@ -81,13 +84,14 @@ export function ConafCard({ numero }: { numero: string | null }) {
   const { record } = state
   const message = conafMessage(record)
   const tone = conafTone(record)
+  const raw = rawEstado(record)
   return (
     <div className="conaf-card" data-testid="conaf-card">
       {hasData(record) ? (
         <div className="conaf-card__head">
           <span className={TONE_PILL[tone]}>{TONE_LABELS[tone]}</span>
           {record.recently_changed ? <span className="conaf-changed">Cambió</span> : null}
-          <span className="conaf-card__raw">{record.estado}</span>
+          {raw !== null ? <span className="conaf-card__raw">{raw}</span> : null}
         </div>
       ) : null}
       {message !== null ? (
@@ -121,7 +125,7 @@ export function ConafCard({ numero }: { numero: string | null }) {
         <button type="button" className="button button--ghost" onClick={() => void refresh()} disabled={busy}>
           {busy ? 'Consultando…' : 'Actualizar desde CONAF'}
         </button>
-        <a href={record.conaf_url} target="_blank" rel="noreferrer">
+        <a className="conaf-card__link" href={record.conaf_url} target="_blank" rel="noreferrer">
           Ver en CONAF ↗
         </a>
       </div>

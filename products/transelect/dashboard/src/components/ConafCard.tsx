@@ -11,6 +11,8 @@ import {
   freshness,
   hasData,
   normalizeSolicitud,
+  rawEstado,
+  refreshNotice,
   TONE_LABELS,
   TONE_PILL,
 } from '../lib/conafEstado'
@@ -50,6 +52,7 @@ export function ConafCard({ numero }: { numero: string | null }) {
   }
 
   const refresh = async () => {
+    const before = state.status === 'ready' ? state.record : null
     setBusy(true)
     setNotice(null)
     const result = await refreshConafSolicitud(normalized)
@@ -59,7 +62,7 @@ export function ConafCard({ numero }: { numero: string | null }) {
       return
     }
     setState({ status: 'ready', record: result.data })
-    setNotice(result.data.lookup_status === 'found' ? 'Estado actualizado desde CONAF.' : null)
+    setNotice(refreshNotice(before, result.data))
   }
 
   if (state.status === 'loading') return <p className="hint">Consultando CONAF…</p>
@@ -68,13 +71,14 @@ export function ConafCard({ numero }: { numero: string | null }) {
   const { record } = state
   const message = conafMessage(record)
   const tone = conafTone(record)
+  const raw = rawEstado(record)
   return (
     <div className="conaf-card" data-testid="conaf-card">
       {hasData(record) && (
         <div className="conaf-card__head">
           <span className={`pill ${TONE_PILL[tone]}`}>{TONE_LABELS[tone]}</span>
           {record.recently_changed && <span className="chip conaf-changed">Cambió</span>}
-          <span className="conaf-card__raw">{record.estado}</span>
+          {raw !== null && <span className="conaf-card__raw">{raw}</span>}
         </div>
       )}
       {message && <p className={record.lookup_status === 'found' ? 'hint' : 'hint conaf-warn'}>{message}</p>}

@@ -401,6 +401,9 @@
 .conaf-card__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .conaf-changed { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #e3f0f8; color: #0b5c8c; }
 .conaf-warn { color: #8a5300; }
+.conaf-card__link { color: var(--green-700); font-weight: 600; }
+.conaf-list-cell { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.conaf-list-cell__numero { color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
 
 .report-conaf__form {
   display: flex;

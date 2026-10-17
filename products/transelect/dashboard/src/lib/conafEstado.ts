@@ -69,3 +69,22 @@ export function conafMessage(record: ConafSolicitud): string | null {
       return null
   }
 }
+
+function plain(text: string): string {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
+}
+
+/** CONAF's own text, unless the tone label already says the same. */
+export function rawEstado(record: ConafSolicitud): string | null {
+  if (record.estado === null) return null
+  return plain(record.estado) === plain(TONE_LABELS[conafTone(record)]) ? null : record.estado
+}
+
+/** The notice after «Actualizar»; the server answers from storage within 60 s. */
+export function refreshNotice(before: ConafSolicitud | null, after: ConafSolicitud): string | null {
+  if (after.lookup_status !== 'found') return null
+  if (before !== null && before.checked_at === after.checked_at) {
+    return 'CONAF se consultó hace un momento; se muestra ese resultado.'
+  }
+  return 'Estado actualizado desde CONAF.'
+}

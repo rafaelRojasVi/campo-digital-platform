@@ -21,11 +21,11 @@ const found: ConafSolicitud = {
 beforeEach(() => vi.clearAllMocks())
 
 describe('ConafCard', () => {
-  it('shows the CONAF status, raw text, dates and a link', async () => {
+  it('shows the CONAF status, dates and a link, without repeating the label', async () => {
     api.getConafSolicitud.mockResolvedValue({ ok: true, data: found })
     render(<ConafCard numero="90663" />)
     expect(await screen.findByText('En evaluación')).toBeInTheDocument()
-    expect(screen.getByText('EN EVALUACION')).toBeInTheDocument()
+    expect(screen.queryByText('EN EVALUACION')).not.toBeInTheDocument()
     expect(screen.getByText('PLAN DE MANEJO')).toBeInTheDocument()
     expect(screen.getByText('3,50 ha')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Ver en CONAF/ })).toHaveAttribute('href', found.conaf_url)
@@ -40,7 +40,7 @@ describe('ConafCard', () => {
     render(<ConafCard numero="090663" />)
     await user.click(await screen.findByRole('button', { name: 'Actualizar desde CONAF' }))
     expect(screen.getByRole('button', { name: 'Consultando…' })).toBeDisabled()
-    resolve({ ok: true, data: { ...found, estado: 'APROBADA' } })
+    resolve({ ok: true, data: { ...found, estado: 'APROBADA', checked_at: new Date(Date.now() + 1000).toISOString() } })
     expect(await screen.findByRole('status')).toHaveTextContent('Estado actualizado desde CONAF.')
     expect(screen.getByText('Aprobada')).toBeInTheDocument()
   })
@@ -55,12 +55,24 @@ describe('ConafCard', () => {
     render(<ConafCard numero="090663" />)
     await user.click(await screen.findByRole('button', { name: 'Actualizar desde CONAF' }))
     expect(await screen.findByText('No se pudo actualizar; se muestra el último dato.')).toBeInTheDocument()
-    expect(screen.getByText('EN EVALUACION')).toBeInTheDocument()
+    expect(screen.getByText('En evaluación')).toBeInTheDocument()
+    expect(screen.getByText('PLAN DE MANEJO')).toBeInTheDocument()
   })
 
   it('never asks CONAF for a planilla-style number', () => {
     render(<ConafCard numero="12/34-5/26" />)
     expect(screen.getByText(/no se puede consultar en CONAF/)).toBeInTheDocument()
     expect(api.getConafSolicitud).not.toHaveBeenCalled()
+  })
+
+  it('says so when the refresh repeats the answer from a moment ago', async () => {
+    const user = userEvent.setup()
+    api.getConafSolicitud.mockResolvedValue({ ok: true, data: found })
+    api.refreshConafSolicitud.mockResolvedValue({ ok: true, data: found })
+    render(<ConafCard numero="090663" />)
+    await user.click(await screen.findByRole('button', { name: 'Actualizar desde CONAF' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'CONAF se consultó hace un momento; se muestra ese resultado.',
+    )
   })
 })

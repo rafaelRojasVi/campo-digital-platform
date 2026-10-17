@@ -646,44 +646,6 @@ function Editor({
             </p>
           </div>
 
-          <section className="report-section report-conaf" aria-labelledby="report-conaf-title">
-            <h3 id="report-conaf-title" className="report-section__title">Estado en CONAF</h3>
-            {editable ? (
-              <form
-                className="report-conaf__form"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  void saveConaf()
-                }}
-              >
-                <label className="report-form__field" htmlFor="report-conaf">
-                  <span>N.º solicitud CONAF</span>
-                  <input
-                    id="report-conaf"
-                    inputMode="numeric"
-                    maxLength={9}
-                    value={conafInput}
-                    aria-invalid={conafError !== null}
-                    aria-describedby={conafError !== null ? 'report-conaf-error' : undefined}
-                    onChange={(event) => {
-                      setConafInput(event.target.value)
-                      setConafError(null)
-                    }}
-                  />
-                </label>
-                <button type="submit" className="button button--ghost" disabled={conafBusy}>
-                  {conafBusy ? 'Guardando…' : 'Guardar N.º'}
-                </button>
-                {conafError !== null ? (
-                  <span id="report-conaf-error" className="report-form__error">{conafError}</span>
-                ) : null}
-              </form>
-            ) : (
-              <p className="muted">{conafNumero === null ? 'Sin N.º de solicitud CONAF.' : `N.º ${conafNumero}`}</p>
-            )}
-            {conafNumero !== null ? <ConafCard key={conafNumero} numero={conafNumero} /> : null}
-          </section>
-
           {showNotes && latestChangeNote !== undefined && report.status === 'cambios_solicitados' ? (
             <Notice tone="warn" title={`${latestChangeNote.author_display_name} pidió cambios`}>
               <p>{latestChangeNote.body}</p>
@@ -778,6 +740,48 @@ function Editor({
               <button type="button" className="button button--ghost report-actions__danger" onClick={() => setDialog('delete')} disabled={busy}>Borrar borrador</button>
             ) : null}
           </div>
+
+          <section className="report-section report-conaf" aria-labelledby="report-conaf-title">
+            <h3 id="report-conaf-title" className="report-section__title">Estado en CONAF</h3>
+            {editable ? (
+              <form
+                className="report-conaf__form"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void saveConaf()
+                }}
+              >
+                <label className="report-form__field" htmlFor="report-conaf">
+                  <span>N.º solicitud CONAF</span>
+                  <input
+                    id="report-conaf"
+                    inputMode="numeric"
+                    maxLength={9}
+                    value={conafInput}
+                    aria-invalid={conafError !== null}
+                    aria-describedby={conafError !== null ? 'report-conaf-error' : undefined}
+                    onChange={(event) => {
+                      setConafInput(event.target.value)
+                      setConafError(null)
+                    }}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="button button--ghost"
+                  disabled={conafBusy || conafInput.trim() === (conafNumero ?? '')}
+                >
+                  {conafBusy ? 'Guardando…' : 'Guardar N.º'}
+                </button>
+                {conafError !== null ? (
+                  <span id="report-conaf-error" className="report-form__error">{conafError}</span>
+                ) : null}
+              </form>
+            ) : (
+              <p className="muted">{conafNumero === null ? 'Sin N.º de solicitud CONAF.' : `N.º ${conafNumero}`}</p>
+            )}
+            {conafNumero !== null ? <ConafCard key={conafNumero} numero={conafNumero} /> : null}
+          </section>
 
           <section className="report-section" aria-label="Exportar">
             <h3 className="report-section__title">Exportar</h3>

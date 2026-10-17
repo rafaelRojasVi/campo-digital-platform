@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { ConafSolicitud } from '../reportsApi'
-import { conafMessage, conafTone, freshness, normalizeSolicitud, TONE_LABELS } from './conafEstado'
+import {
+  conafMessage,
+  conafTone,
+  freshness,
+  normalizeSolicitud,
+  rawEstado,
+  refreshNotice,
+  TONE_LABELS,
+} from './conafEstado'
 
 const NOW = new Date('2026-10-16T15:00:00Z')
 
@@ -78,5 +86,19 @@ describe('conafEstado', () => {
       'No se pudo actualizar; se muestra el último dato.',
     )
     expect(conafMessage(record())).toBeNull()
+  })
+
+  it('hides the raw CONAF text when the label already says it', () => {
+    expect(rawEstado(record({ estado: 'APROBADA' }))).toBeNull()
+    expect(rawEstado(record({ estado: 'EN EVALUACION' }))).toBeNull()
+    expect(rawEstado(record({ estado: 'APROBADA CON OBSERVACIONES' }))).toBe('APROBADA CON OBSERVACIONES')
+    expect(rawEstado(record({ estado: 'EN TRAMITE' }))).toBe('EN TRAMITE')
+  })
+
+  it('says when a refresh only repeated the stored answer', () => {
+    const before = record()
+    expect(refreshNotice(before, record({ checked_at: '2026-10-16T14:59:30Z' }))).toBe('Estado actualizado desde CONAF.')
+    expect(refreshNotice(before, record())).toBe('CONAF se consultó hace un momento; se muestra ese resultado.')
+    expect(refreshNotice(before, record({ lookup_status: 'unavailable', checked_at: '2026-10-16T14:59:30Z' }))).toBeNull()
   })
 })
