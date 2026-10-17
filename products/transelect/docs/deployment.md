@@ -617,8 +617,28 @@ TOC above. `rollback.sh` no longer applies.
 
 ## Manual database backup
 
-The 2026-09-28 decision above stands: nothing backs up production on a
-schedule. `scripts/backup_prod_db.sh` is the on-demand substitute. It copies
+**DECISION (2026-10-17, Rafael), revisits 2026-09-28:** the Rodales
+management reports exist only in the platform (they cannot be rebuilt from
+source files), so production gets two backups:
+
+1. **Railway volume backups** on the `PostGIS17` volume and the app's
+   `/data` volume, with a daily schedule (kept 6 days) and a weekly one
+   (kept 27 days). They are enabled by hand in Railway (service → Backups).
+   **LIMITATION (Railway docs, read 2026-10-17):** backups live in the same
+   project and environment, and wiping a volume deletes its backups. They
+   are incremental, billed per GB like the volume, and the feature is
+   marked as still under development. The docs do not say whether a
+   PostgreSQL copy is transactionally consistent. **INFERENCE:** a
+   disk-level copy is crash-consistent, and PostgreSQL normally recovers
+   from that; not confirmed.
+2. **A monthly encrypted dump off Railway:** `make prod-dump`, run by hand
+   (below).
+
+**OPEN QUESTION:** neither backup has been restored yet; a restore drill
+into a scratch database is the next step.
+
+Until 2026-10-17 nothing backed up production on a schedule.
+`scripts/backup_prod_db.sh` is the on-demand copy. It copies
 the production PostgreSQL database to this machine with `pg_dump`, run by
 hand by someone with Railway access, for example before a migration or a
 risky deploy.
@@ -648,6 +668,20 @@ uploaded workbook files on the `/data` volume (see "Object storage").
    ```
 
 3. Disable the TCP proxy again.
+
+**`make prod-dump` (2026-10-17, recommended):** runs
+`scripts/backup_prod_db.sh --ssh`, which automates the path below. The
+dump is written and checked with `pg_restore --list` inside `PostGIS17`
+(the server's own version 17; the local `pg_restore` may be older); its
+sha256 is compared with the downloaded copy, and the file is then encrypted
+with `age` using a passphrase typed twice, giving
+`~/campo-digital-backups/campo-digital-prod-<UTC stamp>.dump.age`. Run it
+in a terminal, because `age` asks for the passphrase there, and keep the
+passphrase in a password manager: without it the dump cannot be read. The
+script refuses a `CAMPO_BACKUP_DIR` inside the repository.
+**FACT (2026-10-17):** `railway ssh` passed 4 KiB of random bytes unchanged
+(same sha256 on both ends). To read a dump:
+`age --decrypt -o x.dump file.dump.age`, then `pg_restore` 17 or newer.
 
 **Without the TCP proxy** (used on 2026-10-04, no Railway setting changed):
 run `pg_dump` inside the database container (`PostGIS17`) over `railway ssh`. Use the local
