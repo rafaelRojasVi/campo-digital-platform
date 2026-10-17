@@ -14,7 +14,6 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
-from app.conaf import ConafClient
 from app.conaf_refresh import refresh_enabled, run_conaf_refresh
 from app.config import get_settings
 from app.dashboard_static import (
@@ -42,6 +41,8 @@ from app.identity_safety import require_production_identity_configuration
 from app.object_store import LocalObjectStore, ObjectStoreError, ObjectStoreNotConfiguredError
 from app.observability import init_error_reporting
 from app.routers.access_admin import router as access_admin_router
+from app.routers.conaf import get_conaf_client
+from app.routers.conaf import router as conaf_router
 from app.routers.csrf import router as csrf_router
 from app.routers.entra_auth import router as entra_auth_router
 from app.routers.forestry import router as forestry_router
@@ -109,10 +110,6 @@ security_recorder = SecurityEventRecorder(
 )
 
 
-# CONAF's public consulta page, read for Transelec and Rodales (Estado CONAF).
-conaf_client = ConafClient()
-
-
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start the staging-only in-process execution backend, if applicable."""
@@ -141,7 +138,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     conaf_refresh = (
         asyncio.create_task(
-            run_conaf_refresh(get_database_engine, conaf_client, stop=stop_maintenance)
+            run_conaf_refresh(get_database_engine, get_conaf_client(), stop=stop_maintenance)
         )
         if refresh_enabled(APP_ENV, os.environ)
         else None
@@ -325,6 +322,7 @@ if APP_ENV == "development":
 app.include_router(forestry_router)
 app.include_router(forestry_workflow_router)
 app.include_router(forestry_reports_router)
+app.include_router(conaf_router)
 
 # Second mount under /api for the routers a browser bundle actually calls at
 # that prefix (see products/transelect/dashboard/src/api.ts). Every frontend
