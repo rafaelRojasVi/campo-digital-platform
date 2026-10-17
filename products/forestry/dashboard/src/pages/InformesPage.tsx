@@ -157,6 +157,22 @@ export function InformesPage({ role }: { role: ForestryRole }) {
 
 function ConafListCell({ numero, record }: { numero: string | null; record: ConafSolicitud | undefined }) {
   if (numero === null) return <span className="muted">—</span>
+  const warning =
+    record?.lookup_status === 'not_found'
+      ? 'No existe en CONAF'
+      : record?.lookup_status === 'mismatch'
+        ? 'Revisar N.º'
+        : record?.lookup_status === 'unavailable' && record.estado === null
+          ? 'CONAF no respondió'
+          : null
+  if (warning !== null) {
+    return (
+      <span className="conaf-list-cell">
+        <span className="conaf-warn">{warning}</span>
+        <span className="conaf-list-cell__numero">{numero}</span>
+      </span>
+    )
+  }
   const tone = record !== undefined && record.estado !== null ? conafTone(record) : null
   return (
     <span className="conaf-list-cell">

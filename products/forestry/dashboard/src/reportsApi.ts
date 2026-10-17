@@ -240,10 +240,15 @@ export async function fetchConafSolicitudes(numeros: string[]): Promise<ConafSol
   const all: ConafSolicitud[] = []
   for (let start = 0; start < unique.length; start += 500) {
     const chunk = unique.slice(start, start + 500).join(',')
-    const body = await getConafJson<{ solicitudes: ConafSolicitud[] }>(
-      `/api/conaf/solicitudes?numeros=${encodeURIComponent(chunk)}`,
-    )
-    all.push(...body.solicitudes)
+    // A failed chunk leaves its rows at «—»; the chunks that answered still show.
+    try {
+      const body = await getConafJson<{ solicitudes: ConafSolicitud[] }>(
+        `/api/conaf/solicitudes?numeros=${encodeURIComponent(chunk)}`,
+      )
+      all.push(...body.solicitudes)
+    } catch {
+      continue
+    }
   }
   return all
 }

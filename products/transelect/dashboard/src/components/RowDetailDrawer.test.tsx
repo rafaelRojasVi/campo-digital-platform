@@ -363,6 +363,12 @@ describe("RowDetailDrawer — Proceso CONAF (lifecycle_pmf_v1)", () => {
     });
   });
 
+  it("does not show the CONAF status card while the ingreso number is unconfirmed", () => {
+    const lifecycle = makeLifecycleRow({ source_row_number: 3, pmf: "MP002" });
+    render(<RowDetailDrawer row={lifecycle} lifecycle={lifecycle} onClose={() => {}} />);
+    expect(screen.queryByRole("heading", { name: "Estado en CONAF" })).not.toBeInTheDocument();
+  });
+
   it("shows where the PMF stands when the Estado section opens it", () => {
     const lifecycle = makeLifecycleRow({
       source_row_number: 3,

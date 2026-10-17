@@ -75,10 +75,34 @@ notes (Spanish):
 - **LIMITATION:** one request per second; the first nightly run over
   hundreds of numbers takes minutes.
 
+## First production run (2026-10-17)
+
+- **RESULT (2026-10-17 15:10 UTC, Consola export):** the first nightly run
+  started minutes after deploy `f6baf244` (the rule is "after 03:00 Chile,
+  once a day", so a daytime deploy runs the same day). It checked 10 numbers:
+  0 found, 10 `not_found`, 0 `unavailable`; no Rodales report had a number yet.
+- **FACT (2026-10-17, read-only, shapes only; no values recorded):** the
+  active Transelec import has 729 rows. Their `N Ingreso` shapes: about 620
+  use slashes and a dash (`999/999-9/99` and variants), which the
+  normalization skips; 101 are 8 digits, all starting with `10`, holding 10
+  distinct values; none parse as dates. Those 10 are the `not_found` numbers.
+  `N Ingreso2` is empty in 705 rows and slash-shaped in the rest.
+- **INFERENCE:** the planilla's `N Ingreso` is not the solicitud number that
+  CONAF's public consulta takes (six digits, such as `090663`). The
+  slash shape resembles a regional office ingreso number; this is unconfirmed.
+- **DECISION (2026-10-17, Rafael):** the Transelec column and drawer card
+  are hidden (`CONAF_ESTADO_ENABLED = false` in
+  `products/transelect/dashboard/src/lib/conafColumn.tsx`) until Campo
+  Digital says which number is CONAF's solicitud, so users do not see
+  101 «No existe en CONAF» warnings for numbers that were never solicitud
+  numbers. Rodales is unchanged. The nightly run still collects the
+  Transelec numbers (10 lookups a night), so the data is ready if the flag
+  is turned back on.
+
 ## Open questions
 
-- **OPEN QUESTION:** whether the planilla's `N Ingreso` is CONAF's «N.º de
-  solicitud»; the mismatch check prevents showing another solicitud.
+- **OPEN QUESTION:** where each Transelec PMF's CONAF solicitud number
+  lives, given that no `N Ingreso` shape matched (see above).
 
 ## Related documentation
 
