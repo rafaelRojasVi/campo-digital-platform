@@ -2,11 +2,18 @@
 
 ## Status
 
-Server side implemented 2026-10-16 on branch `feat/conaf-estado` (migration
-`0015`); screens in Transelec and Rodales are the next plan. Not merged or
-deployed. Design:
-[spec](../superpowers/specs/2026-10-16-conaf-estado-design.md); plan:
-[server](../superpowers/plans/2026-10-16-conaf-estado-server.md).
+Implemented 2026-10-16 on branch `feat/conaf-estado` (migration `0015`):
+server, nightly refresh, API, Consola block, and screens in Transelec (Estado
+column, PMF drawer card) and Rodales (report field and card, Informes list
+column). Verified in a local browser against one real public lookup
+(`090663`); the Transelec screens were verified by component tests only.
+Not merged or deployed. Design:
+[spec](../superpowers/specs/2026-10-16-conaf-estado-design.md); plans:
+[server](../superpowers/plans/2026-10-16-conaf-estado-server.md),
+[screens](../superpowers/plans/2026-10-16-conaf-estado-screens.md). User
+notes (Spanish):
+[Transelec](../../products/transelect/docs/es/2026-10-16-estado-conaf.md),
+[Rodales](../../products/forestry/docs/es/informes-de-manejo.md#estado-conaf).
 
 ## What is read
 

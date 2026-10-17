@@ -48,6 +48,24 @@ base y además EN_INFORME, INFORME, TIPO, FECHA, ESTADO y OID_ORIGEN (el
 OBJECTID del rodal original). Las filas cambiadas en la web llevan
 Editada = wb.
 
+## Estado CONAF
+
+En el informe, la sección **«Estado en CONAF»** (al final del panel) tiene
+el campo **«N.º solicitud CONAF»**. Escriba el número y presione
+**«Guardar N.º»**: se guarda solo el número, sin tocar los polígonos que
+esté editando. Se puede cambiar mientras el informe está en borrador o con
+cambios pedidos.
+
+Con el número guardado, la plataforma lee la consulta pública de CONAF y
+muestra el estado (Aprobada, En evaluación, Rechazada, No vigente u Otro
+estado), el tipo de solicitud, la superficie y las fechas. **«Actualizar
+desde CONAF»** consulta en el momento; además se actualiza cada noche. La
+lista de informes muestra el estado y el número en la columna **CONAF**.
+
+Si CONAF no encuentra el número o responde otra solicitud, el informe lo
+avisa y no muestra datos ajenos. Los documentos de CONAF (resoluciones)
+siguen en la Oficina Virtual, con la ClaveÚnica del titular.
+
 ## Lo que falta
 
 - Saber qué significa el campo N_Rodal_te.

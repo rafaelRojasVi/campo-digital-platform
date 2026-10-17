@@ -62,6 +62,7 @@ and the audit that produced them are recorded in:
 - [Post-launch backlog V1 — 2026-10-02](docs/design/2026-10-02-post-launch-backlog-v1.md)
 - [Reunión del 02-10-2026: cambios pedidos y preguntas (español)](docs/es/2026-10-02-reunion-cambios-y-preguntas.md)
 - [Planilla del 30-sept: segundo ingreso y columnas renombradas (español)](docs/es/2026-10-02-planilla-30sep-segundo-ingreso.md)
+- [Estado CONAF dentro del panel (español)](docs/es/2026-10-16-estado-conaf.md)
 
 Run it locally with `make transelec-dev` from the repository root.
 
