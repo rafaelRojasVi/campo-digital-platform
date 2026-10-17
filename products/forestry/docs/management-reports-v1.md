@@ -3,9 +3,10 @@
 ## Status
 
 - Stage 1 (data, API, export): merged 2026-10-16 as PR #103 (`997270e`);
-  migration `0014`. Not deployed yet.
-- Stage 2 (screens): implemented 2026-10-16 on branch
-  `feat/rodales-informes-ui`; not merged or deployed.
+  migration `0014`.
+- Stage 2 (screens): merged 2026-10-17 as PR #104 (`c9fb98a`).
+- Both deployed 2026-10-17 (Railway `f6baf244`, `main` at `87338cb`);
+  migration `0014` ran in production.
 
 Design:
 [spec](../../../docs/superpowers/specs/2026-10-16-rodales-informes-de-manejo-design.md);
