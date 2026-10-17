@@ -18,14 +18,13 @@ from datetime import UTC, datetime
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Connection, Engine
+from sqlalchemy import Connection, Engine, text
 
-from app.conaf import ConafLookup
+from app.conaf import ConafBusyError, ConafLookup
 from app.conaf_store import (
     collect_known_numbers,
     due_numbers,
     finish_run,
-    read_last_run,
     save_lookup,
     start_run,
 )
@@ -62,6 +61,18 @@ def should_run_now(now: datetime, last_started: datetime | None) -> bool:
     return last_started is None or last_started.astimezone(CHILE).date() < local.date()
 
 
+def already_ran_today(connection: Connection, now: datetime) -> bool:
+    """A run that *finished* and started today in Chile (a killed run does not count)."""
+
+    started = connection.execute(
+        text(
+            "SELECT started_at FROM platform.conaf_run WHERE finished_at IS NOT NULL "
+            "ORDER BY started_at DESC, id DESC LIMIT 1"
+        )
+    ).scalar_one_or_none()
+    return started is not None and not should_run_now(now, started)
+
+
 def refresh_due(
     engine: Engine,
     client: Lookup,
@@ -70,6 +81,7 @@ def refresh_due(
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     collect: Callable[[Connection], list[str]] = collect_known_numbers,
     limit: int = MAX_PER_RUN,
+    should_stop: Callable[[], bool] = lambda: False,
 ) -> RunSummary:
     summary = RunSummary()
     with engine.begin() as connection:
@@ -77,37 +89,54 @@ def refresh_due(
         run_id = start_run(connection, now=now, due=len(due))
 
     streak = 0
-    for numero in due[:limit]:
-        lookup = client.lookup(numero)
+    try:
+        for numero in due[:limit]:
+            if should_stop():
+                summary.stopped_reason = "shutdown"
+                break
+            summary.counts["checked"] += 1
+            try:
+                lookup = client.lookup(numero)
+                with engine.begin() as connection:
+                    _, changed = save_lookup(connection, lookup, now=clock())
+            except ConafBusyError:
+                # An interactive lookup is running; this number waits for tomorrow.
+                summary.counts["unavailable"] += 1
+                continue
+            except Exception as exc:  # noqa: BLE001 - one bad row must not end the night
+                logger.warning("CONAF refresh skipped a number (%s)", type(exc).__name__)
+                summary.counts["unavailable"] += 1
+                continue
+            summary.counts[lookup.status] += 1
+            summary.counts["changed"] += int(changed)
+            streak = streak + 1 if lookup.status == "unavailable" else 0
+            if streak >= STOP_AFTER_UNAVAILABLE:
+                summary.stopped_reason = "conaf_unavailable"
+                break
+        if summary.stopped_reason is None and len(due) > limit:
+            summary.stopped_reason = "limit"
+    finally:
         with engine.begin() as connection:
-            _, changed = save_lookup(connection, lookup, now=clock())
-        summary.counts["checked"] += 1
-        summary.counts[lookup.status] += 1
-        summary.counts["changed"] += int(changed)
-        streak = streak + 1 if lookup.status == "unavailable" else 0
-        if streak >= STOP_AFTER_UNAVAILABLE:
-            summary.stopped_reason = "conaf_unavailable"
-            break
-    if summary.stopped_reason is None and len(due) > limit:
-        summary.stopped_reason = "limit"
-
-    with engine.begin() as connection:
-        finish_run(
-            connection,
-            run_id,
-            now=clock(),
-            counts=summary.counts,
-            stopped_reason=summary.stopped_reason,
-        )
-    logger.info("CONAF refresh: %s (stopped: %s)", summary.counts, summary.stopped_reason)
+            finish_run(
+                connection,
+                run_id,
+                now=clock(),
+                counts=summary.counts,
+                stopped_reason=summary.stopped_reason,
+            )
+        logger.info("CONAF refresh: %s (stopped: %s)", summary.counts, summary.stopped_reason)
     return summary
 
 
-def _run_if_due(engine: Engine, client: Lookup, now: datetime) -> None:
+def _run_if_due(
+    engine: Engine, client: Lookup, now: datetime, should_stop: Callable[[], bool]
+) -> None:
+    if now.astimezone(CHILE).hour < RUN_AFTER_HOUR:
+        return
     with engine.connect() as connection:
-        last = read_last_run(connection)
-    if should_run_now(now, None if last is None else last.started_at):
-        refresh_due(engine, client, now=now)
+        if already_ran_today(connection, now):
+            return
+    refresh_due(engine, client, now=now, should_stop=should_stop)
 
 
 async def run_conaf_refresh(
@@ -126,6 +155,6 @@ async def run_conaf_refresh(
         if stop.is_set():
             return
         try:
-            await asyncio.to_thread(_run_if_due, engine_factory(), client, clock())
+            await asyncio.to_thread(_run_if_due, engine_factory(), client, clock(), stop.is_set)
         except Exception as exc:  # noqa: BLE001 - logged; the app keeps serving
             logger.warning("CONAF refresh failed (%s)", type(exc).__name__)

@@ -94,7 +94,8 @@ def upgrade() -> None:
         sa.Column("changed", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column("stopped_reason", sa.Text(), nullable=True),
         sa.CheckConstraint(
-            "stopped_reason IS NULL OR stopped_reason IN ('conaf_unavailable', 'limit')",
+            "stopped_reason IS NULL "
+            "OR stopped_reason IN ('conaf_unavailable', 'limit', 'shutdown')",
             name="ck_conaf_run_stopped_reason",
         ),
         sa.PrimaryKeyConstraint("id", name="pk_conaf_run"),

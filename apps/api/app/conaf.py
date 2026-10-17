@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from html.parser import HTMLParser
-from typing import Literal
+from typing import Literal, Protocol
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -35,6 +35,13 @@ USER_AGENT = "CampoDigital-Plataforma/1.0 (consulta de estado de solicitudes)"
 TIMEOUT_SECONDS = 10.0
 MAX_BYTES = 1024 * 1024
 MIN_INTERVAL_SECONDS = 1.0
+# An interactive lookup waits at most this long for another one to finish,
+# so a hanging CONAF never piles up the API's worker threads.
+INTERACTIVE_WAIT_SECONDS = 2.0
+# The whole read of one page, not just each socket operation.
+TOTAL_DEADLINE_SECONDS = 15.0
+# Numeric(14, 4) holds values below 10^10.
+MAX_SUPERFICIE_HA = Decimal(10) ** 10
 NOT_FOUND_TEXT = "la solicitud indicada no existe"
 
 LookupStatus = Literal["found", "not_found", "mismatch", "unavailable"]
@@ -56,6 +63,10 @@ def normalize_solicitud(raw: str | None) -> str | None:
 
 def public_url(numero: str) -> str:
     return f"{CONAF_CONSULTA_URL}?{urlencode({'nsolicitud': numero})}"
+
+
+class ConafBusyError(RuntimeError):
+    """Another CONAF lookup is still running; try again in a moment."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,9 +129,12 @@ def _decimal(value: str) -> Decimal | None:
     if not cleaned:
         return None
     try:
-        return Decimal(cleaned)
+        number = Decimal(cleaned)
     except InvalidOperation:
         return None
+    if not number.is_finite() or number < 0 or number >= MAX_SUPERFICIE_HA:
+        return None
+    return number
 
 
 def _date(value: str) -> date | None:
@@ -158,12 +172,43 @@ def parse_conaf_page(numero: str, body: bytes) -> ConafLookup:
     )
 
 
+class _Readable(Protocol):
+    def read(self, size: int) -> bytes: ...
+
+
+def read_with_deadline(
+    response: _Readable,
+    *,
+    limit: int,
+    deadline: float,
+    clock: Callable[[], float] = time.monotonic,
+) -> bytes:
+    """Read until EOF or past ``limit`` bytes; raise TimeoutError after ``deadline``."""
+
+    chunks: list[bytes] = []
+    size = 0
+    while True:
+        if clock() > deadline:
+            raise TimeoutError("CONAF page read exceeded its deadline")
+        chunk = response.read(64 * 1024)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        size += len(chunk)
+        if size > limit:
+            break
+    return b"".join(chunks)
+
+
 def urllib_fetch(url: str) -> tuple[int, bytes]:
     """GET ``url`` with the platform's User-Agent; read at most ``MAX_BYTES + 1``."""
 
     request = Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310 - fixed https URL
+    deadline = time.monotonic() + TOTAL_DEADLINE_SECONDS
     with urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310
-        return int(response.status), response.read(MAX_BYTES + 1)
+        return int(response.status), read_with_deadline(
+            response, limit=MAX_BYTES, deadline=deadline
+        )
 
 
 class ConafClient:
@@ -184,8 +229,13 @@ class ConafClient:
         self._lock = threading.Lock()
         self._last: float | None = None
 
-    def lookup(self, numero: str) -> ConafLookup:
-        with self._lock:
+    def lookup(self, numero: str, *, wait: float | None = INTERACTIVE_WAIT_SECONDS) -> ConafLookup:
+        """Ask CONAF; raise ``ConafBusyError`` if another lookup holds it past ``wait``."""
+
+        acquired = self._lock.acquire() if wait is None else self._lock.acquire(timeout=wait)
+        if not acquired:
+            raise ConafBusyError
+        try:
             if self._last is not None:
                 wait = self._last + self._min_interval - self._clock()
                 if wait > 0:
@@ -196,6 +246,8 @@ class ConafClient:
             except (OSError, ValueError, http.client.HTTPException) as error:
                 logger.warning("CONAF lookup failed (%s)", type(error).__name__)
                 return ConafLookup(numero, "unavailable")
+        finally:
+            self._lock.release()
         if status != 200 or len(body) > MAX_BYTES:
             logger.warning("CONAF lookup answered status %s (%s bytes)", status, len(body))
             return ConafLookup(numero, "unavailable")

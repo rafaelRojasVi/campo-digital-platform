@@ -23,8 +23,11 @@ deployed. Design:
 ## Server
 
 - `app/conaf.py`: `normalize_solicitud` (1–9 ASCII digits, padded to six),
-  one request per second, 10 s timeout, at most 1 MiB, parse with the
-  standard library. Results: `found` (the returned Solicitud equals the
+  one request per second, 10 s socket timeout and 15 s for the whole read,
+  at most 1 MiB, parse with the standard library. An interactive lookup
+  waits at most 2 s for another one; when CONAF is busy the API answers
+  with the stored result, or `503` «CONAF está ocupado…» for a number never
+  read. Superficie must be finite, non-negative and below 10^10 ha. Results: `found` (the returned Solicitud equals the
   requested one), `not_found`, `mismatch`, `unavailable`.
 - `app/conaf_store.py`: `platform.conaf_solicitud` (last result),
   `platform.conaf_cambio` (each change of `estado`), `platform.conaf_run`
@@ -35,7 +38,10 @@ deployed. Design:
   the app (one replica, no queue). Numbers come from the active Transelec
   import (`numero_ingreso`, `numero_ingreso_2`) and non-archived Rodales
   reports (`conaf_solicitud`). It refreshes those unchecked for 20 h, at
-  most 2,000, and stops after 5 consecutive `unavailable`. Enabled when
+  most 2,000, and stops after 5 consecutive `unavailable`. A number whose
+  save fails is skipped and the run continues; the run row is always
+  closed. On shutdown the run stops between numbers (`shutdown`), and a run
+  that never finished is retried the same day. Enabled when
   `APP_ENV=production` or `CONAF_REFRESH_ENABLED=1`.
 - `GET /api/conaf/solicitudes/{numero}`: refreshes when never read, older
   than 12 h, or `unavailable` for 15 min.
@@ -51,6 +57,9 @@ deployed. Design:
 
 - **LIMITATION:** CONAF's page is not an API. A markup change makes reads
   `unavailable`; the Consola alerts and the last good data stays.
+- **LIMITATION:** superficie is read with `.` or `,` as the decimal mark;
+  a page with thousands separators (`1.234,5`) has not been seen and would
+  be misread or dropped.
 - **LIMITATION:** one request per second; the first nightly run over
   hundreds of numbers takes minutes.
 

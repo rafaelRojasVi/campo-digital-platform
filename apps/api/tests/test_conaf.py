@@ -151,3 +151,41 @@ def test_client_waits_between_requests() -> None:
     now[0] += 0.25
     client.lookup("090663")
     assert waits == [pytest.approx(0.75)]
+
+
+def test_busy_client_does_not_wait_forever() -> None:
+    # Another request holds the lock (CONAF hanging): an interactive lookup gives up.
+    import threading
+
+    from app.conaf import ConafBusyError
+
+    client = ConafClient(FakeFetch((200, FOUND)), min_interval=0)
+    client._lock.acquire()
+    try:
+        with pytest.raises(ConafBusyError):
+            client.lookup("090663", wait=0.05)
+    finally:
+        client._lock.release()
+    assert isinstance(threading.Lock(), type(client._lock))
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "12345678901", "-1"])
+def test_superficie_out_of_range_is_dropped(value: str) -> None:
+    body = page(("090663", "PLAN DE MANEJO", value, "16/04/1996", "APROBADA", ""))
+    assert parse_conaf_page("090663", body).superficie_ha is None
+
+
+def test_fetch_has_a_total_deadline() -> None:
+    from app.conaf import read_with_deadline
+
+    class Drip:
+        def __init__(self) -> None:
+            self.now = 0.0
+
+        def read(self, size: int) -> bytes:
+            self.now += 5.0
+            return b"x"
+
+    drip = Drip()
+    with pytest.raises(TimeoutError):
+        read_with_deadline(drip, limit=MAX_BYTES, deadline=12.0, clock=lambda: drip.now)

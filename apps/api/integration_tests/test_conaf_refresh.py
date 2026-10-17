@@ -83,3 +83,61 @@ def test_refresh_respects_the_limit(integration_engine: Engine) -> None:
     )
     assert len(conaf.asked) == 3
     assert summary.stopped_reason == "limit"
+
+
+def test_refresh_stops_on_shutdown_and_records_it(integration_engine: Engine) -> None:
+    numbers = [f"{n:06d}" for n in range(1, 6)]
+    conaf = FakeConaf({n: found(n, "APROBADA") for n in numbers})
+    summary = refresh_due(
+        integration_engine,
+        conaf,
+        now=NOW,
+        clock=lambda: NOW,
+        collect=lambda _c: numbers,
+        should_stop=lambda: len(conaf.asked) >= 2,
+    )
+    assert len(conaf.asked) == 2
+    assert summary.stopped_reason == "shutdown"
+    with integration_engine.connect() as connection:
+        run = read_last_run(connection)
+        assert run is not None and run.finished_at == NOW and run.stopped_reason == "shutdown"
+
+
+def test_one_bad_row_does_not_abort_the_night(integration_engine: Engine) -> None:
+    from decimal import Decimal
+
+    numbers = ["000001", "000002", "000003"]
+    answers = {n: found(n, "APROBADA") for n in numbers}
+    # A value the column cannot hold (bypassing the parser's guard).
+    answers["000002"] = ConafLookup(
+        "000002", "found", estado="APROBADA", superficie_ha=Decimal("1e12")
+    )
+    conaf = FakeConaf(answers)
+    summary = refresh_due(
+        integration_engine, conaf, now=NOW, clock=lambda: NOW, collect=lambda _c: numbers
+    )
+    assert conaf.asked == numbers
+    assert summary.counts["found"] == 2
+    with integration_engine.connect() as connection:
+        assert read_record(connection, "000003") is not None
+        run = read_last_run(connection)
+        assert run is not None and run.finished_at == NOW
+
+
+def test_a_killed_run_is_retried_the_same_day(integration_engine: Engine) -> None:
+    from app.conaf_refresh import already_ran_today
+
+    with integration_engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO platform.conaf_run (started_at) VALUES (:start)"),
+            {"start": NOW - timedelta(minutes=20)},
+        )
+    with integration_engine.connect() as connection:
+        assert already_ran_today(connection, NOW) is False
+    with integration_engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO platform.conaf_run (started_at, finished_at) VALUES (:s, :s)"),
+            {"s": NOW - timedelta(minutes=5)},
+        )
+    with integration_engine.connect() as connection:
+        assert already_ran_today(connection, NOW) is True

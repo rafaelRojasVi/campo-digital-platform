@@ -17,7 +17,7 @@ from sqlalchemy import Engine
 
 from app.access import Action, can
 from app.access_repository import AppUser, get_product_role
-from app.conaf import ConafClient, normalize_solicitud, public_url
+from app.conaf import ConafBusyError, ConafClient, normalize_solicitud, public_url
 from app.conaf_refresh import Lookup
 from app.conaf_store import (
     ConafRecord,
@@ -37,6 +37,7 @@ MAX_BULK = 500
 MANUAL_REFRESH_EVERY = timedelta(seconds=60)
 _BAD_NUMBER = "Ese número no se puede consultar en CONAF (solo dígitos)."
 _TOO_MANY = f"Se pueden consultar hasta {MAX_BULK} números a la vez."
+_BUSY = "CONAF está ocupado; intente de nuevo en un momento."
 
 _client = ConafClient()
 
@@ -118,8 +119,17 @@ def _normalized(raw: str) -> str:
     return numero
 
 
-def _lookup_and_save(engine: Engine, client: Lookup, numero: str) -> ConafRecord:
-    lookup = client.lookup(numero)
+def _lookup_and_save(
+    engine: Engine, client: Lookup, numero: str, stored: ConafRecord | None
+) -> ConafRecord:
+    """Ask CONAF; when another lookup is running, answer with what is stored (or 503)."""
+
+    try:
+        lookup = client.lookup(numero)
+    except ConafBusyError as error:
+        if stored is not None:
+            return stored
+        raise HTTPException(status_code=503, detail=_BUSY) from error
     with engine.begin() as connection:
         record, _ = save_lookup(connection, lookup, now=datetime.now(UTC))
     return record
@@ -151,7 +161,7 @@ def get_solicitud(numero: str, engine: DatabaseEngine, client: Client) -> ConafS
     with engine.connect() as connection:
         record = read_record(connection, normalized)
     if needs_refresh(record, now):
-        record = _lookup_and_save(engine, client, normalized)
+        record = _lookup_and_save(engine, client, normalized, record)
     assert record is not None
     return _model(record, datetime.now(UTC))
 
@@ -169,5 +179,5 @@ def refresh_solicitud(numero: str, engine: DatabaseEngine, client: Client) -> Co
     with engine.connect() as connection:
         record = read_record(connection, normalized)
     if record is None or now - record.checked_at >= MANUAL_REFRESH_EVERY:
-        record = _lookup_and_save(engine, client, normalized)
+        record = _lookup_and_save(engine, client, normalized, record)
     return _model(record, datetime.now(UTC))

@@ -155,3 +155,22 @@ def test_mismatch_and_unavailable_reach_the_client(
     assert (mismatch["lookup_status"], mismatch["returned_solicitud"]) == ("mismatch", "069025")
     unavailable = client.get("/api/conaf/solicitudes/222222").json()
     assert unavailable["lookup_status"] == "unavailable" and unavailable["stale"] is True
+
+
+def test_busy_conaf_answers_with_stored_data_or_a_clear_503(
+    client: TestClient, integration_engine: Engine, conaf: FakeConaf
+) -> None:
+    from app.conaf import ConafBusyError
+
+    sign_in(client, integration_engine, "t", (("transelect", Role.VIEWER),))
+    client.get("/api/conaf/solicitudes/090663")
+
+    def busy(numero: str) -> ConafLookup:
+        raise ConafBusyError
+
+    conaf.lookup = busy  # type: ignore[method-assign]
+    stored = client.post("/api/conaf/solicitudes/090663/refresh", headers=_ORIGIN)
+    assert stored.status_code == 200  # within a minute: served from storage anyway
+    never_seen = client.get("/api/conaf/solicitudes/111111")
+    assert never_seen.status_code == 503
+    assert never_seen.json()["detail"] == "CONAF está ocupado; intente de nuevo en un momento."
