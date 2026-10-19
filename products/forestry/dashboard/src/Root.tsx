@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import App from './App.tsx'
-import { ApiError, devLogin, fetchForestryRole } from './api.ts'
+import { ApiError, SESSION_EXPIRED_EVENT, devLogin, fetchForestryRole } from './api.ts'
 import { ErrorView, ForbiddenView, LoadingView, SignedOutView } from './components/StatusViews.tsx'
 import { ImportarPage } from './pages/ImportarPage.tsx'
 import { InformeEditorPage } from './pages/InformeEditorPage.tsx'
@@ -50,6 +50,18 @@ export default function Root() {
       cancelled = true
     }
   }, [nonce])
+
+  useEffect(() => {
+    const onExpired = () => {
+      if (platformFrontDoorEnabled()) {
+        window.location.assign(PLATFORM_FRONT_DOOR_PATH)
+        return
+      }
+      setAccess({ status: 'signed-out' })
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired)
+  }, [])
 
   const retry = useCallback(() => setNonce((n) => n + 1), [])
   const handleDevLogin = useCallback((identityKey: string) => {

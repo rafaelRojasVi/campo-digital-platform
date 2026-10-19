@@ -69,10 +69,23 @@ async function getUrl<T>(url: string): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 401) announceSessionExpired()
     throw new ApiError(response.status, `request failed (${response.status})`)
   }
 
   return (await response.json()) as T
+}
+
+/**
+ * A read answered 401: the session ended while a page was open. `Root`
+ * listens and shows the sign-in instead of each page's «Reintentar», which
+ * could never succeed. Mutations keep their own message so an editor sees
+ * why a save failed before leaving the page.
+ */
+export const SESSION_EXPIRED_EVENT = 'forestry:session-expired'
+
+function announceSessionExpired(): void {
+  window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
 }
 
 export async function fetchPublishedSnapshot(): Promise<ForestrySnapshot> {
