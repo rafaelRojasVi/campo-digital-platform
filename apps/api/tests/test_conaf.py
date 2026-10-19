@@ -13,6 +13,7 @@ from app.conaf import (
     normalize_solicitud,
     parse_conaf_page,
     public_url,
+    solicitudes_in_cell,
 )
 
 HEADER = (
@@ -53,7 +54,14 @@ NOT_FOUND = (
         (" 90663 ", "090663"),
         ("123456789", "123456789"),
         ("1", "000001"),
-        ("12/34-5/26", None),
+        # CONAF's own «correlativo/oficina-código/año» numbers, as the
+        # Transelec planilla's «N Ingreso» carries them (checked 2026-10-18:
+        # 12/345-6/24 answers APROBADA).
+        ("12/345-6/24", "12/345-6/24"),
+        (" 12/345-6/24 ", "12/345-6/24"),
+        ("12/34-5/26", "12/34-5/26"),
+        ("16/345-10-25", None),  # a typo in the planilla is not corrected
+        ("39/345-6/24 11/345-6/26", None),  # two numbers: see solicitudes_in_cell
         ("MP002-202-5", None),
         ("1234567890", None),
         ("", None),
@@ -63,6 +71,29 @@ NOT_FOUND = (
 )
 def test_normalize_solicitud(raw: str | None, expected: str | None) -> None:
     assert normalize_solicitud(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("12/345-6/24", ["12/345-6/24"]),
+        ("39/345-6/24 11/345-6/26", ["39/345-6/24", "11/345-6/26"]),
+        ("16/ 345-10-25", []),
+        ("10099991", ["10099991"]),
+        ("Sin ingreso", []),
+        ("-", []),
+        (None, []),
+    ],
+)
+def test_solicitudes_in_cell(raw: str | None, expected: list[str]) -> None:
+    # A planilla cell may hold the ingreso and the reingreso: both, in order.
+    assert solicitudes_in_cell(raw) == expected
+
+
+def test_public_url_encodes_a_slashed_number() -> None:
+    assert public_url("12/345-6/24") == (
+        "https://oficinavirtual.conaf.cl/consultas/action.php?nsolicitud=12%2F345-6%2F24"
+    )
 
 
 def test_public_url_sends_the_padded_number() -> None:

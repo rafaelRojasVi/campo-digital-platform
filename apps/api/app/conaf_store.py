@@ -14,7 +14,7 @@ from typing import Any
 
 from sqlalchemy import Connection, Row, text
 
-from app.conaf import ConafLookup, normalize_solicitud
+from app.conaf import ConafLookup, normalize_solicitud, solicitudes_in_cell
 from app.transelec_publication import read_active_import_id
 
 REFRESH_AFTER = timedelta(hours=12)
@@ -189,7 +189,7 @@ def recently_changed(record: ConafRecord, now: datetime) -> bool:
 def collect_known_numbers(connection: Connection) -> list[str]:
     """Normalized numbers from the active Transelec import and active Rodales reports."""
 
-    raw: list[str | None] = []
+    numeros: set[str] = set()
     import_id = read_active_import_id(connection)
     if import_id is not None:
         for row in connection.execute(
@@ -199,16 +199,18 @@ def collect_known_numbers(connection: Connection) -> list[str]:
             ),
             {"import_id": import_id},
         ):
-            raw.extend([row.numero_ingreso, row.numero_ingreso_2])
-    raw.extend(
-        connection.execute(
-            text(
-                "SELECT conaf_solicitud FROM forestry.report "
-                "WHERE status <> 'archivado' AND conaf_solicitud IS NOT NULL"
-            )
-        ).scalars()
-    )
-    return sorted({numero for value in raw if (numero := normalize_solicitud(value)) is not None})
+            # A cell may hold the ingreso and the reingreso: both are queried.
+            for cell in (row.numero_ingreso, row.numero_ingreso_2):
+                numeros.update(solicitudes_in_cell(cell))
+    for value in connection.execute(
+        text(
+            "SELECT conaf_solicitud FROM forestry.report "
+            "WHERE status <> 'archivado' AND conaf_solicitud IS NOT NULL"
+        )
+    ).scalars():
+        if (numero := normalize_solicitud(value)) is not None:
+            numeros.add(numero)
+    return sorted(numeros)
 
 
 def due_numbers(connection: Connection, numeros: Collection[str], *, now: datetime) -> list[str]:

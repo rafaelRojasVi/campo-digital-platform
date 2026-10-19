@@ -48,17 +48,52 @@ LookupStatus = Literal["found", "not_found", "mismatch", "unavailable"]
 Fetcher = Callable[[str], tuple[int, bytes]]
 
 _NUMBER = re.compile(r"[0-9]{1,9}")
+# CONAF's «correlativo/oficina-código/año» solicitud numbers, which is what
+# the Transelec planilla's «N Ingreso» holds. FACT (2026-10-18): the public
+# consulta answers `12/345-6/24` with its row (APROBADA), by link
+# (slashes URL-encoded) and by form alike. The 2026-10-17 conclusion that
+# «N Ingreso» was not CONAF's number came from querying only digit numbers.
+_SLASHED = re.compile(r"[0-9]{1,6}/[0-9]{1,4}-[0-9]{1,4}/[0-9]{2}")
 
 
 def normalize_solicitud(raw: str | None) -> str | None:
-    """1–9 ASCII digits, left-padded to six; anything else is not queryable."""
+    """A CONAF solicitud number, or None when it is not queryable.
+
+    1–9 ASCII digits are left-padded to six (`90663` → `090663`, as CONAF
+    answers another solicitud for the unpadded one). A slashed number
+    (`12/345-6/24`) is kept as written. A typo such as `16/345-10-25` is
+    not corrected: it stays unqueryable.
+    """
 
     if raw is None:
         return None
     value = raw.strip()
-    if not value.isascii() or not _NUMBER.fullmatch(value):
+    if not value.isascii():
         return None
-    return value.zfill(6)
+    if _NUMBER.fullmatch(value):
+        return value.zfill(6)
+    if _SLASHED.fullmatch(value):
+        return value
+    return None
+
+
+def solicitudes_in_cell(raw: str | None) -> list[str]:
+    """Every queryable number in one planilla cell, in order.
+
+    About 58 «N Ingreso» cells of the 30-Sept workbook hold two numbers (the
+    ingreso and the reingreso of the same plan, source-contract-v2.md); both
+    are returned. A cell that is entirely something else yields nothing.
+    """
+
+    if raw is None or not raw.isascii():
+        return []
+    if "/" in raw:
+        # Only whole CONAF numbers; the digits of a typo do not count.
+        found = _SLASHED.findall(raw)
+    else:
+        numero = normalize_solicitud(raw)
+        found = [] if numero is None else [numero]
+    return list(dict.fromkeys(found))
 
 
 def public_url(numero: str) -> str:

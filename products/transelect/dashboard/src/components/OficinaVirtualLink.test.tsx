@@ -33,9 +33,17 @@ describe("OficinaVirtualLink keyboard and click isolation", () => {
     );
   });
 
-  it("opens the empty consulta page for a planilla-style N.º CONAF cannot answer", () => {
-    // CONAF answers «No fue posible realizar su consulta» to «n/n-n/n».
-    render(<OficinaVirtualLink numero="12/34-5/26" withLink />);
+  it("opens CONAF's result for the planilla's slashed N.º, the most recent of a pair", () => {
+    // FACT (2026-10-18): CONAF answers 12/345-6/24 by link, slashes encoded.
+    render(<OficinaVirtualLink numero="39/345-6/24 11/345-6/26" withLink />);
+    expect(screen.getByTestId("oficina-virtual-link")).toHaveAttribute(
+      "href",
+      "https://oficinavirtual.conaf.cl/consultas/action.php?nsolicitud=11%2F345-6%2F26",
+    );
+  });
+
+  it("opens the empty consulta page for a mistyped N.º", () => {
+    render(<OficinaVirtualLink numero="16/345-10-25" withLink />);
     expect(screen.getByTestId("oficina-virtual-link")).toHaveAttribute(
       "href",
       "https://oficinavirtual.conaf.cl/consultas/index.php",
@@ -56,10 +64,9 @@ describe("OficinaVirtualLink keyboard and click isolation", () => {
     expect(screen.queryByTestId("oficina-virtual-copy")).toBeNull();
   });
 
-  it("offers only «Copiar N.º» while the CONAF number is unconfirmed", () => {
-    // CONAF_ESTADO_ENABLED is off: «Abrir» led to «no existe» or an empty form.
-    render(<OficinaVirtualLink numero="10034567" />);
+  it("can leave out the link and keep «Copiar N.º»", () => {
+    render(<OficinaVirtualLink numero="10099992" withLink={false} />);
     expect(screen.queryByTestId("oficina-virtual-link")).toBeNull();
-    expect(screen.getByTestId("oficina-virtual-copy")).toHaveAccessibleName("Copiar N.º 10034567");
+    expect(screen.getByTestId("oficina-virtual-copy")).toHaveAccessibleName("Copiar N.º 10099992");
   });
 });

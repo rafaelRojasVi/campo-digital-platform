@@ -609,7 +609,9 @@ describe('Estado CONAF in Rodales', () => {
     render(<RealEditor role="operator" reportId={7} />)
     await user.type(await screen.findByLabelText('N.º solicitud CONAF'), '12/34')
     await user.click(screen.getByRole('button', { name: 'Guardar N.º' }))
-    expect(screen.getByText('Solo dígitos, hasta 9.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Use el N.º de CONAF: dígitos (hasta 9) o el formato 12/345-6/24.'),
+    ).toBeInTheDocument()
     expect(reportsApi.updateReport).not.toHaveBeenCalled()
   })
 

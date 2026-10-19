@@ -284,19 +284,26 @@ test('Estado: the old Pendientes address lands on Estado with its filters', asyn
   ).toHaveAttribute('aria-current', 'page')
 })
 
-test('Estado: while Estado CONAF is off, only «Copiar N.º» is offered and it copies', async ({
+test('Estado: the Oficina Virtual opens the N.º in CONAF in a new tab and the N.º can be copied', async ({
   page,
   context,
 }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await openEstado(page)
-  // The planilla's N Ingreso is not CONAF's consulta number (CONAF_ESTADO_ENABLED).
-  await expect(page.getByTestId('estado-ov-3-link')).toHaveCount(0)
+  const link = page.getByTestId('estado-ov-3-link')
+  // The most recent ingreso, already entered (digits padded to six, as CONAF
+  // answers them); the link no longer depends on the Estado CONAF switch.
+  await expect(link).toHaveAttribute(
+    'href',
+    'https://oficinavirtual.conaf.cl/consultas/action.php?nsolicitud=030003',
+  )
+  await expect(link).toHaveAttribute('target', '_blank')
+  await expect(link).toHaveAttribute('rel', 'noopener noreferrer')
 
   await page.getByTestId('estado-ov-3-copy').click()
   // Copying inside a row must not open the drawer behind it.
   await expect(page.getByTestId('row-drawer')).toHaveCount(0)
-  // The most recent ingreso is the one copied.
+  // The most recent ingreso is the one copied, as the planilla writes it.
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('30003')
 })
 

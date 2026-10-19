@@ -397,7 +397,7 @@ def test_report_conaf_number_can_be_set_and_cleared(
     assert detail["conaf_solicitud"] == "090663"
     bad = client.patch(
         f"/api/forestry/reports/{report_id}",
-        json={"revision": 2, "conaf_solicitud": "12/34-5/26"},
+        json={"revision": 2, "conaf_solicitud": "12/34-5-26"},  # a typo, not a number
         headers=_ORIGIN,
     )
     assert bad.status_code == 422
@@ -417,6 +417,17 @@ def test_report_conaf_number_can_be_set_and_cleared(
     assert renamed.status_code == 200
     assert (
         client.get(f"/api/forestry/reports/{report_id}").json()["report"]["conaf_solicitud"] is None
+    )
+    # CONAF's own slashed numbers are accepted as written (2026-10-18).
+    slashed = client.patch(
+        f"/api/forestry/reports/{report_id}",
+        json={"revision": 4, "conaf_solicitud": "12/345-6/24"},
+        headers=_ORIGIN,
+    )
+    assert slashed.status_code == 200, slashed.text
+    assert (
+        client.get(f"/api/forestry/reports/{report_id}").json()["report"]["conaf_solicitud"]
+        == "12/345-6/24"
     )
 
 

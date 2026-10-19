@@ -8,11 +8,11 @@ qué tan rápido carga.
 
 ## Qué cambia
 
-- **«Abrir Oficina Virtual CONAF» queda oculto por ahora.** El enlace usaba
-  el «N Ingreso» de la planilla, que la consulta pública de CONAF no acepta
-  (pide el número de 6 dígitos del comprobante de ingreso), así que llevaba
-  a «no existe» o a un formulario en blanco. «Copiar N.º» sigue disponible.
-  Vuelve cuando se confirme qué número usar.
+- **«Abrir Oficina Virtual CONAF» abre la solicitud correcta.** El «N Ingreso»
+  de la planilla sí es el número que acepta la consulta pública de CONAF
+  (por ejemplo `12/345-6/24`). La columna «Estado CONAF» está activa; los
+  PMF aprobados en la planilla que CONAF muestra denegados aparecen como
+  «Revisar» (ver [Estado CONAF](2026-10-16-estado-conaf.md)).
 - **Estado se puede filtrar.** Un clic en un grupo o un paso de las barras
   (por ejemplo «En evaluación») deja en la tabla solo esos PMF; además hay
   un buscador por PMF o N.º de ingreso. La tabla se desplaza por dentro con

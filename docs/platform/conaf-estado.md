@@ -87,7 +87,7 @@ notes (Spanish):
   normalization skips; 101 are 8 digits, all starting with `10`, holding 10
   distinct values; none parse as dates. Those 10 are the `not_found` numbers.
   `N Ingreso2` is empty in 705 rows and slash-shaped in the rest.
-- **INFERENCE:** the planilla's `N Ingreso` is not the solicitud number that
+- **INFERENCE (withdrawn 2026-10-18, see Correction):** the planilla's `N Ingreso` is not the solicitud number that
   CONAF's public consulta takes (six digits, such as `090663`). The
   slash shape resembles a regional office ingreso number; this is unconfirmed.
 - **DECISION (2026-10-17, Rafael):** the Transelec column and drawer card
@@ -99,10 +99,84 @@ notes (Spanish):
   Transelec numbers (10 lookups a night), so the data is ready if the flag
   is turned back on.
 
+## Correction: the slashed `N Ingreso` is CONAF's number (2026-10-18)
+
+- **FACT (2026-10-18, reported by Rafael from CONAF's page, then reproduced
+  by GET and POST):** CONAF's public consulta answers the planilla's slashed
+  `N Ingreso` as written. `12/345-6/24` returns its row (Ley 20.283 obras
+  civiles, the PMF's total area, APROBADA). Sent as a link the
+  slashes are URL-encoded (`nsolicitud=12%2F345-6%2F24`).
+- **FACT:** the 2026-10-17 INFERENCE above was wrong. It came from querying
+  only the numbers the normalization let through (the 8-digit `10…` ones,
+  which do answer «no existe»); the slashed numbers were never sent. The
+  2026-10-05 note in `OficinaVirtualLink.tsx` that slashed numbers failed was
+  also wrong.
+- **DECISION (2026-10-18):**
+  - `normalize_solicitud` accepts 1–9 digits (padded to six, as before) and
+    `correlativo/oficina-código/año` numbers kept as written; a typo such as
+    `16/345-10-25` is not corrected and stays unqueryable.
+  - `solicitudes_in_cell` returns every number of a planilla cell: some
+    cells hold the ingreso and the reingreso together; the nightly run
+    collects both, and the Transelec column reads the most recent (last of
+    `N Ingreso2`, else of `N Ingreso`).
+  - Migration 0016 widens both CHECK constraints to that shape.
+  - The `/api/conaf/solicitudes/{numero:path}` routes accept the slashes.
+  - `CONAF_ESTADO_ENABLED` is on again (`src/lib/conafFlag.ts`), and the
+    «Abrir Oficina Virtual» link opens the result with the number entered.
+    (Switched off again on 2026-10-19; see below.)
+- **RESULT (2026-10-18, live, three lookups one second apart):**
+  `12/345-6/24` found (APROBADA, resolution 2024-08-26); a two-number cell's
+  most recent number found APROBADA with a resolution three days old, while
+  the planilla still shows the PMF «En evaluación»; `10099991` not found.
+
+## Planilla-wide check: Transelec status paused again (2026-10-19)
+
+- **RESULT (2026-10-19):** every distinct number of the development copy of
+  the planilla (the 09-Sept workbook) was queried once, 1.5 s apart, together
+  with its resolution page (`consultas/ver.php?id=<n>`, public, no login).
+  Raw pages stayed outside the repository and were deleted afterwards.
+  - Every APROBADA solicitud has a resolution in one format: «Apruébase»,
+    «Superficie aprobada» and a six-column «Solicitado / Aprobado (ficha
+    predial)» table (rodal, superficie, actividad; rodal, superficie, año)
+    whose numbers all parse. One had no table (0.00 ha, observaciones only).
+    The activities seen are CORTA OOCC and REFORESTACION.
+  - Every DENEGADA solicitud says «Rechácese», with no superficie or table;
+    the reasons are free text under «Observaciones».
+  - «En evaluación» rows have no resolution link. The 8-digit numbers answer
+    «no existe»; two slashed numbers answered «Intente más tarde» twice.
+- **FACT:** a substantial share of PMF that the planilla marks «Aprobado»
+  are DENEGADA in the consulta, including **every** PMF with a «Reingreso
+  rec. reposición» recorded. Others, with no recurso recorded, are not
+  explained by the data. Some PMF «En trámite» in the planilla are APROBADA
+  in CONAF (possibly only because the 09-Sept copy is old).
+- **INFERENCE:** after a denial is overturned by a recurso de reposición, the
+  consulta keeps showing the original denial.
+- **DECISION (2026-10-19, superseded the same day, below):** `CONAF_ESTADO_ENABLED` was switched off again: the column
+  would tell Transelec that approved plans were denied. The «Abrir Oficina
+  Virtual CONAF» links no longer depend on it and open the most recent
+  number, so a person sees CONAF's own page. Slashed-number support, the
+  nightly refresh and Rodales are unchanged.
+- **FACT (2026-10-19, Javier's written answer):** after an approved recurso
+  de reposición the consulta keeps showing the original denial; the other
+  cases are to be reviewed case by case.
+- **DECISION (2026-10-19, same day):** `CONAF_ESTADO_ENABLED` is on again.
+  When the planilla's «Estado resumido» is «Aprobado» and CONAF's tone is a
+  denial, the column and the drawer card show «Revisar» with that
+  explanation, never «Rechazada» (`contradictsPlanilla` in
+  `src/lib/conafEstado.ts`). The drawer card reads the same most recent
+  number as the column (`conafNumero`); before, a two-number cell showed as
+  unqueryable there.
+- **OPEN QUESTION:** the 8-digit numbers. Javier: «CONAF tiene diferentes
+  formatos según provincia»; which consulta answers them is still unknown.
+- **HYPOTHESIS:** reading the approval resolutions (one fixed format) could
+  check the planilla's superficie per área and reforestation commitments;
+  not designed, waiting on what Marianne copies from them by hand.
+
 ## Open questions
 
-- **OPEN QUESTION:** where each Transelec PMF's CONAF solicitud number
-  lives, given that no `N Ingreso` shape matched (see above).
+- **OPEN QUESTION:** what the 8-digit `N Ingreso` values starting with `10`
+  are (10 distinct, in 101 rows): CONAF's consulta does not know them.
+  They may be numbers from another CONAF system; Campo Digital can say.
 
 ## Related documentation
 

@@ -25,11 +25,19 @@ export const TONE_PILL: Record<ConafTone, string> = {
   neutral: 'conaf-pill conaf-pill--neutral',
 }
 
-/** 1–9 ASCII digits, padded to six (the server's rule); otherwise null. */
+const SLASHED = /^[0-9]{1,6}\/[0-9]{1,4}-[0-9]{1,4}\/[0-9]{2}$/
+
+/**
+ * The server's rule (app.conaf.normalize_solicitud): 1–9 ASCII digits padded
+ * to six, or CONAF's slashed «correlativo/oficina-código/año» number kept as
+ * written (12/345-6/24, what the Transelec planilla's «N Ingreso» holds).
+ * A typo is not corrected; anything else is null.
+ */
 export function normalizeSolicitud(raw: string | null | undefined): string | null {
   const value = (raw ?? '').trim()
-  if (!/^[0-9]{1,9}$/.test(value)) return null
-  return value.padStart(6, '0')
+  if (/^[0-9]{1,9}$/.test(value)) return value.padStart(6, '0')
+  if (SLASHED.test(value)) return value
+  return null
 }
 
 export function conafTone(record: ConafSolicitud): ConafTone {

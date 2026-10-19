@@ -1,8 +1,13 @@
 /**
- * Off until Campo Digital confirms which planilla number is CONAF's solicitud.
- * FACT (2026-10-17, production, shapes only): no `N Ingreso` matched CONAF's
- * public consulta; most use `999/999-9/99` and the 8-digit ones answered «no
- * existe». Turning this on shows the «Estado CONAF» column, the drawer card
- * and the «Abrir Oficina Virtual CONAF» links again.
+ * Estado CONAF in Transelec: the «Estado CONAF» column and the drawer card.
+ * The «Abrir Oficina Virtual CONAF» links do not depend on it.
+ *
+ * FACT (2026-10-18): CONAF's public consulta answers the planilla's
+ * «N Ingreso» as written (e.g. 12/345-6/24, slashes URL-encoded).
+ *
+ * Paused on 2026-10-19 after approved plans showed «DENEGADA» in the
+ * consulta; back on the same day once Campo Digital confirmed why (an
+ * approved recurso de reposición is not reflected there). Those cases show
+ * «Revisar», not «Rechazada» (lib/conafEstado.ts, contradictsPlanilla).
  */
-export const CONAF_ESTADO_ENABLED = false
+export const CONAF_ESTADO_ENABLED = true

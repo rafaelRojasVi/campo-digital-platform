@@ -112,12 +112,31 @@ def test_bad_number_is_422_and_never_reaches_conaf(
     client: TestClient, integration_engine: Engine, conaf: FakeConaf
 ) -> None:
     sign_in(client, integration_engine, "t", (("transelect", Role.VIEWER),))
-    response = client.get("/api/conaf/solicitudes/12%2F34-5%2F26")
-    assert response.status_code in (404, 422)
+    # A typo in the planilla is not corrected into a number.
+    response = client.get("/api/conaf/solicitudes/16%2F345-10-25")
+    assert response.status_code == 422
     response = client.get("/api/conaf/solicitudes/MP002")
     assert response.status_code == 422
-    assert response.json()["detail"] == "Ese número no se puede consultar en CONAF (solo dígitos)."
+    assert response.json()["detail"] == (
+        "Ese número no se puede consultar en CONAF (dígitos, o el formato 12/345-6/24)."
+    )
     assert conaf.asked == []
+
+
+def test_a_slashed_planilla_number_is_read_refreshed_and_listed(
+    client: TestClient, integration_engine: Engine, conaf: FakeConaf
+) -> None:
+    # FACT (2026-10-18): CONAF answers the planilla's «N Ingreso» as written.
+    sign_in(client, integration_engine, "t", (("transelect", Role.VIEWER),))
+    first = client.get("/api/conaf/solicitudes/12%2F345-6%2F24")
+    assert first.status_code == 200
+    assert first.json()["numero"] == "12/345-6/24"
+    assert first.json()["conaf_url"].endswith("nsolicitud=12%2F345-6%2F24")
+    refreshed = client.post("/api/conaf/solicitudes/12%2F345-6%2F24/refresh", headers=_ORIGIN)
+    assert refreshed.status_code == 200
+    listed = client.get("/api/conaf/solicitudes", params={"numeros": "12/345-6/24,090663"})
+    assert [item["numero"] for item in listed.json()["solicitudes"]] == ["12/345-6/24"]
+    assert conaf.asked == ["12/345-6/24"]
 
 
 def test_refresh_needs_csrf_and_waits_a_minute(

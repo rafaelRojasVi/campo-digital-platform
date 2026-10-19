@@ -30,8 +30,20 @@ describe('ConafEstadoCell', () => {
     expect(screen.getByText('Sin actualizar')).toBeInTheDocument()
   })
 
+  it('shows «Revisar», not «Rechazada», when the planilla says the plan is approved', () => {
+    render(<ConafEstadoCell numero="12/345-6/24" record={{ ...base, estado: 'DENEGADA:' }} estadoResumido="Aprobado" />)
+    expect(screen.getByText('Revisar')).toHaveClass('pill', 'pill-otro')
+    expect(screen.queryByText('Rechazada')).not.toBeInTheDocument()
+    expect(screen.getByText('Revisar').closest('[title]')?.getAttribute('title')).toMatch(/recurso de reposición/)
+  })
+
+  it('keeps «Rechazada» when the planilla does not say approved', () => {
+    render(<ConafEstadoCell numero="12/345-6/24" record={{ ...base, estado: 'DENEGADA:' }} estadoResumido="En tramite" />)
+    expect(screen.getByText('Rechazada')).toBeInTheDocument()
+  })
+
   it('skips numbers CONAF cannot answer', () => {
-    render(<ConafEstadoCell numero="12/34-5/26" record={undefined} />)
+    render(<ConafEstadoCell numero="16/345-10-25" record={undefined} />)
     expect(screen.getByText('Sin N.º consultable')).toBeInTheDocument()
   })
 

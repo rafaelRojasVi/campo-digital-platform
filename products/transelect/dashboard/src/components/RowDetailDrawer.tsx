@@ -62,6 +62,7 @@ import { AlertBanner, LoadingBlock } from './StateViews'
 import { Fact } from './Fact'
 import { OficinaVirtualLink } from './OficinaVirtualLink'
 import { ConafCard } from './ConafCard'
+import { conafNumero } from '../lib/conafColumn'
 import { CONAF_ESTADO_ENABLED } from '../lib/conafFlag'
 import { PlazoDrawerNotice, PlazoDrawerSection, type PlazoDrawerStatus } from './PlazoDrawerSection'
 import { SourceDate } from './SourceDate'
@@ -555,8 +556,9 @@ export function RowDetailDrawer({
           <section className="drawer-section" aria-labelledby="drawer-conaf">
             <h3 id="drawer-conaf">Estado en CONAF</h3>
             <ConafCard
-              key={current.numero_ingreso_2 ?? current.numero_ingreso ?? ''}
-              numero={current.numero_ingreso_2 ?? current.numero_ingreso}
+              key={conafNumero(current) ?? ''}
+              numero={conafNumero(current)}
+              estadoResumido={current.estado_resumido}
             />
           </section>
         )}
