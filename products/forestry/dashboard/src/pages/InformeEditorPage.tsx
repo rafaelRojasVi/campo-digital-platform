@@ -158,6 +158,19 @@ function writeMapPref(name: string, value: number): void {
   }
 }
 
+/** The drawn line's length (EPSG:32718 is in metres). */
+function lengthLabel(points: Position[]): string {
+  let total = 0
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1]!
+    const b = points[index]!
+    total += Math.hypot(b[0] - a[0], b[1] - a[1])
+  }
+  return total >= 1000
+    ? `${(total / 1000).toLocaleString('es-CL', { maximumFractionDigits: 2 })} km`
+    : `${Math.round(total).toLocaleString('es-CL')} m`
+}
+
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`
 }
@@ -1050,6 +1063,7 @@ function Editor({
             ) : null}
           </div>
 
+          {mode === 'select' || mode === 'view' ? (
           <div className="map-layers" role="group" aria-label="Vista del mapa">
             <button
               type="button"
@@ -1075,6 +1089,7 @@ function Editor({
             </label>
             <Hint text="«Números» muestra el N.º de cada rodal (los de la base aparecen al acercarse). «Opacidad» aclara el relleno para ver la imagen satelital; bajo 35 % el borde toma el color del rodal." />
           </div>
+          ) : null}
 
           {editable && mode === 'select' && card === null && toast === null ? (
             <p className="map-hint">
@@ -1137,7 +1152,10 @@ function Editor({
 
           {mode === 'split' ? (
             <div className="report-sheet">
-              <span>{`Línea: ${plural(linePoints.length, 'punto', 'puntos')}`}</span>
+              <span>
+                {`Línea: ${plural(linePoints.length, 'punto', 'puntos')}`}
+                {linePoints.length > 1 ? ` · ${lengthLabel(linePoints)}` : ''}
+              </span>
               <button type="button" className="button button--ghost" onClick={() => setLinePoints((p) => p.slice(0, -1))} disabled={linePoints.length === 0}>Quitar último punto</button>
               <button type="button" className="button button--ghost" onClick={cancelSplit}>Cancelar</button>
               <button type="button" className="button" onClick={finishLine}>

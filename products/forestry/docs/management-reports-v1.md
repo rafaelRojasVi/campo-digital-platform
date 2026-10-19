@@ -153,6 +153,11 @@ A feature sent without `geometry` is an untouched copy of its source polygon
     - «Opacidad» sets the report fill (10–100 %), and below 35 % the outline
       takes the fill color;
     - «Ver todo el informe» refits the view.
+    While a line is drawn, rodal tooltips are hidden, and three things show
+    instead: a dashed preview segment to the cursor, «+segment · total»
+    length beside the cursor (EPSG:32718 metres), and the cursor's UTM
+    coordinates. The bottom bar adds the line's length. No elevation is
+    shown: the base carries none.
     Opacity and numbers are a per-viewer convenience kept in localStorage,
     guarded by try/catch.
   - **Phones:** the map sits above and the table below, and the panel scrolls

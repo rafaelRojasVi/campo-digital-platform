@@ -63,6 +63,23 @@ const REPORT = '#2f9e6a'
 const SELECTED = '#3b8fd6'
 const CUT = '#ffd84d'
 
+const METERS = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 })
+
+/** Length of a polyline in EPSG:32718 (metres). */
+function lineLength(points: Position[]): number {
+  let total = 0
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1]!
+    const b = points[index]!
+    total += Math.hypot(b[0] - a[0], b[1] - a[1])
+  }
+  return total
+}
+
+function formatLength(meters: number): string {
+  return meters >= 1000 ? `${(meters / 1000).toLocaleString('es-CL', { maximumFractionDigits: 2 })} km` : `${METERS.format(meters)} m`
+}
+
 /** Below this fill opacity the outline takes the fill color, so edges stay readable. */
 const COLORED_OUTLINE_BELOW = 0.35
 /** Base rodal numbers appear from this zoom, on polygons at least this big on screen. */
@@ -124,6 +141,12 @@ export function ReportMap(props: ReportMapProps) {
   const reportLayerRef = useRef<L.LayerGroup | null>(null)
   const drawLayerRef = useRef<L.LayerGroup | null>(null)
   const labelLayerRef = useRef<L.LayerGroup | null>(null)
+  // While a line is drawn: the segment to the cursor, its length by the
+  // cursor, and the cursor's UTM coordinates. Updated on mousemove without
+  // re-rendering React.
+  const rubberRef = useRef<L.Polyline | null>(null)
+  const measureRef = useRef<HTMLDivElement>(null)
+  const coordsRef = useRef<HTMLDivElement>(null)
   // Interior label points and UTM boxes, computed once per base polygon.
   const baseGeomRef = useRef<Map<number, { point: [number, number]; box: [number, number, number, number] }>>(new Map())
   const propsRef = useRef(props)
@@ -169,6 +192,43 @@ export function ReportMap(props: ReportMapProps) {
     map.on('dblclick', () => {
       if (propsRef.current.mode === 'split') propsRef.current.onFinishLine()
     })
+    rubberRef.current = L.polyline([], { color: CUT, weight: 2, dashArray: '4 6', opacity: 0.9, interactive: false }).addTo(map)
+    let frame = 0
+    map.on('mousemove', (event: L.LeafletMouseEvent) => {
+      if (propsRef.current.mode !== 'split') return
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => showCursor(event))
+    })
+    function hideCursor() {
+      rubberRef.current?.setLatLngs([])
+      if (measureRef.current !== null) measureRef.current.hidden = true
+      if (coordsRef.current !== null) coordsRef.current.hidden = true
+    }
+    map.on('mouseout', () => hideCursor())
+    const showCursor = (event: L.LeafletMouseEvent) => {
+      const [easting, northing] = lonLatToUtm(event.latlng.lng, event.latlng.lat)
+      const coords = coordsRef.current
+      if (coords !== null) {
+        coords.hidden = false
+        coords.textContent = `UTM 18S · E ${METERS.format(easting)} · N ${METERS.format(northing)}`
+      }
+      const points = propsRef.current.linePoints
+      const last = points[points.length - 1]
+      const measure = measureRef.current
+      if (last === undefined) {
+        rubberRef.current?.setLatLngs([])
+        if (measure !== null) measure.hidden = true
+        return
+      }
+      const [lastLon, lastLat] = utmToLonLat(last[0], last[1])
+      rubberRef.current?.setLatLngs([[lastLat, lastLon], event.latlng])
+      const segment = Math.hypot(easting - last[0], northing - last[1])
+      if (measure !== null) {
+        measure.hidden = false
+        measure.textContent = `+${formatLength(segment)} · total ${formatLength(lineLength(points) + segment)}`
+        measure.style.transform = `translate(${event.containerPoint.x + 14}px, ${event.containerPoint.y + 14}px)`
+      }
+    }
     mapRef.current = map
     const uninstallKeyboardZoom = installKeyboardZoom(map)
     // The panel widens in «Planificación»: redraw tiles for the new size
@@ -417,12 +477,29 @@ export function ReportMap(props: ReportMapProps) {
     }
   }, [props.features, props.base, props.showLabels, props.mode])
 
-  // Cursor follows the mode.
+  // Cursor follows the mode; outside «Dividir» the line helpers are hidden.
   useEffect(() => {
     const container = containerRef.current
     if (container === null) return
     container.dataset.mode = props.mode
+    if (props.mode !== 'split') {
+      rubberRef.current?.setLatLngs([])
+      if (measureRef.current !== null) measureRef.current.hidden = true
+      if (coordsRef.current !== null) coordsRef.current.hidden = true
+    }
   }, [props.mode])
 
-  return <div ref={containerRef} className="report-map" role="application" aria-label="Mapa del informe" />
+  // A new point restarts the preview segment from it.
+  useEffect(() => {
+    rubberRef.current?.setLatLngs([])
+    if (measureRef.current !== null) measureRef.current.hidden = true
+  }, [props.linePoints])
+
+  return (
+    <>
+      <div ref={containerRef} className="report-map" role="application" aria-label="Mapa del informe" />
+      <div ref={measureRef} className="report-map__measure" hidden aria-hidden="true" />
+      <div ref={coordsRef} className="report-map__coords" hidden aria-hidden="true" />
+    </>
+  )
 }
