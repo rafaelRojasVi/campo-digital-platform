@@ -158,6 +158,19 @@ A feature sent without `geometry` is an untouched copy of its source polygon
     length beside the cursor (EPSG:32718 metres), and the cursor's UTM
     coordinates. The bottom bar adds the line's length. No elevation is
     shown: the base carries none.
+    **RESULT (2026-10-19, local dev, real Degenfeld base, CPU profile):**
+    - opening the editor had one 854 ms long task: interior label points were
+      computed for every base polygon before the viewport test, and
+      reprojection missed its cache (it was keyed by geometry objects the
+      editor re-wraps);
+    - after testing the bbox first, caching label points and boxes, and keying
+      reprojection by the coordinates array, the longest task is 271 ms
+      (first reprojection), zero when arriving from the main map;
+    - labels redraw once per move, not twice.
+    **DECISION:** the panel is a size container; under 560 px each rodal row
+    becomes a stacked card with visible field labels, and the progress cards
+    drop their status line. The «Haga clic en un rodal» hint shows only while
+    the report is empty.
     Opacity and numbers are a per-viewer convenience kept in localStorage,
     guarded by try/catch.
   - **Phones:** the map sits above and the table below, and the panel scrolls

@@ -1128,11 +1128,9 @@ function Editor({
           </div>
           ) : null}
 
-          {editable && mode === 'select' && card === null && toast === null ? (
+          {editable && mode === 'select' && card === null && toast === null && draft.features.length === 0 ? (
             <p className="map-hint">
-              {draft.features.length === 0
-                ? 'Haga clic en un rodal para agregarlo al informe'
-                : 'Clic en un rodal: entra al informe · Clic en uno naranjo: ver opciones'}
+              Haga clic en un rodal del mapa para agregarlo al informe
             </p>
           ) : null}
 

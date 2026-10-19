@@ -39,14 +39,16 @@ export function tooltipHtml(properties: SourceFeatureProperties): string {
  */
 // Reprojection is the costly part of drawing ~1,600 polygons; the same
 // geometry objects come back from the in-memory collection cache, so each is
-// reprojected once per page session.
-const latLngCache = new WeakMap<GeoFeature['geometry'], [number, number][][][]>()
+// reprojected once per page session. Keyed by the coordinates array, which the
+// map, the report editor (wrapping it in a new geometry object) and the draft
+// all share.
+const latLngCache = new WeakMap<GeoFeature['geometry']['coordinates'], [number, number][][][]>()
 
 export function multiPolygonToLatLngs(geometry: GeoFeature['geometry']): [number, number][][][] {
-  const cached = latLngCache.get(geometry)
+  const cached = latLngCache.get(geometry.coordinates)
   if (cached !== undefined) return cached
   const latLngs = projectMultiPolygon(geometry)
-  latLngCache.set(geometry, latLngs)
+  latLngCache.set(geometry.coordinates, latLngs)
   return latLngs
 }
 

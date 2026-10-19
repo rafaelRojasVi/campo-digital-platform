@@ -112,6 +112,29 @@ function featureStyle(feature: DraftFeature, selected: boolean, opacity: number)
   }
 }
 
+// Interior label points and UTM boxes, once per polygon for the page session
+// (the base and the draft keep their coordinate arrays).
+const labelPointCache = new WeakMap<Coordinates, [number, number]>()
+const boxCache = new WeakMap<Coordinates, [number, number, number, number]>()
+
+function cachedLabelPoint(coordinates: Coordinates): [number, number] {
+  let point = labelPointCache.get(coordinates)
+  if (point === undefined) {
+    point = labelPoint(coordinates)
+    labelPointCache.set(coordinates, point)
+  }
+  return point
+}
+
+function cachedBox(coordinates: Coordinates): [number, number, number, number] {
+  let box = boxCache.get(coordinates)
+  if (box === undefined) {
+    box = multiPolygonUtmBbox({ type: 'MultiPolygon', coordinates })
+    boxCache.set(coordinates, box)
+  }
+  return box
+}
+
 function labelMarker(lat: number, lon: number, html: string, className: string): L.Marker {
   return L.marker([lat, lon], {
     interactive: false,
@@ -147,8 +170,6 @@ export function ReportMap(props: ReportMapProps) {
   const rubberRef = useRef<L.Polyline | null>(null)
   const measureRef = useRef<HTMLDivElement>(null)
   const coordsRef = useRef<HTMLDivElement>(null)
-  // Interior label points and UTM boxes, computed once per base polygon.
-  const baseGeomRef = useRef<Map<number, { point: [number, number]; box: [number, number, number, number] }>>(new Map())
   const propsRef = useRef(props)
   propsRef.current = props
 
@@ -438,7 +459,7 @@ export function ReportMap(props: ReportMapProps) {
         const code = feature.attributes.n_rodal
         if (code === null || code === undefined || String(code).trim() === '') continue
         const text = String(code)
-        push(labelPoint(feature.coordinates), `<b>${escapeHtml(text)}</b>`, 'report-map__label', text.length * 8 + 12)
+        push(cachedLabelPoint(feature.coordinates), `<b>${escapeHtml(text)}</b>`, 'report-map__label', text.length * 8 + 12)
       }
       if (map.getZoom() >= BASE_LABELS_FROM_ZOOM) {
         const resolution = metersPerPixel(map.getCenter().lat, map.getZoom())
@@ -449,18 +470,11 @@ export function ReportMap(props: ReportMapProps) {
           const ordinal = feature.properties.feature_ordinal
           const rodal = feature.properties.n_rodal
           if (inReport.has(ordinal) || rodal === null || rodal.trim() === '') continue
-          let geom = baseGeomRef.current.get(ordinal)
-          if (geom === undefined) {
-            geom = {
-              point: labelPoint(feature.geometry.coordinates),
-              box: multiPolygonUtmBbox({ type: 'MultiPolygon', coordinates: feature.geometry.coordinates }),
-            }
-            baseGeomRef.current.set(ordinal, geom)
-          }
-          const [minx, miny, maxx, maxy] = geom.box
+          // The box is cheap; the interior point is not: test the box first.
+          const [minx, miny, maxx, maxy] = cachedBox(feature.geometry.coordinates)
           if (maxx < vx1 || minx > vx2 || maxy < vy1 || miny > vy2) continue
           if (Math.max(maxx - minx, maxy - miny) / resolution < BASE_LABEL_MIN_PX) continue
-          push(geom.point, escapeHtml(rodal.trim()), 'report-map__label report-map__label--base', rodal.trim().length * 7 + 10)
+          push(cachedLabelPoint(feature.geometry.coordinates), escapeHtml(rodal.trim()), 'report-map__label report-map__label--base', rodal.trim().length * 7 + 10)
           count += 1
           if (count >= BASE_LABEL_MAX) break
         }
@@ -471,9 +485,10 @@ export function ReportMap(props: ReportMapProps) {
       })
     }
     sync()
-    map.on('zoomend moveend', sync)
+    // «moveend» also follows every zoom; listening to both drew labels twice.
+    map.on('moveend', sync)
     return () => {
-      map.off('zoomend moveend', sync)
+      map.off('moveend', sync)
     }
   }, [props.features, props.base, props.showLabels, props.mode])
 
