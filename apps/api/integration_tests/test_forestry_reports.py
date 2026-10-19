@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 
 import pytest
@@ -51,7 +52,7 @@ def new_report(connection: Connection, ctx: dict[str, int], name: str = "Cosecha
         connection,
         name=name,
         report_type="cosecha",
-        report_month="2027-01",
+        report_date=dt.date(2027, 1, 15),
         actor_app_user_id=ctx["operator"],
     )
 
@@ -81,6 +82,9 @@ def test_create_starts_a_draft_on_the_published_base(
     )
     assert report.created_by_display_name == "operadora"
     assert (report.feature_count, report.managed_area_ha) == (0, 0.0)
+    # Date and derived month are stored correctly.
+    assert report.report_date == dt.date(2027, 1, 15)
+    assert report.report_month == "2027-01"
 
 
 def test_create_needs_a_published_base(
@@ -105,18 +109,21 @@ def test_create_checks_the_name(
     assert code(raised) == expected
 
 
-def test_create_refuses_a_bad_month(
+def test_create_derives_month_from_date(
     integration_connection: Connection, ctx: dict[str, int]
 ) -> None:
-    with pytest.raises(ReportError) as raised:
-        create_report(
-            integration_connection,
-            name="X",
-            report_type="cosecha",
-            report_month="2027-13",
-            actor_app_user_id=ctx["operator"],
-        )
-    assert code(raised) == "invalid_month"
+    """report_month is derived server-side from report_date."""
+    report_id = create_report(
+        integration_connection,
+        name="Otro",
+        report_type="manejo",
+        report_date=dt.date(2027, 3, 4),
+        actor_app_user_id=ctx["operator"],
+    )
+    report = get_report(integration_connection, report_id)
+    assert report is not None
+    assert report.report_date == dt.date(2027, 3, 4)
+    assert report.report_month == "2027-03"
 
 
 def test_active_name_must_be_free(integration_connection: Connection, ctx: dict[str, int]) -> None:
@@ -428,7 +435,7 @@ def test_header_update_checks_revision_and_name(
         expected_revision=1,
         name="Raleo",
         report_type="manejo",
-        report_month="2026-12",
+        report_date=dt.date(2026, 12, 5),
     )
     report = get_report(integration_connection, report_id)
     assert report is not None
@@ -438,11 +445,43 @@ def test_header_update_checks_revision_and_name(
         "manejo",
         "2026-12",
     )
+    assert report.report_date == dt.date(2026, 12, 5)
     with pytest.raises(ReportError) as raised:
         update_report_header(
             integration_connection, report_id=report_id, expected_revision=2, name="otro"
         )
     assert code(raised) == "name_taken"
+
+
+def test_header_update_date_derives_month(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
+    """Setting report_date updates report_month automatically."""
+    report_id = new_report(integration_connection, ctx)
+    update_report_header(
+        integration_connection,
+        report_id=report_id,
+        expected_revision=1,
+        report_date=dt.date(2026, 11, 30),
+    )
+    report = get_report(integration_connection, report_id)
+    assert report is not None
+    assert report.report_date == dt.date(2026, 11, 30)
+    assert report.report_month == "2026-11"
+
+
+def test_duplicate_copies_report_date(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
+    report_id = new_report(integration_connection, ctx)
+    copy_id = duplicate_report(
+        integration_connection, report_id=report_id, actor_app_user_id=ctx["operator"]
+    )
+    original = get_report(integration_connection, report_id)
+    copy = get_report(integration_connection, copy_id)
+    assert original is not None and copy is not None
+    assert copy.report_date == original.report_date
+    assert copy.report_month == original.report_month
 
 
 def test_delete_only_never_submitted_drafts(

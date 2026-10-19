@@ -1,7 +1,7 @@
 # Rodales: informes de manejo
 
-Fecha: 2026-10-16. Estado: **listo para revisión, no publicado en la
-plataforma**. Nada cambió todavía en el Rodales que ven los usuarios.
+Fecha: 2026-10-19 (actualización). Estado: **en producción desde 2026-10-17;
+fecha exacta desde 2026-10-19**.
 
 ## Qué es un informe
 
@@ -25,7 +25,9 @@ guarda su propia copia de los rodales.
 ## Paso a paso
 
 1. En **Informes**, use **Nuevo informe**: nombre, tipo (Cosecha, Manejo,
-   Reforestación, Plantación u Otro) y mes.
+   Reforestación, Plantación u Otro) y fecha exacta (día, mes y año).
+   Los informes anteriores al 2026-10-19 solo tienen mes; se les puede
+   asignar una fecha exacta editando el encabezado del informe.
 2. En el mapa, haga clic en los rodales (Mayús + clic para elegir varios),
    use **Copiar** y luego **Pegar al informe**.
 3. Si solo se maneja una parte de un rodal, use **Dividir con línea**: un

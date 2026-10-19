@@ -54,6 +54,8 @@ export interface Report {
   name: string
   report_type: ReportType
   report_month: string
+  /** Exact date (YYYY-MM-DD) when set; null for legacy month-only reports. */
+  report_date: string | null
   status: ReportStatus
   base_snapshot_id: number
   revision: number
@@ -151,6 +153,21 @@ export interface StatusResult {
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
+/**
+ * Human-readable date for a report.
+ *
+ * When ``report_date`` is set (YYYY-MM-DD), it is shown as dd-mm-aaaa
+ * (e.g. "15-01-2027"). Legacy month-only reports show MM-YYYY (e.g. "01-2026").
+ */
+export function formatReportDate(report: Pick<Report, 'report_date' | 'report_month'>): string {
+  if (report.report_date !== null && report.report_date !== undefined) {
+    const [year, month, day] = report.report_date.split('-')
+    return `${day}-${month}-${year}`
+  }
+  const [year, month] = report.report_month.split('-')
+  return `${month}-${year}`
+}
+
 export function fetchReports(): Promise<ReportList> {
   return getJson<ReportList>('/reports')
 }
@@ -162,11 +179,11 @@ export function fetchReport(reportId: number): Promise<ReportDetail> {
 export async function createReport(
   name: string,
   reportType: ReportType,
-  reportMonth: string,
+  reportDate: string,
 ): Promise<number> {
   const created = await mutate<{ report_id: number }>('/reports', {
     headers: JSON_HEADERS,
-    body: JSON.stringify({ name, report_type: reportType, report_month: reportMonth }),
+    body: JSON.stringify({ name, report_type: reportType, report_date: reportDate }),
   })
   return created.report_id
 }
@@ -189,7 +206,7 @@ export function updateReport(
   changes: {
     name?: string
     report_type?: ReportType
-    report_month?: string
+    report_date?: string | null
     conaf_solicitud?: string | null
   },
 ): Promise<StatusResult> {

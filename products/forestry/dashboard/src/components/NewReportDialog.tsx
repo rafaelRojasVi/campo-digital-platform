@@ -5,9 +5,12 @@ import { REPORT_TYPES, TYPE_LABELS, createReport, type ReportType } from '../rep
 import { navigate, reportPath } from '../router.ts'
 import { Notice } from './PageShell.tsx'
 
-function currentMonth(): string {
+function currentDate(): string {
   const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 export function NewReportDialog({
@@ -20,7 +23,7 @@ export function NewReportDialog({
 }) {
   const [name, setName] = useState('')
   const [reportType, setReportType] = useState<ReportType>('cosecha')
-  const [month, setMonth] = useState(currentMonth)
+  const [date, setDate] = useState(currentDate)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -30,14 +33,14 @@ export function NewReportDialog({
       setBusy(true)
       setError(null)
       try {
-        const reportId = await createReport(name.trim(), reportType, month)
+        const reportId = await createReport(name.trim(), reportType, date)
         navigate(openPath(reportId))
       } catch (caught) {
         setError(mutationMessage(caught, 'No fue posible crear el informe.'))
         setBusy(false)
       }
     },
-    [name, reportType, month, openPath],
+    [name, reportType, date, openPath],
   )
 
   return (
@@ -80,13 +83,13 @@ export function NewReportDialog({
             </select>
           </label>
           <label className="report-form__field">
-            <span>Mes</span>
+            <span>Fecha</span>
             <input
-              id="report-month"
-              type="month"
-              value={month}
+              id="report-date"
+              type="date"
+              value={date}
               required
-              onChange={(event) => setMonth(event.target.value)}
+              onChange={(event) => setDate(event.target.value)}
             />
           </label>
           {error !== null ? <Notice tone="error">{error}</Notice> : null}

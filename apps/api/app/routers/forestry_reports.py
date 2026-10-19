@@ -42,12 +42,12 @@ from app.forestry_report_geometry import (
     ReportWarning,
 )
 from app.forestry_reports import (
-    MONTH_PATTERN,
     Report,
     ReportError,
     ReportStatus,
     ReportType,
     TransitionAction,
+    _check_date,
     create_report,
     delete_report,
     duplicate_report,
@@ -94,6 +94,7 @@ _STATUS_FOR_CODE = {
     "name_taken": 409,
     "invalid_name": 422,
     "invalid_month": 422,
+    "invalid_date": 422,
     "not_editable": 409,
     "stale_revision": 409,
     "invalid_transition": 409,
@@ -121,6 +122,7 @@ class ReportModel(BaseModel):
     name: str
     report_type: str
     report_month: str
+    report_date: dt.date | None
     status: str
     base_snapshot_id: int
     revision: int
@@ -181,14 +183,14 @@ class SourcePolygonsResponse(BaseModel):
 class CreateReportRequest(BaseModel):
     name: str = Field(max_length=500)
     report_type: ReportType
-    report_month: str = Field(pattern=MONTH_PATTERN)
+    report_date: str  # ISO YYYY-MM-DD; validated in the handler via _check_date
 
 
 class UpdateReportRequest(BaseModel):
     revision: int = Field(ge=1)
     name: str | None = Field(default=None, max_length=500)
     report_type: ReportType | None = None
-    report_month: str | None = Field(default=None, pattern=MONTH_PATTERN)
+    report_date: str | None = None  # ISO YYYY-MM-DD when provided
     conaf_solicitud: str | None = Field(default=None, max_length=50)
 
 
@@ -238,6 +240,7 @@ def _report_model(report: Report) -> ReportModel:
         name=report.name,
         report_type=report.report_type,
         report_month=report.report_month,
+        report_date=report.report_date,
         status=report.status,
         base_snapshot_id=report.base_snapshot_id,
         revision=report.revision,
@@ -408,7 +411,13 @@ def export_report_file(
     ]
     content, media_type, filename = export_report(
         format,
-        ExportReport(report.name, report.report_type, report.report_month, report.status),
+        ExportReport(
+            report.name,
+            report.report_type,
+            report.report_month,
+            report.status,
+            report.report_date,
+        ),
         rows,
     )
     _audit(
@@ -437,12 +446,13 @@ def post_report(
     """«Nuevo informe» against the published base."""
 
     try:
+        report_date = _check_date(request.report_date)
         with engine.begin() as connection:
             report_id = create_report(
                 connection,
                 name=request.name,
                 report_type=request.report_type,
-                report_month=request.report_month,
+                report_date=report_date,
                 actor_app_user_id=user.id,
             )
             record_audit_event(
@@ -499,11 +509,22 @@ def put_report_features(
     )
 
 
+_PATCH_DATE_UNSET = object()  # sentinel: report_date was not included in the PATCH body
+
+
 @router.patch("/{report_id}", response_model=StatusResponse, dependencies=_EDIT)
 def patch_report(
     report_id: ReportIdPath, request: UpdateReportRequest, user: CurrentUser, engine: DatabaseEngine
 ) -> StatusResponse:
     try:
+        # Validate and convert the date string when provided in the body.
+        parsed_date: object = _PATCH_DATE_UNSET
+        if "report_date" in request.model_fields_set:
+            if request.report_date is not None:
+                parsed_date = _check_date(request.report_date)
+            else:
+                parsed_date = None  # explicit null clears the date
+
         with engine.begin() as connection:
             revision = update_report_header(
                 connection,
@@ -511,7 +532,8 @@ def patch_report(
                 expected_revision=request.revision,
                 name=request.name,
                 report_type=request.report_type,
-                report_month=request.report_month,
+                # Only when sent: «null» clears the date, leaving it out keeps it.
+                **({"report_date": parsed_date} if parsed_date is not _PATCH_DATE_UNSET else {}),
                 # Only when sent: «null» clears the number, leaving it out keeps it.
                 **(
                     {"conaf_solicitud": request.conaf_solicitud}

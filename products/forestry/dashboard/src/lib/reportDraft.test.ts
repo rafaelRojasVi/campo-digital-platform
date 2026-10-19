@@ -29,6 +29,7 @@ function detail(): ReportDetail {
       name: 'Cosecha',
       report_type: 'cosecha',
       report_month: '2027-01',
+      report_date: '2027-01-15' as string | null,
       status: 'borrador',
       base_snapshot_id: 3,
       revision: 2,

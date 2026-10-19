@@ -15,6 +15,7 @@ UTF-8 with BOM, comma separated, CRLF, like the dashboard's CSV.
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import io
 import re
 import sqlite3
@@ -63,7 +64,7 @@ EXPORT_FIELDS: tuple[ExportField, ...] = (
     ExportField("EN_INFORME", "C", 2, 0),
     ExportField("INFORME", "C", 254, 0),
     ExportField("TIPO", "C", 15, 0),
-    ExportField("FECHA", "C", 7, 0),
+    ExportField("FECHA", "C", 10, 0),
     ExportField("ESTADO", "C", 20, 0),
     ExportField("OID_ORIGEN", "N", 10, 0),
 )
@@ -148,6 +149,7 @@ class ExportReport:
     report_type: str
     report_month: str
     status: str
+    report_date: dt.date | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,12 +167,16 @@ def row_values(report: ExportReport, row: ExportRow) -> list[object]:
     source_objectid = row.attributes.get("objectid")
     if row.geometry_changed:
         base[0] = 0
+    # FECHA: use the exact ISO date when set; fall back to the month string.
+    fecha = (
+        report.report_date.isoformat() if report.report_date is not None else report.report_month
+    )
     return [
         *base,
         "si" if row.in_report else "no",
         report.name,
         TYPE_LABELS[report.report_type],
-        report.report_month,
+        fecha,
         STATUS_LABELS[report.status],
         source_objectid,
     ]
