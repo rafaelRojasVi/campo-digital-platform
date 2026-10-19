@@ -12,6 +12,10 @@
  * Whether CONAF's «N.º de solicitud» is the planilla's `N Ingreso` is still
  * an open question, so the copy says «N.º».
  *
+ * While CONAF_ESTADO_ENABLED is off (2026-10-18) only «Copiar N.º» shows: the
+ * planilla's `N Ingreso` is not the 6-digit SAFF number the public consulta
+ * takes, so «Abrir» led to «no existe» or an empty form.
+ *
  * Used inside clickable table rows: a click here belongs to the link or the
  * button, never to the row behind it. Enter and Space are stopped for the same
  * reason; every other key (Escape, Tab) must still reach the drawer's
@@ -19,6 +23,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
+import { CONAF_ESTADO_ENABLED } from '../lib/conafFlag'
 
 export const OFICINA_VIRTUAL_CONAF_URL = 'https://oficinavirtual.conaf.cl/consultas/index.php'
 const OFICINA_VIRTUAL_RESULT_URL = 'https://oficinavirtual.conaf.cl/consultas/action.php'
@@ -36,8 +41,11 @@ export function OficinaVirtualLink({
   numero,
   compact = false,
   testId = 'oficina-virtual',
+  withLink = CONAF_ESTADO_ENABLED,
 }: {
   numero: string | null
+  /** Show «Abrir Oficina Virtual CONAF»; off with the Estado CONAF switch. */
+  withLink?: boolean
   /** «Abrir» instead of the full label, for a table cell. */
   compact?: boolean
   testId?: string
@@ -66,6 +74,7 @@ export function OficinaVirtualLink({
       onClick={(event) => event.stopPropagation()}
       onKeyDown={keepActivationKeys}
     >
+      {withLink && (
       <a
         href={oficinaVirtualHref(value)}
         target="_blank"
@@ -77,6 +86,7 @@ export function OficinaVirtualLink({
           {compact ? 'Oficina Virtual CONAF ' : ''}(se abre en una pestaña nueva)
         </span>
       </a>
+      )}
       {value !== '' && (
         <button
           type="button"

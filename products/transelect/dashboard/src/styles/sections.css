@@ -1115,3 +1115,42 @@ a.status-card .status-card-go {
   margin-top: var(--s-3);
 }
 
+
+/* Estado: the table scrolls inside itself, so the page stays short and the
+   header (sticky in .tablewrap) stays in view. Printing shows every row. */
+.estado-tablewrap {
+  max-height: min(72vh, 760px);
+}
+
+@media print {
+  .estado-tablewrap {
+    max-height: none;
+  }
+}
+
+.estado-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-4);
+  margin: 0 0 var(--s-4);
+}
+
+.estado-search-field {
+  display: grid;
+  gap: var(--s-2);
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.estado-search-field input {
+  min-width: min(320px, 80vw);
+  font: inherit;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control, 6px);
+  padding: var(--s-3) var(--s-4);
+}

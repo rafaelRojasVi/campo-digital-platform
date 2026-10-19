@@ -8,7 +8,7 @@ describe("OficinaVirtualLink keyboard and click isolation", () => {
     const onRowClick = vi.fn();
     render(
       <div onKeyDown={onRowKey} onClick={onRowClick}>
-        <OficinaVirtualLink numero="ING-7" compact />
+        <OficinaVirtualLink numero="ING-7" compact withLink />
       </div>,
     );
     const link = screen.getByTestId("oficina-virtual-link");
@@ -26,7 +26,7 @@ describe("OficinaVirtualLink keyboard and click isolation", () => {
   });
 
   it("opens CONAF's result for a plain N.º, with the number already entered", () => {
-    render(<OficinaVirtualLink numero=" 123456 " />);
+    render(<OficinaVirtualLink numero=" 123456 " withLink />);
     expect(screen.getByTestId("oficina-virtual-link")).toHaveAttribute(
       "href",
       "https://oficinavirtual.conaf.cl/consultas/action.php?nsolicitud=123456",
@@ -35,7 +35,7 @@ describe("OficinaVirtualLink keyboard and click isolation", () => {
 
   it("opens the empty consulta page for a planilla-style N.º CONAF cannot answer", () => {
     // CONAF answers «No fue posible realizar su consulta» to «n/n-n/n».
-    render(<OficinaVirtualLink numero="12/34-5/26" />);
+    render(<OficinaVirtualLink numero="12/34-5/26" withLink />);
     expect(screen.getByTestId("oficina-virtual-link")).toHaveAttribute(
       "href",
       "https://oficinavirtual.conaf.cl/consultas/index.php",
@@ -44,7 +44,7 @@ describe("OficinaVirtualLink keyboard and click isolation", () => {
   });
 
   it("opens CONAF's empty consulta page without an N.º", () => {
-    render(<OficinaVirtualLink numero={null} />);
+    render(<OficinaVirtualLink numero={null} withLink />);
     expect(screen.getByTestId("oficina-virtual-link")).toHaveAttribute(
       "href",
       "https://oficinavirtual.conaf.cl/consultas/index.php",
@@ -54,5 +54,12 @@ describe("OficinaVirtualLink keyboard and click isolation", () => {
   it("offers no copy button without an N.º", () => {
     render(<OficinaVirtualLink numero={null} />);
     expect(screen.queryByTestId("oficina-virtual-copy")).toBeNull();
+  });
+
+  it("offers only «Copiar N.º» while the CONAF number is unconfirmed", () => {
+    // CONAF_ESTADO_ENABLED is off: «Abrir» led to «no existe» or an empty form.
+    render(<OficinaVirtualLink numero="10034567" />);
+    expect(screen.queryByTestId("oficina-virtual-link")).toBeNull();
+    expect(screen.getByTestId("oficina-virtual-copy")).toHaveAccessibleName("Copiar N.º 10034567");
   });
 });

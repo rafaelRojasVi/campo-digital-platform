@@ -111,12 +111,11 @@ test('TR-FUNC-009/010: one composition bar per grain, each against its own total
   page,
 }) => {
   await openResumen(page)
-  await expect(page.getByTestId('composition-predios-total')).toHaveText(
-    '10 de 20 predios aprobados',
-  )
+  // One predio bar since 2026-10-18 (the second was a repeat of it).
+  await expect(page.getByTestId('status-hero-total')).toHaveText('10 de 20 predios aprobados')
   await expect(page.getByTestId('status-pmf-total')).toHaveText('12 PMF')
   // 10 of 20 predios: the predio grain's own percentage, not the PMF grain's.
-  await expect(page.getByTestId('composition-predios')).toContainText('50% aprobado')
+  await expect(page.getByTestId('status-hero')).toContainText('50% aprobado')
 })
 
 test('TR-FUNC-011: the predio-grain Estado resumido breakdown, with its grain stated', async ({
@@ -285,20 +284,14 @@ test('Estado: the old Pendientes address lands on Estado with its filters', asyn
   ).toHaveAttribute('aria-current', 'page')
 })
 
-test('Estado: the Oficina Virtual opens the N.º in CONAF in a new tab and the N.º can be copied', async ({
+test('Estado: while Estado CONAF is off, only «Copiar N.º» is offered and it copies', async ({
   page,
   context,
 }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await openEstado(page)
-  const link = page.getByTestId('estado-ov-3-link')
-  // The most recent ingreso, already entered: CONAF answers its consulta by GET too.
-  await expect(link).toHaveAttribute(
-    'href',
-    'https://oficinavirtual.conaf.cl/consultas/action.php?nsolicitud=30003',
-  )
-  await expect(link).toHaveAttribute('target', '_blank')
-  await expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  // The planilla's N Ingreso is not CONAF's consulta number (CONAF_ESTADO_ENABLED).
+  await expect(page.getByTestId('estado-ov-3-link')).toHaveCount(0)
 
   await page.getByTestId('estado-ov-3-copy').click()
   // Copying inside a row must not open the drawer behind it.

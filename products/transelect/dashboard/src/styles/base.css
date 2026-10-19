@@ -371,8 +371,17 @@ th.numeric {
 }
 
 .btn[disabled],
-.btn[aria-disabled="true"] {
-  opacity: 0.45;
+.btn[aria-disabled="true"],
+.btn.alt[disabled],
+.btn.alt[aria-disabled="true"],
+.btn.alt[disabled]:hover,
+.btn.alt[aria-disabled="true"]:hover {
+  /* Solid colours instead of a faded button, so the label stays readable
+     (--ink-3 on --sunken ≈ 5:1). */
+  color: var(--ink-3);
+  background: var(--sunken);
+  border-color: var(--line);
+  box-shadow: none;
   cursor: not-allowed;
   transform: none;
 }

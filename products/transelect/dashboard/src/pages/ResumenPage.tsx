@@ -46,7 +46,6 @@ import { cell, formatDateTime, formatInteger, formatNumber } from '../format'
 import { activeFilterChips, withoutChip } from '../lib/filterUrl'
 import { PENDING_STAGE_LABELS } from '../lib/pendingStage'
 import {
-  approvalSegments,
   buildAttentionItems,
   buildScaleStats,
   estadoResumidoSegments,
@@ -152,26 +151,11 @@ export function ResumenPage({
         <>
           <StatusHeadline summary={data.summary} filters={filters} />
 
-          <section className="ruled" aria-labelledby="detalle-title">
-            <SectionHeader
-              id="detalle-title"
-              title="Estado detallado de tramitación"
-              meta={`Desglose del encabezado sobre los mismos ${formatInteger(
-                data.summary.pmf_count,
-              )} PMF · evaluación, rechazos y recursos`}
-            />
-            <EstadoDetalleTable summary={data.summary} />
-          </section>
-
-          <section className="ruled" aria-labelledby="empresa-title">
-            <SectionHeader
-              id="empresa-title"
-              title="Por empresa"
-              meta="Cada PMF pertenece a una sola empresa, por lo que los subtotales suman el total."
-            />
-            <CompanyMatrix summary={data.summary} filters={filters} />
-          </section>
-
+          {/*
+            What to act on first (2026-10-18): the attention cards and the work
+            queue sit right under the headline; the breakdowns and reference
+            counts follow, for consultation.
+          */}
           <section className="ruled" aria-labelledby="atencion-title" data-testid="attention-row">
             <SectionHeader
               id="atencion-title"
@@ -208,53 +192,6 @@ export function ResumenPage({
               bases={[data.summary.basis_pending_priority, data.summary.basis_estado_resumido]}
               testId="attention-how"
             />
-          </section>
-
-          <section className="ruled" aria-labelledby="alcance-title" data-testid="kpi-row">
-            <SectionHeader
-              id="alcance-title"
-              title="Alcance medido"
-              meta="Conteos de referencia del alcance seleccionado."
-            />
-            <StatStrip items={buildScaleStats(data.summary)} />
-          </section>
-
-          <section className="ruled" aria-labelledby="reforestacion-title">
-            <SectionHeader
-              id="reforestacion-title"
-              title="Reforestación"
-              meta="Lo que la planilla puede responder sobre reforestación, y lo que no."
-            />
-            <ReforestacionPanel reforestacion={data.summary.reforestacion} />
-          </section>
-
-          {/*
-            The predio grain, kept and demoted rather than dropped. It answers
-            a different question from the headline — a plan covers several
-            cutting properties, so 159 PMF and 272 predios are two genuine
-            denominators — and it is the grain the shipped interface led with.
-            It stays available, below the question people actually ask.
-          */}
-          <section className="ruled" aria-labelledby="estado-predio-title">
-            <SectionHeader
-              id="estado-predio-title"
-              title="Estado resumido por predio"
-              meta={`${formatInteger(
-                data.summary.predio_count,
-              )} predios únicos del alcance seleccionado · un denominador distinto del de los PMF`}
-            />
-            <CompositionBar
-              noun="predios aprobados"
-              testId="status-hero"
-              segments={estadoResumidoSegments(data.summary)}
-            />
-            <CompositionBar
-              title="Agrupado como aprobado / en trámite / resto"
-              noun="predios aprobados"
-              testId="composition-predios"
-              segments={approvalSegments(data.summary.avance_por_predio)}
-            />
-            <HowCalculated bases={[data.summary.basis_estado_resumido]} testId="predio-how" />
           </section>
 
           <section className="ruled" aria-labelledby="cola-title" data-testid="work-queue">
@@ -314,6 +251,74 @@ export function ResumenPage({
               testId="queue-how"
             />
           </section>
+
+          <section className="ruled" aria-labelledby="detalle-title">
+            <SectionHeader
+              id="detalle-title"
+              title="Estado detallado de tramitación"
+              meta={`Desglose del encabezado sobre los mismos ${formatInteger(
+                data.summary.pmf_count,
+              )} PMF · evaluación, rechazos y recursos`}
+            />
+            <EstadoDetalleTable summary={data.summary} />
+          </section>
+
+          <section className="ruled" aria-labelledby="empresa-title">
+            <SectionHeader
+              id="empresa-title"
+              title="Por empresa"
+              meta="Cada PMF pertenece a una sola empresa, por lo que los subtotales suman el total."
+            />
+            <CompanyMatrix summary={data.summary} filters={filters} />
+          </section>
+
+          <section className="ruled" aria-labelledby="alcance-title" data-testid="kpi-row">
+            <SectionHeader
+              id="alcance-title"
+              title="Alcance medido"
+              meta="Conteos de referencia del alcance seleccionado."
+            />
+            <StatStrip items={buildScaleStats(data.summary)} />
+          </section>
+
+          {/*
+            The predio grain, kept and demoted rather than dropped. It answers
+            a different question from the headline — a plan covers several
+            cutting properties, so 159 PMF and 272 predios are two genuine
+            denominators — and it is the grain the shipped interface led with.
+            It stays available, below the question people actually ask.
+          */}
+          <section className="ruled" aria-labelledby="estado-predio-title">
+            <SectionHeader
+              id="estado-predio-title"
+              title="Estado resumido por predio"
+              meta={`${formatInteger(
+                data.summary.predio_count,
+              )} predios únicos del alcance seleccionado · un denominador distinto del de los PMF`}
+            />
+            <CompositionBar
+              noun="predios aprobados"
+              testId="status-hero"
+              segments={estadoResumidoSegments(data.summary)}
+            />
+            <HowCalculated bases={[data.summary.basis_estado_resumido]} testId="predio-how" />
+          </section>
+
+          <section className="ruled" aria-labelledby="reforestacion-title">
+            <SectionHeader
+              id="reforestacion-title"
+              title="Reforestación"
+              meta="Lo que la planilla puede responder sobre reforestación, y lo que no."
+            />
+            <ReforestacionPanel reforestacion={data.summary.reforestacion} />
+          </section>
+
+
+
+
+
+
+
         </>
       )}
 
