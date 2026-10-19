@@ -348,6 +348,19 @@ describe('Informe editor', () => {
     expect(screen.queryByRole('button', { name: 'Ver el rodal 17 en el mapa' })).not.toBeInTheDocument()
   })
 
+  it('takes a rodal out from its row, and «Deshacer» puts it back with its planning', async () => {
+    const user = userEvent.setup()
+    const detail = reportDetail({}, true)
+    Object.assign(detail.features[0]!, { sector: 'La Reina' })
+    reportsApi.fetchReport.mockResolvedValue(detail)
+    render(<RealEditor role="operator" reportId={7} />)
+    await user.click(await screen.findByRole('button', { name: 'Sacar el rodal 17 del informe' }))
+    expect(screen.queryByRole('button', { name: 'Ver el rodal 17 en el mapa' })).not.toBeInTheDocument()
+    const toast = screen.getByText('Rodal 17 sacado del informe').parentElement as HTMLElement
+    await user.click(within(toast).getByRole('button', { name: 'Deshacer' }))
+    expect(screen.getByLabelText('Sector del rodal 17')).toHaveValue('La Reina')
+  })
+
   it('finds a rodal by its number, and says when there is none', async () => {
     const user = userEvent.setup()
     reportsApi.fetchReport.mockResolvedValue(reportDetail())

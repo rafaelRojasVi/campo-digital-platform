@@ -865,6 +865,11 @@ function Editor({
             activeKey={cardFeature?.key ?? hoverKey}
             onRodal={showFeature}
             onHover={setHoverKey}
+            onRemove={(key) => {
+              const feature = draft.features.find((f) => f.key === key)
+              if (feature !== undefined) removeOne(feature.source_feature_ordinal)
+              setHoverKey(null)
+            }}
             onChange={(keys, fields) => change(setPlanningFields(draft, keys, fields))}
           />
 

@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { Hint } from '../Hint.tsx'
 import { SpeciesPicker } from './SpeciesPicker.tsx'
+import { Icon } from './Icon.tsx'
 import { featureCode, type DraftFeature, type PlanningFields } from '../../lib/reportDraft.ts'
 
 const ha = new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -33,6 +34,7 @@ export function PlanificacionTable({
   activeKey = null,
   onRodal,
   onHover,
+  onRemove,
 }: {
   features: DraftFeature[]
   editable: boolean
@@ -43,6 +45,8 @@ export function PlanificacionTable({
   onRodal?: (key: string) => void
   /** The pointer entered (key) or left (null) a row: highlight it on the map. */
   onHover?: (key: string | null) => void
+  /** «Sacar del informe» from the row's ×. */
+  onRemove?: (key: string) => void
 }) {
   const managed = features.filter((feature) => feature.in_report)
   const sectors = [...new Set(features.flatMap((f) => (f.sector ? [f.sector] : [])))].sort((a, b) =>
@@ -79,11 +83,16 @@ export function PlanificacionTable({
             <th scope="col">
               Densidad <Hint text="Plantas por hectárea en total para el rodal, sumando todas sus especies." />
             </th>
+            {editable && onRemove ? (
+              <th scope="col">
+                <span className="sr-only">Sacar</span>
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
           {editable && managed.length > 1 ? (
-            <AllRow count={managed.length} used={used} onApply={(fields) => onChange(new Set(managed.map((f) => f.key)), fields)} />
+            <AllRow count={managed.length} used={used} withRemove={Boolean(onRemove)} onApply={(fields) => onChange(new Set(managed.map((f) => f.key)), fields)} />
           ) : null}
           {managed.map((feature) => (
             <PlanRow
@@ -93,6 +102,7 @@ export function PlanificacionTable({
               editable={editable}
               active={activeKey === feature.key}
               used={used}
+              onRemove={editable ? onRemove : undefined}
               onRodal={onRodal}
               onHover={onHover}
               onChange={(fields) => onChange(new Set([feature.key]), fields)}
@@ -111,12 +121,14 @@ function PlanRow({
   used,
   onRodal,
   onHover,
+  onRemove,
   onChange,
 }: {
   feature: DraftFeature
   editable: boolean
   active: boolean
   used: string[]
+  onRemove?: (key: string) => void
   onRodal?: (key: string) => void
   onHover?: (key: string | null) => void
   onChange: (fields: Partial<PlanningFields>) => void
@@ -231,6 +243,19 @@ function PlanRow({
           </span>
         ) : null}
       </td>
+      {onRemove ? (
+        <td className="plan-table__remove">
+          <button
+            type="button"
+            className="icon-button icon-button--danger"
+            aria-label={`Sacar el rodal ${code} del informe`}
+            title="Sacar del informe"
+            onClick={() => onRemove(feature.key)}
+          >
+            <Icon name="trash" size={16} />
+          </button>
+        </td>
+      ) : null}
     </tr>
   )
 }
@@ -242,10 +267,12 @@ function PlanRow({
 function AllRow({
   count,
   used,
+  withRemove,
   onApply,
 }: {
   count: number
   used: string[]
+  withRemove: boolean
   onApply: (fields: Partial<PlanningFields>) => void
 }) {
   const [sector, setSector] = useState('')
@@ -326,6 +353,7 @@ function AllRow({
           </span>
         ) : null}
       </td>
+      {withRemove ? <td /> : null}
     </tr>
   )
 }
