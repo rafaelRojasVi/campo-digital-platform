@@ -90,7 +90,7 @@ def sign_in(client: TestClient, engine: Engine, name: str, role: Role | None) ->
 def create(client: TestClient, name: str = "Cosecha pino enero 2027") -> int:
     response = client.post(
         "/api/forestry/reports",
-        json={"name": name, "report_type": "cosecha", "report_month": "2027-01"},
+        json={"name": name, "report_type": "cosecha", "report_date": "2027-01-15"},
         headers=_ORIGIN,
     )
     assert response.status_code == 201, response.text
@@ -222,7 +222,7 @@ def test_viewer_cannot_create_and_operator_cannot_approve(
     sign_in(client, integration_engine, "dueno", Role.VIEWER)
     refused = client.post(
         "/api/forestry/reports",
-        json={"name": "X", "report_type": "cosecha", "report_month": "2027-01"},
+        json={"name": "X", "report_type": "cosecha", "report_date": "2027-01-15"},
         headers=_ORIGIN,
     )
     assert refused.status_code == 403
@@ -246,7 +246,7 @@ def test_writes_need_csrf(client: TestClient, integration_engine: Engine, base: 
     client.headers.pop(CSRF_HEADER_NAME)
     response = client.post(
         "/api/forestry/reports",
-        json={"name": "X", "report_type": "cosecha", "report_month": "2027-01"},
+        json={"name": "X", "report_type": "cosecha", "report_date": "2027-01-15"},
         headers=_ORIGIN,
     )
     assert response.status_code == 403
@@ -470,3 +470,75 @@ def test_conaf_number_can_be_added_after_approval_but_not_when_archived(
         headers=_ORIGIN,
     )
     assert archived.json()["detail"]["code"] == "not_editable"
+
+
+def test_report_date_is_stored_derived_and_returned(
+    client: TestClient, integration_engine: Engine, base: int
+) -> None:
+    sign_in(client, integration_engine, "marco", Role.OPERATOR)
+    # Create with an exact date; month is derived server-side.
+    response = client.post(
+        "/api/forestry/reports",
+        json={"name": "Fecha test", "report_type": "cosecha", "report_date": "2027-03-04"},
+        headers=_ORIGIN,
+    )
+    assert response.status_code == 201, response.text
+    report_id = response.json()["report_id"]
+    detail = client.get(f"/api/forestry/reports/{report_id}").json()["report"]
+    assert detail["report_date"] == "2027-03-04"
+    assert detail["report_month"] == "2027-03"
+
+
+def test_invalid_date_is_rejected(
+    client: TestClient, integration_engine: Engine, base: int
+) -> None:
+    sign_in(client, integration_engine, "marco", Role.OPERATOR)
+    bad = client.post(
+        "/api/forestry/reports",
+        json={"name": "X", "report_type": "cosecha", "report_date": "2027-02-30"},
+        headers=_ORIGIN,
+    )
+    assert bad.status_code == 422
+    assert bad.json()["detail"]["code"] == "invalid_date"
+
+
+def test_patch_report_date_updates_month(
+    client: TestClient, integration_engine: Engine, base: int
+) -> None:
+    sign_in(client, integration_engine, "marco", Role.OPERATOR)
+    report_id = create(client)
+    patched = client.patch(
+        f"/api/forestry/reports/{report_id}",
+        json={"revision": 1, "report_date": "2026-11-30"},
+        headers=_ORIGIN,
+    )
+    assert patched.status_code == 200, patched.text
+    detail = client.get(f"/api/forestry/reports/{report_id}").json()["report"]
+    assert detail["report_date"] == "2026-11-30"
+    assert detail["report_month"] == "2026-11"
+
+
+def test_export_fecha_contains_iso_date(
+    client: TestClient, integration_engine: Engine, base: int
+) -> None:
+    import io
+    import zipfile as _zipfile
+
+    import shapefile as _shp
+
+    sign_in(client, integration_engine, "marco", Role.OPERATOR)
+    # Create with exact date 2027-01-15.
+    report_id = create(client)
+    save(client, report_id, 1, SPLIT[:2])
+    exported = client.get(f"/api/forestry/reports/{report_id}/export?format=shp")
+    assert exported.status_code == 200
+    slug = "Cosecha_pino_enero_2027"
+    with _zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+        reader = _shp.Reader(
+            shp=io.BytesIO(archive.read(f"{slug}.shp")),
+            shx=io.BytesIO(archive.read(f"{slug}.shx")),
+            dbf=io.BytesIO(archive.read(f"{slug}.dbf")),
+            encoding="utf-8",
+        )
+        records = [record.as_dict() for record in reader.records()]
+    assert all(r["FECHA"] == "2027-01-15" for r in records)

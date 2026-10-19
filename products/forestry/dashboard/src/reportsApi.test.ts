@@ -43,7 +43,7 @@ describe('reports API', () => {
 
   it('creates a report with POST and the CSRF header', async () => {
     csrfThen(json({ report_id: 7 }, 201))
-    await expect(createReport('Cosecha', 'cosecha', '2027-01')).resolves.toBe(7)
+    await expect(createReport('Cosecha', 'cosecha', '2027-01-15')).resolves.toBe(7)
     const [url, init] = fetchMock.mock.calls[1] ?? []
     expect(url).toBe('/api/forestry/reports')
     expect(init?.method).toBe('POST')
@@ -51,7 +51,7 @@ describe('reports API', () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       name: 'Cosecha',
       report_type: 'cosecha',
-      report_month: '2027-01',
+      report_date: '2027-01-15',
     })
   })
 

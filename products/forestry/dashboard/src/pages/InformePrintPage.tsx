@@ -8,7 +8,13 @@ import { useEffect, useState } from 'react'
 import { PRINT_MANAGED, PRINT_OTHER, PrintMap } from '../components/PrintMap.tsx'
 import { formatDate } from '../lib/format.ts'
 import { printRows } from '../lib/reportPrint.ts'
-import { STATUS_LABELS, TYPE_LABELS, fetchReport, type ReportDetail } from '../reportsApi.ts'
+import {
+  STATUS_LABELS,
+  TYPE_LABELS,
+  fetchReport,
+  formatReportDate,
+  type ReportDetail,
+} from '../reportsApi.ts'
 import { onLinkClick, reportPath } from '../router.ts'
 
 const ha = new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -63,7 +69,7 @@ export function InformePrintPage({ reportId }: { reportId: number | null }) {
         <p className="print-page__kicker">Informe de manejo · Patrimonio Degenfeld</p>
         <h1>{report.name}</h1>
         <p>
-          {TYPE_LABELS[report.report_type]} · {report.report_month} · {STATUS_LABELS[report.status]}
+          {TYPE_LABELS[report.report_type]} · {formatReportDate(report)} · {STATUS_LABELS[report.status]}
           {report.conaf_solicitud !== null ? ` · Solicitud CONAF N.º ${report.conaf_solicitud}` : ''}
         </p>
         {predios.length > 0 ? <p>Predios: {predios.join(', ')}</p> : null}

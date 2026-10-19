@@ -13,6 +13,7 @@ import {
   TYPE_LABELS,
   fetchConafSolicitudes,
   fetchReports,
+  formatReportDate,
   type ConafSolicitud,
   type ReportList,
 } from '../reportsApi.ts'
@@ -101,7 +102,7 @@ export function InformesPage({ role }: { role: ForestryRole }) {
                 <thead>
                   <tr>
                     <th>Informe</th>
-                    <th>Tipo · mes</th>
+                    <th>Tipo · fecha</th>
                     <th>Estado</th>
                     <th>Creado por</th>
                     <th>CONAF</th>
@@ -120,7 +121,7 @@ export function InformesPage({ role }: { role: ForestryRole }) {
                           {report.name}
                         </a>
                       </td>
-                      <td>{`${TYPE_LABELS[report.report_type]} · ${report.report_month}`}</td>
+                      <td>{`${TYPE_LABELS[report.report_type]} · ${formatReportDate(report)}`}</td>
                       <td>
                         <ReportStatusChip status={report.status} />
                       </td>

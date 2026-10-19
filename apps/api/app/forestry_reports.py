@@ -41,6 +41,7 @@ EDITABLE_STATUSES: frozenset[str] = frozenset({"borrador", "cambios_solicitados"
 MAX_NAME_LENGTH = 120
 MAX_NOTE_LENGTH = 2000
 MONTH_PATTERN = r"^[0-9]{4}-(0[1-9]|1[0-2])$"
+DATE_PATTERN = r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
 _STORAGE_SRID = 32718
 _MAX_COPY_SUFFIX = 50
 # update_report_header: «not given» differs from «clear» (None).
@@ -64,6 +65,7 @@ REPORT_ERROR_MESSAGES: dict[str, str] = {
     "name_taken": "Ya existe un informe con ese nombre.",
     "invalid_name": f"El nombre debe tener entre 1 y {MAX_NAME_LENGTH} caracteres.",
     "invalid_month": "El mes debe tener la forma AAAA-MM, por ejemplo 2027-01.",
+    "invalid_date": "La fecha debe ser un día válido, por ejemplo 2027-01-15.",
     "not_editable": "Este informe ya no se puede editar. Duplíquelo para hacer cambios.",
     "stale_revision": "Otra persona guardó cambios en este informe; recárguelo.",
     "invalid_transition": "Esta acción no aplica al estado actual del informe.",
@@ -95,6 +97,7 @@ class Report:
     name: str
     report_type: str
     report_month: str
+    report_date: dt.date | None
     status: str
     base_snapshot_id: int
     revision: int
@@ -146,7 +149,8 @@ class _Locked:
 
 _REPORT_SELECT = """
 SELECT
-    r.id, r.name, r.report_type, r.report_month, r.status, r.base_snapshot_id, r.revision,
+    r.id, r.name, r.report_type, r.report_month, r.report_date, r.status,
+    r.base_snapshot_id, r.revision,
     r.created_by_app_user_id, creator.display_name AS created_by_display_name,
     r.created_at, r.updated_at, r.submitted_at, r.decided_at,
     decider.display_name AS decided_by_display_name,
@@ -169,6 +173,7 @@ def _report(row: Any) -> Report:
         name=row.name,
         report_type=row.report_type,
         report_month=row.report_month,
+        report_date=row.report_date,
         status=row.status,
         base_snapshot_id=row.base_snapshot_id,
         revision=row.revision,
@@ -316,11 +321,11 @@ def create_report(
     *,
     name: str,
     report_type: str,
-    report_month: str,
+    report_date: dt.date,
     actor_app_user_id: int,
 ) -> int:
     clean = _clean_name(name)
-    _check_month(report_month)
+    report_month = _month_from_date(report_date)
     base = read_published_snapshot_id(connection)
     if base is None:
         raise ReportError("no_published_base")
@@ -330,8 +335,9 @@ def create_report(
             text(
                 """
                 INSERT INTO forestry.report
-                    (name, report_type, report_month, base_snapshot_id, created_by_app_user_id)
-                VALUES (:name, :report_type, :report_month, :base, :actor)
+                    (name, report_type, report_month, report_date,
+                     base_snapshot_id, created_by_app_user_id)
+                VALUES (:name, :report_type, :report_month, :report_date, :base, :actor)
                 RETURNING id
                 """
             ),
@@ -339,6 +345,7 @@ def create_report(
                 "name": clean,
                 "report_type": report_type,
                 "report_month": report_month,
+                "report_date": report_date,
                 "base": base,
                 "actor": actor_app_user_id,
             },
@@ -415,13 +422,14 @@ def update_report_header(
     expected_revision: int,
     name: str | None = None,
     report_type: str | None = None,
-    report_month: str | None = None,
+    report_date: object = _UNSET,
     conaf_solicitud: object = _UNSET,
 ) -> int:
     locked = _lock(connection, report_id)
     # The CONAF number exists only once the plan is filed, after approval, and
     # it never changes the polygons: alone, it is editable until archived.
-    only_conaf = name is None and report_type is None and report_month is None
+    set_date = report_date is not _UNSET
+    only_conaf = name is None and report_type is None and not set_date
     if only_conaf and conaf_solicitud is not _UNSET:
         if locked.status == "archivado":
             raise ReportError("not_editable")
@@ -432,8 +440,14 @@ def update_report_header(
     clean = None if name is None else _clean_name(name)
     if clean is not None:
         _ensure_name_free(connection, clean, except_id=report_id)
-    if report_month is not None:
-        _check_month(report_month)
+    # Derive report_month from report_date when a date is being set.
+    new_month: str | None = None
+    new_date: dt.date | None = None
+    if set_date and report_date is not None:
+        if not isinstance(report_date, dt.date):
+            raise ReportError("invalid_date")
+        new_date = report_date
+        new_month = _month_from_date(new_date)
     set_conaf = conaf_solicitud is not _UNSET
     conaf: str | None = None
     if set_conaf and conaf_solicitud is not None and str(conaf_solicitud).strip():
@@ -447,6 +461,7 @@ def update_report_header(
             SET name = COALESCE(:name, name),
                 report_type = COALESCE(:report_type, report_type),
                 report_month = COALESCE(:report_month, report_month),
+                report_date = CASE WHEN :set_date THEN :report_date ELSE report_date END,
                 conaf_solicitud = CASE WHEN :set_conaf THEN :conaf ELSE conaf_solicitud END
             WHERE id = :id
             """
@@ -454,7 +469,9 @@ def update_report_header(
         {
             "name": clean,
             "report_type": report_type,
-            "report_month": report_month,
+            "report_month": new_month,
+            "set_date": set_date,
+            "report_date": new_date,
             "set_conaf": set_conaf,
             "conaf": conaf,
             "id": report_id,
@@ -542,9 +559,10 @@ def duplicate_report(connection: Connection, *, report_id: int, actor_app_user_i
             text(
                 """
                 INSERT INTO forestry.report
-                    (name, report_type, report_month, base_snapshot_id, created_by_app_user_id,
-                     conaf_solicitud)
-                SELECT :name, report_type, report_month, base_snapshot_id, :actor, conaf_solicitud
+                    (name, report_type, report_month, report_date, base_snapshot_id,
+                     created_by_app_user_id, conaf_solicitud)
+                SELECT :name, report_type, report_month, report_date, base_snapshot_id,
+                       :actor, conaf_solicitud
                 FROM forestry.report WHERE id = :id
                 RETURNING id
                 """
@@ -616,6 +634,20 @@ def _clean_name(name: str) -> str:
 def _check_month(report_month: str) -> None:
     if not re.fullmatch(MONTH_PATTERN, report_month):
         raise ReportError("invalid_month")
+
+
+def _check_date(report_date: str) -> dt.date:
+    """Parse an ISO date string and raise ``invalid_date`` if malformed."""
+    if not re.fullmatch(DATE_PATTERN, report_date):
+        raise ReportError("invalid_date")
+    try:
+        return dt.date.fromisoformat(report_date)
+    except ValueError:
+        raise ReportError("invalid_date") from None
+
+
+def _month_from_date(d: dt.date) -> str:
+    return d.strftime("%Y-%m")
 
 
 def _name_in_use(connection: Connection, name: str, *, except_id: int | None = None) -> bool:

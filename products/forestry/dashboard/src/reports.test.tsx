@@ -77,6 +77,7 @@ function listedReport(overrides: Partial<import('./reportsApi.ts').Report> = {})
     name: 'Cosecha pino enero 2027',
     report_type: 'cosecha' as const,
     report_month: '2027-01',
+    report_date: '2027-01-15' as string | null,
     status: 'enviado' as const,
     base_snapshot_id: 3,
     revision: 3,
@@ -112,10 +113,10 @@ describe('Informes list', () => {
     await user.click(await screen.findByRole('button', { name: 'Nuevo informe' }))
     await user.type(screen.getByLabelText('Nombre'), 'Raleo Purretrun')
     await user.selectOptions(screen.getByLabelText('Tipo'), 'manejo')
-    await user.clear(screen.getByLabelText('Mes'))
-    await user.type(screen.getByLabelText('Mes'), '2026-12')
+    await user.clear(screen.getByLabelText('Fecha'))
+    await user.type(screen.getByLabelText('Fecha'), '2026-12-05')
     await user.click(screen.getByRole('button', { name: 'Crear informe' }))
-    expect(reportsApi.createReport).toHaveBeenCalledWith('Raleo Purretrun', 'manejo', '2026-12')
+    expect(reportsApi.createReport).toHaveBeenCalledWith('Raleo Purretrun', 'manejo', '2026-12-05')
     expect(window.location.pathname + window.location.search).toBe(
       '/rodales/informes/editar?informe=9',
     )

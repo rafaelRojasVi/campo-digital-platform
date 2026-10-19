@@ -36,6 +36,7 @@ import { multiPolygonAreaSquareMeters } from '../lib/draftGeometry.ts'
 import { SPLIT_MESSAGES, interiorPoint, lineCrosses, splitByPolyline, type Coordinates, type Position } from '../lib/splitGeometry.ts'
 import {
   TYPE_LABELS,
+  formatReportDate,
   updateReport,
   duplicateReport,
   deleteReport,
@@ -658,7 +659,7 @@ function Editor({
             <a className="report-panel__back" href={ROUTES.informes} onClick={(event) => onLinkClick(event, ROUTES.informes)}>← Informes</a>
             <h2 className="report-panel__title">{report.name}</h2>
             <p className="report-panel__meta">
-              {`${TYPE_LABELS[report.report_type]} · ${report.report_month} · `}
+              {`${TYPE_LABELS[report.report_type]} · ${formatReportDate(report)} · `}
               <ReportStatusChip status={report.status} />
             </p>
           </div>

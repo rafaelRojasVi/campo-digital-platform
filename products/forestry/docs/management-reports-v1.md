@@ -29,11 +29,18 @@ Spanish guide: [Informes de manejo](es/informes-de-manejo.md).
   the report's base snapshot, not by OBJECTID, which may repeat within a
   snapshot. OBJECTID is still exported from the copied attributes.
 
-## Data (migration 0014)
+## Data (migrations 0014, 0017)
+
+**DECISION (2026-10-19):** Javier (Campo Digital) confirmed that reports need
+the exact day, not just the month. `report_date DATE` was added alongside
+`report_month TEXT` in migration `0017`. Existing rows keep `report_date`
+NULL and retain their month. New reports supply `report_date`; the server
+derives `report_month` from it. A CHECK constraint keeps them consistent:
+`report_date IS NULL OR report_month = to_char(report_date, 'YYYY-MM')`.
 
 | Table | Content |
 |---|---|
-| `forestry.report` | name (1–120 characters, unique among non-archived reports ignoring case), type, month `YYYY-MM`, status, base snapshot, `revision`, creator, decision time and decider |
+| `forestry.report` | name (1–120 characters, unique among non-archived reports ignoring case), type, month `YYYY-MM`, exact date `YYYY-MM-DD` (nullable; legacy rows NULL), status, base snapshot, `revision`, creator, decision time and decider |
 | `forestry.report_note` | append-only review notes; a change request always has text (≤ 2,000 characters) |
 | `forestry.report_feature` | position, `source_feature_ordinal`, `in_report` (the EN_INFORME mark), `geometry_changed`, `attributes` (JSONB, source-contract lineage keys), `geometry` (`MultiPolygon`, EPSG:32718) |
 
