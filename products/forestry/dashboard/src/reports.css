@@ -658,80 +658,10 @@
   transition: grid-template-columns 220ms var(--ease);
 }
 
-.report-editor__body--wide {
-  grid-template-columns: minmax(0, 1fr) min(720px, 58vw);
-}
+
 
 .report-panel {
   padding-bottom: 0;
-}
-
-.editor-steps {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-bottom: 1px solid var(--border);
-  margin: 0 -16px;
-  padding: 0 16px;
-}
-
-.editor-steps__tab {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 6px 4px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition: color 160ms var(--ease);
-}
-
-.editor-steps__tab:hover {
-  color: var(--ink);
-}
-
-.editor-steps__tab:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  border-radius: var(--radius);
-}
-
-.editor-steps__tab--on {
-  color: var(--green-900);
-}
-
-.editor-steps__n {
-  flex-shrink: 0;
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--panel-2);
-  font-size: 12px;
-  transition: background-color 160ms var(--ease), color 160ms var(--ease);
-}
-
-.editor-steps__tab--on .editor-steps__n {
-  background: var(--green-700);
-  color: #fff;
-}
-
-.editor-steps__bar {
-  position: absolute;
-  left: 16px;
-  bottom: -1px;
-  width: calc((100% - 32px) / 3);
-  height: 3px;
-  border-radius: 3px 3px 0 0;
-  background: var(--green-700);
-  transition: transform 240ms var(--ease);
 }
 
 .editor-step {
@@ -1211,10 +1141,9 @@
 }
 
 .export-main {
-  justify-content: center;
-  width: 100%;
-  white-space: normal;
-  text-align: center;
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 0 14px;
 }
 
 details.report-warnings {
@@ -1272,7 +1201,6 @@ details.report-warnings ul {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .editor-steps__bar,
   .report-editor__body,
   .save-bar {
     transition: none;
@@ -1291,10 +1219,6 @@ details.report-warnings ul {
 /* Phones and narrow windows: map above, panel below (rule above at 900px);
    the wide «Planificación» panel must not bring the side-by-side layout back. */
 @media (max-width: 900px) {
-  .report-editor__body--wide {
-    grid-template-columns: 1fr;
-  }
-
   .map-tools {
     right: 10px;
     flex-wrap: wrap;
@@ -1308,10 +1232,333 @@ details.report-warnings ul {
   }
 }
 
-@media (max-width: 480px) {
-  .editor-steps__tab {
-    flex-direction: column;
-    gap: 2px;
-    font-size: 12px;
+
+
+/* ------------------------------------------------------------------------
+   Table + map (2026-10-19, option C + B): the report is a table on the left;
+   a click on the map adds a rodal, a click on one of the report opens its
+   card. Nothing stays «selected».
+   ------------------------------------------------------------------------ */
+
+.report-editor__body--table {
+  grid-template-columns: min(640px, 50vw) minmax(0, 1fr);
+}
+
+.report-editor__body--table .report-panel {
+  border-left: none;
+  border-right: 1px solid var(--border);
+}
+
+.report-panel__head--row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-table__title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.plan-table__row {
+  transition: background-color 140ms var(--ease);
+}
+
+.plan-table__row--active {
+  background: #eaf3fb;
+}
+
+.plan-table__rodal-button {
+  display: grid;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-table__rodal-button:hover .plan-table__rodal {
+  color: var(--green-700);
+  text-decoration: underline;
+}
+
+.plan-table__rodal-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.plan-table tbody tr.plan-table__row th {
+  box-shadow: inset 4px 0 0 #e8a33d;
+  padding-left: 10px;
+}
+
+.icon {
+  flex-shrink: 0;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--panel-2);
+  color: var(--ink);
+}
+
+.icon-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.map-tools {
+  left: 56px;
+  gap: 4px;
+}
+
+.map-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 8px;
+  color: var(--ink-3);
+}
+
+.map-search input {
+  width: 130px;
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.map-search input:focus-visible {
+  outline: none;
+}
+
+.map-search:focus-within {
+  border-radius: var(--radius);
+  box-shadow: var(--focus-ring);
+}
+
+.map-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 30px;
+  z-index: 500;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgb(15 59 43 / 0.86);
+  color: var(--ink-inverse);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.rodal-card {
+  position: absolute;
+  top: 70px;
+  right: 14px;
+  z-index: 600;
+  width: 300px;
+  max-height: calc(100% - 100px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow-overlay);
+  animation: card-in 200ms var(--ease);
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
   }
+}
+
+.rodal-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.rodal-card__title {
+  margin: 0;
+  font-size: 17px;
+}
+
+.rodal-card__meta {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.rodal-card__badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fdf0db;
+  color: #6b4300;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rodal-card__badge--rest {
+  background: var(--green-tint);
+  color: var(--green-900);
+}
+
+.rodal-card__badge--out {
+  background: var(--panel-2);
+  color: var(--ink-2);
+}
+
+.rodal-card__main {
+  min-height: 42px;
+}
+
+.rodal-card__actions {
+  display: grid;
+  gap: 6px;
+}
+
+.rodal-card__actions .button {
+  justify-content: flex-start;
+  min-height: 38px;
+}
+
+.rodal-card__danger {
+  color: var(--danger);
+}
+
+.rodal-card__fields {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  animation: step-in 180ms var(--ease);
+}
+
+.map-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 30px;
+  z-index: 650;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 10px;
+  background: var(--green-950);
+  color: var(--ink-inverse);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: var(--shadow-overlay);
+  animation: sheet-up-centered 200ms var(--ease);
+}
+
+.map-toast__undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 0.4);
+  border-radius: var(--radius);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.map-toast__undo:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.5);
+}
+
+.save-bar__buttons {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .report-editor__body--table {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(260px, 38vh) minmax(0, 1fr);
+  }
+
+  .report-editor__body--table .report-editor__map {
+    min-height: 260px;
+  }
+
+  .map-hint {
+    display: none;
+  }
+
+  .report-editor__body--table .report-panel {
+    border-right: none;
+    order: 2;
+  }
+
+  .rodal-card {
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+
+  .map-hint {
+    white-space: normal;
+    text-align: center;
+    max-width: 80%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rodal-card,
+  .map-toast,
+  .rodal-card__fields,
+  .plan-table__row {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* The panel scrolls as a whole; its sections never shrink to fit (a narrow
+   screen otherwise squeezes the table to one row). */
+.report-editor__body--table .report-panel > * {
+  flex-shrink: 0;
 }

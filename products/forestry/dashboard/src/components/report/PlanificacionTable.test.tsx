@@ -32,9 +32,21 @@ describe('PlanificacionTable', () => {
     expect(screen.queryByLabelText('Sector del rodal 11')).not.toBeInTheDocument()
   })
 
-  it('points back to step 1 when nothing is managed yet', () => {
+  it('explains how to add rodales when the report has none', () => {
     setup([feature('f1', '10', {}, false)])
-    expect(screen.getByText(/Todavía no hay rodales en el área de manejo/)).toBeInTheDocument()
+    expect(screen.getByText('Todavía no hay rodales en el informe.')).toBeInTheDocument()
+  })
+
+  it('shows a rodal on the map from its number, and highlights the hovered row', async () => {
+    const user = userEvent.setup()
+    const onRodal = vi.fn()
+    const onHover = vi.fn()
+    render(
+      <PlanificacionTable features={[feature('f1', '10')]} editable onChange={vi.fn()} onRodal={onRodal} onHover={onHover} />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Ver el rodal 10 en el mapa' }))
+    expect(onRodal).toHaveBeenCalledWith('f1')
+    expect(onHover).toHaveBeenCalledWith('f1')
   })
 
   it('never writes a cell that was only focused and left', async () => {

@@ -1,5 +1,5 @@
 /**
- * «2 Planificación»: one row per rodal in the management area, filled like a
+ * The report's table: one row per rodal in the management area, filled like a
  * spreadsheet (Javier, 2026-10-19: «Simple»). Sector, species to reforest
  * (one or more) and one total density in pl/ha. The first row, «Todos los
  * rodales», writes a value into every row at once.
@@ -56,10 +56,19 @@ export function PlanificacionTable({
   features,
   editable,
   onChange,
+  activeKey = null,
+  onRodal,
+  onHover,
 }: {
   features: DraftFeature[]
   editable: boolean
   onChange: OnChange
+  /** The rodal shown on the map (its card is open, or the row is hovered). */
+  activeKey?: string | null
+  /** The rodal cell was clicked: show that rodal on the map. */
+  onRodal?: (key: string) => void
+  /** The pointer entered (key) or left (null) a row: highlight it on the map. */
+  onHover?: (key: string | null) => void
 }) {
   const managed = features.filter((feature) => feature.in_report)
   const sectors = [...new Set(features.flatMap((f) => (f.sector ? [f.sector] : [])))].sort((a, b) =>
@@ -70,9 +79,10 @@ export function PlanificacionTable({
 
   if (managed.length === 0) {
     return (
-      <p className="step-empty">
-        Todavía no hay rodales en el área de manejo. Agréguelos en el paso <strong>1 Rodales</strong>.
-      </p>
+      <div className="step-empty">
+        <p><strong>Todavía no hay rodales en el informe.</strong></p>
+        <p>Haga clic en un rodal del mapa: entra al informe. Si se equivoca, «Deshacer».</p>
+      </div>
     )
   }
 
@@ -113,6 +123,9 @@ export function PlanificacionTable({
               key={`${feature.key}:${feature.sector ?? ''}:${(feature.reforest_species ?? []).join('|')}:${feature.reforest_density ?? ''}`}
               feature={feature}
               editable={editable}
+              active={activeKey === feature.key}
+              onRodal={onRodal}
+              onHover={onHover}
               onChange={(fields) => onChange(new Set([feature.key]), fields)}
             />
           ))}
@@ -125,10 +138,16 @@ export function PlanificacionTable({
 function PlanRow({
   feature,
   editable,
+  active,
+  onRodal,
+  onHover,
   onChange,
 }: {
   feature: DraftFeature
   editable: boolean
+  active: boolean
+  onRodal?: (key: string) => void
+  onHover?: (key: string | null) => void
   onChange: (fields: Partial<PlanningFields>) => void
 }) {
   const code = featureCode(feature) ?? 'Sin número'
@@ -139,14 +158,36 @@ function PlanRow({
   const [density, setDensity] = useState(initialDensity)
   const [error, setError] = useState<string | null>(null)
   const species = feature.reforest_species ?? []
+  const rowProps = {
+    className: active ? 'plan-table__row plan-table__row--active' : 'plan-table__row',
+    onMouseEnter: onHover ? () => onHover(feature.key) : undefined,
+    onMouseLeave: onHover ? () => onHover(null) : undefined,
+  }
+  const rodalCell = (
+    <th scope="row">
+      {onRodal ? (
+        <button
+          type="button"
+          className="plan-table__rodal-button"
+          aria-label={`Ver el rodal ${code} en el mapa`}
+          onClick={() => onRodal(feature.key)}
+        >
+          <span className="plan-table__rodal">{code}</span>
+          <span className="plan-table__ha">{area}</span>
+        </button>
+      ) : (
+        <>
+          <span className="plan-table__rodal">{code}</span>
+          <span className="plan-table__ha">{area}</span>
+        </>
+      )}
+    </th>
+  )
 
   if (!editable) {
     return (
-      <tr>
-        <th scope="row">
-          <span className="plan-table__rodal">{code}</span>
-          <span className="plan-table__ha">{area}</span>
-        </th>
+      <tr {...rowProps}>
+        {rodalCell}
         <td>{feature.sector ?? '—'}</td>
         <td>{species.length > 0 ? species.join(' + ') : '—'}</td>
         <td>{feature.reforest_density === null ? '—' : `${plants.format(feature.reforest_density)} pl/ha`}</td>
@@ -173,11 +214,8 @@ function PlanRow({
   }
 
   return (
-    <tr>
-      <th scope="row">
-        <span className="plan-table__rodal">{code}</span>
-        <span className="plan-table__ha">{area}</span>
-      </th>
+    <tr {...rowProps}>
+      {rodalCell}
       <td>
         <input
           className="plan-table__input"

@@ -41,6 +41,8 @@ interface ReportMapProps {
   onFinishLine: () => void
   onPieceClick: (featureKey: string, index: number) => void
   fitNonce: number
+  /** A click on the map outside every polygon (closes the rodal card). */
+  onBackgroundClick?: () => void
   /** Fly to these polygons whenever `focus.nonce` changes (search, list click). */
   focus?: { nonce: number; coordinates: Coordinates[] }
 }
@@ -133,6 +135,7 @@ export function ReportMap(props: ReportMapProps) {
 
     map.on('click', (event: L.LeafletMouseEvent) => {
       if (propsRef.current.mode === 'split') addLinePoint(event, propsRef.current.onLinePoint)
+      else propsRef.current.onBackgroundClick?.()
     })
     map.on('dblclick', () => {
       if (propsRef.current.mode === 'split') propsRef.current.onFinishLine()

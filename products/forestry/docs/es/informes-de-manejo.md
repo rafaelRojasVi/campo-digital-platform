@@ -24,34 +24,36 @@ guarda su propia copia de los rodales.
 
 ## Paso a paso
 
-Desde el 19 de octubre de 2026 el informe se arma en **tres pasos**, con
-pestañas arriba del panel: **1 Rodales**, **2 Planificación** y
-**3 Exportar**. Javier pidió que fuera lo más simple posible; los «?» explican
-cada parte.
+Desde el 19 de octubre de 2026 el informe es **una tabla a la izquierda y el
+mapa a la derecha**, sin pestañas ni «selección». Javier pidió que fuera lo
+más simple posible; los «?» explican cada parte.
 
 1. En **Informes**, use **Nuevo informe**: nombre, tipo (Cosecha, Manejo,
    Reforestación, Plantación u Otro) y fecha exacta (día, mes y año).
    Los informes anteriores al 2026-10-19 solo tienen mes; se les puede
    asignar una fecha exacta editando el encabezado del informe.
-2. **1 Rodales:** haga clic en un rodal del mapa, o búsquelo por su número
-   («Buscar rodal»), y presione **Agregar al informe** (Mayús + clic elige
-   varios). El rodal entra directo al **área de manejo** (en naranjo).
-3. Si solo se maneja una parte, use **Dividir con línea** (arriba del mapa):
-   un clic por cada quiebre, empezando y terminando fuera del rodal, y
-   **Terminar línea**. Toque la parte que se maneja y **Listo**. Esa parte
-   recibe un código nuevo (por ejemplo 766-1); la otra queda como
-   **«Resto»**, fuera del área de manejo. **Incluir** la vuelve a sumar.
-4. **2 Planificación:** una tabla, como en Excel, con sector, especie(s) a
-   reforestar y densidad de cada rodal (ver más abajo).
-5. **3 Exportar:** resumen (rodales, hectáreas, cuántos tienen
-   planificación), **Enviar a revisión**, las descargas (el Excel de
-   cosecha primero) y el N.º de CONAF.
-6. **Guardar** está siempre abajo del panel e indica si hay cambios sin
-   guardar. **Deshacer** y **Rehacer** sirven para cualquier paso.
-7. Si Javier pide cambios, la nota aparece arriba del informe. Se corrige y
+2. **Un clic en un rodal del mapa lo agrega** al informe (en naranjo) y
+   aparece «Rodal 1208 agregado · Deshacer». También se puede buscar por
+   número («Buscar rodal», arriba del mapa).
+3. **Un clic en un rodal naranjo abre su tarjeta**: **Dividir**, **Sacar del
+   informe** y **Editar datos**. Así un rodal ya planificado no se saca por
+   un clic distraído. Otro clic, o un clic fuera, la cierra.
+4. **Dividir:** un clic por cada quiebre, empezando y terminando fuera del
+   rodal, y **Terminar línea**. Toque la parte que se maneja y **Listo**. Esa
+   parte recibe un código nuevo (por ejemplo 766-1); la otra queda como
+   **«Resto»**, fuera del área de manejo (su tarjeta tiene **Incluir**).
+5. En la **tabla**, una fila por rodal: sector, especie(s) a reforestar y
+   densidad (ver más abajo). Tocar el número de un rodal lo muestra en el
+   mapa.
+6. **Excel de cosecha** está arriba del panel; los otros formatos, el N.º de
+   CONAF, duplicar y borrar están en **«Otros formatos, CONAF y más»**.
+7. **Guardar** y **Enviar a revisión** están siempre abajo del panel, que
+   indica si hay cambios sin guardar. **Deshacer** y **Rehacer** están arriba
+   del mapa.
+8. Si Javier pide cambios, la nota aparece arriba del informe. Se corrige y
    se vuelve a enviar.
-8. Un informe aprobado queda fijo. Para cambiarlo, use **Duplicar como
-   borrador** (en «Más acciones», paso 3).
+9. Un informe aprobado queda fijo. Para cambiarlo, use **Duplicar como
+   borrador**.
 
 ## Desde el mapa
 
@@ -110,7 +112,7 @@ predio y especie a reforestar, con su porcentaje.
 
 ### Planificación por rodal
 
-En el paso **2 Planificación** hay una fila por cada rodal del área de manejo:
+En la tabla del informe hay una fila por cada rodal del área de manejo:
 
 - **Sector:** texto libre (por ejemplo «La Reina»). Javier explicó que es un
   dato aproximado que no está escrito en ninguna parte; la plataforma sugiere

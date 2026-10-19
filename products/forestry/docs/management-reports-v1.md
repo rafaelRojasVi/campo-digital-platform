@@ -115,33 +115,36 @@ A feature sent without `geometry` is an untouched copy of its source polygon
   approve → Shapefile export; also checked at 800 px width.
 - **LIMITATION:** no snapping, vertex editing or new polygons (out of
   scope); editing is not optimized for touch.
-- **DECISION (2026-10-19, «simple editor»):** after a walkthrough found the
-  editor confusing (copy/paste inside one report, added rodales landing
-  outside the management area, a planning panel that appeared only for a
-  selected and managed polygon), and Javier asked for «Simple», the editor
-  became three tabs, «1 Rodales», «2 Planificación» and «3 Exportar»
-  (`?paso=` keeps the step):
-  - **1 Rodales:** a search by rodal number (flies to it) and a selection
-    bar on the map with «Agregar al informe». Added rodales go straight into
-    the management area (`pasteSources` now sets `in_report = true`), and only
-    the rest of a split stays out, shown as «Resto» with «Incluir». The rows
-    are compact, base fields sit behind «Editar datos», and «Dividir con
-    línea» / «Deshacer» / «Rehacer» float on the map. Copy/paste remains only
-    for rodales sent from the main map («Agregar a un informe»).
-  - **2 Planificación:** a spreadsheet-like table (`PlanificacionTable`)
-    replaces the selection panel. A «Todos» row applies values to every
-    managed rodal, and a cell is written only when its text changed.
-  - **3 Exportar:** a summary, send or review actions, the downloads (the
-    harvest Excel first), CONAF, and «Más acciones» (duplicate, archive,
-    delete).
-  - One sticky save bar shows unsaved changes in every step. Save notices
-    collapse into one line naming each rodal.
-  - **Map:** the wheel moves half a level per notch, imagery tops out at
-    native zoom 18 (no more «Map data not yet available»), and the map
-    redraws when the panel widens.
-  - **Motion:** the step underline slides, step content and the selection
-    bar ease in, and every animation stops under prefers-reduced-motion.
-    «?» hints explain each part.
+- **DECISION (2026-10-19, «simple editor»):** a walkthrough found the editor
+  confusing. Copy and paste were needed inside one report, added rodales landed
+  outside the management area, a selection stayed stuck, and the panel jumped.
+  Javier asked for «Simple». Four clickable alternatives were compared on a
+  design canvas, and Rafael chose «one click = in» plus a card:
+  - The editor is one screen: the report's table on the left
+    (`PlanificacionTable`, one row per managed rodal with sector, species and
+    density; a «Todos» row applies a value to all; a cell is written only when
+    its text changed) and the map on the right. There are no steps and no
+    selection state.
+  - **A click on a base rodal adds it** to the management area
+    (`pasteSources` sets `in_report = true`), with a «Deshacer» toast.
+  - **A click on a report rodal opens its card** (`RodalCard`: «Dividir»,
+    «Sacar del informe», «Editar datos», or «Incluir» for a «Resto»), so a
+    planned rodal is never removed by a stray click. A second click or a click
+    outside closes the card.
+  - «Buscar rodal» flies to a rodal and opens its card, with «Agregar al
+    informe» when it is outside the report.
+  - Hovering a row highlights its polygon, and the rodal number in a row
+    shows it on the map.
+  - The harvest Excel is the main download at the top. Other formats, CONAF
+    and duplicate/archive/delete sit under «Otros formatos, CONAF y más».
+    Save and send live in a sticky bar.
+  - Icons sit on the actions, and «?» hints explain the parts.
+  - **Motion:** the card and toast ease in, a row's highlight fades, and all
+    of it stops under prefers-reduced-motion.
+  - **Map:** half-level wheel zoom, imagery capped at native zoom 18, and a
+    redraw on resize.
+  - **Phones:** the map sits above and the table below, and the panel scrolls
+    as a whole.
 
 ## Rules on save
 
