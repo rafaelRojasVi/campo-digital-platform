@@ -567,3 +567,83 @@
     print-color-adjust: exact;
   }
 }
+
+/* Planificación: sector, species to reforest and density per rodal. */
+.plan__hint,
+.plan__mixed {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.plan__chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.plan__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2, #f1f3ef);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.plan__chip button {
+  border: 0;
+  background: transparent;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.plan__chip button:hover,
+.plan__chip button:focus-visible {
+  background: var(--border);
+}
+
+.plan__add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.plan__error {
+  font-weight: 500;
+  color: var(--danger);
+}
+
+.plan__readonly {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.plan__readonly div {
+  display: grid;
+  grid-template-columns: 11em minmax(0, 1fr);
+  gap: 8px;
+}
+
+.plan__readonly dt {
+  color: var(--ink-3);
+}
+
+.plan__readonly dd {
+  margin: 0;
+  font-weight: 600;
+}

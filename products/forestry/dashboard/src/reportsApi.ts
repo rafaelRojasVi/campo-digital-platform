@@ -101,6 +101,9 @@ export interface ReportFeature {
   geometry_changed: boolean
   attributes: Attributes
   geometry: MultiPolygonGeometry
+  sector: string | null
+  reforest_species: string[] | null
+  reforest_density: number | null
 }
 
 export interface ReportSource {
@@ -131,6 +134,9 @@ export interface SaveFeatureInput {
   in_report: boolean
   attributes: Record<string, string | null>
   geometry: MultiPolygonGeometry | null
+  sector: string | null
+  reforest_species: string[] | null
+  reforest_density: number | null
 }
 
 export interface ReportWarning {

@@ -34,11 +34,10 @@ import datetime
 import io
 
 import pytest
-from app.forestry_report_export import ExportFormat, ExportReport, ExportRow, export_report
+from app.forestry_report_export import ExportReport, ExportRow, export_report
 from app.forestry_report_harvest_xlsx import write_harvest_xlsx
 from python_calamine import CalamineWorkbook
 from shapely.geometry import MultiPolygon, box
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -184,9 +183,9 @@ def test_units_row() -> None:
     sheet = _sheet(content, detail)
     # Units are at output row 3
     units = sheet[3]
-    assert units[4] == "(ha)"    # superficie col
-    assert units[9] == "(ha)"    # superficie corta col
-    assert units[7] == "(%)"     # pendiente col
+    assert units[4] == "(ha)"  # superficie col
+    assert units[9] == "(ha)"  # superficie corta col
+    assert units[7] == "(%)"  # pendiente col
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +207,7 @@ def test_split_rodal_superficie_includes_both_pieces() -> None:
     sheet = _sheet(content, detail)
     # First data row is at output row 4 (rows 0-3 are title/empty/headers/units)
     data_row = sheet[4]
-    sup = data_row[4]       # col F (index 5 in xlsx, 4 in output) = superficie
+    sup = data_row[4]  # col F (index 5 in xlsx, 4 in output) = superficie
     sup_corta = data_row[9]  # col K (index 10 in xlsx, 9 in output) = superficie corta
     assert sup == pytest.approx(5.0)
     assert sup_corta == pytest.approx(3.0)
@@ -395,3 +394,124 @@ def test_sheets_ordered_by_species_then_predio() -> None:
     pi_a = next(i for i, n in enumerate(names) if "Pino radiata" in n and "A" in n)
     pi_z = next(i for i, n in enumerate(names) if "Pino radiata" in n and " Z" in n)
     assert pi_a < pi_z
+
+
+# ---------------------------------------------------------------------------
+# Planning fields in detail sheet (migration 0018)
+# ---------------------------------------------------------------------------
+
+
+def test_planning_fields_appear_in_detail_sheet() -> None:
+    """sector, esp_refor, dens_refor are written to the correct detail columns."""
+    rows = [
+        ExportRow(
+            _attrs(),
+            GEOM,
+            True,
+            False,
+            sector="Las Araucas",
+            reforest_species=["pino radiata", "coigüe"],
+            reforest_density=850,
+        )
+    ]
+    content = write_harvest_xlsx(REPORT_DATE, rows)
+    wb = _wb(content)
+    detail = [n for n in wb.sheet_names if n != "Resumen"][0]
+    sheet = _sheet(content, detail)
+    # First data row at output row 4; col mapping (col A stripped):
+    # sector=1, esp_refor=11, dens_refor=12
+    data_row = sheet[4]
+    assert data_row[1] == "Las Araucas"
+    assert data_row[11] == "pino radiata + coigüe"
+    assert data_row[12] == pytest.approx(850.0)
+
+
+def test_planning_fields_blank_when_not_set() -> None:
+    """A row with no planning fields writes blank/None to those columns."""
+    rows = [ExportRow(_attrs(), GEOM, True, False)]
+    content = write_harvest_xlsx(REPORT_DATE, rows)
+    wb = _wb(content)
+    detail = [n for n in wb.sheet_names if n != "Resumen"][0]
+    sheet = _sheet(content, detail)
+    data_row = sheet[4]
+    # calamine returns None or "" for blank cells
+    assert data_row[1] in (None, "")
+    assert data_row[11] in (None, "")
+    assert data_row[12] in (None, "")
+
+
+# ---------------------------------------------------------------------------
+# PLANTACIÓN TEMPORADA section in Resumen (migration 0018)
+# ---------------------------------------------------------------------------
+
+
+def test_resumen_plantacion_section_present_when_species_set() -> None:
+    """PLANTACIÓN TEMPORADA block appears in Resumen when a row has reforest_species."""
+    rows = [
+        ExportRow(
+            _attrs(objectid=1, nom_predio="Fundo Norte", sup_ha=3.5),
+            GEOM,
+            True,
+            False,
+            reforest_species=["pino radiata"],
+            reforest_density=1200,
+        )
+    ]
+    content = write_harvest_xlsx(REPORT_DATE, rows)
+    sheet = _sheet(content, "Resumen")
+    all_values = [cell for row in sheet for cell in row if cell]
+    # The PLANTACIÓN heading must appear somewhere in the sheet
+    assert any("PLANTACIÓN TEMPORADA" in str(v) for v in all_values), all_values
+
+
+def test_resumen_plantacion_section_absent_when_no_species() -> None:
+    """PLANTACIÓN TEMPORADA block is omitted when no row has reforest_species."""
+    rows = [ExportRow(_attrs(), GEOM, True, False)]
+    content = write_harvest_xlsx(REPORT_DATE, rows)
+    sheet = _sheet(content, "Resumen")
+    all_values = [cell for row in sheet for cell in row if cell]
+    assert not any("PLANTACIÓN TEMPORADA" in str(v) for v in all_values), all_values
+
+
+def test_resumen_plantacion_rows_and_pct() -> None:
+    """PLANTACIÓN rows show predio, species, sup, and % summing to 100."""
+    rows = [
+        ExportRow(
+            _attrs(objectid=1, nom_predio="Fundo Norte", sup_ha=2.0),
+            GEOM,
+            True,
+            False,
+            reforest_species=["pino radiata"],
+        ),
+        ExportRow(
+            _attrs(objectid=2, nom_predio="Fundo Norte", sup_ha=8.0),
+            GEOM,
+            True,
+            False,
+            reforest_species=["coigüe"],
+        ),
+    ]
+    content = write_harvest_xlsx(REPORT_DATE, rows)
+    sheet = _sheet(content, "Resumen")
+    # Locate the PLANTACIÓN heading row
+    plant_row_idx = next(
+        i for i, row in enumerate(sheet) if any("PLANTACIÓN TEMPORADA" in str(c) for c in row)
+    )
+    # Headers are one row below the heading; data starts two rows below
+    data_start = plant_row_idx + 2
+    # Read until Total row
+    plant_data = []
+    for row in sheet[data_start:]:
+        if row[0] == "Total" or row[1] == "Total":
+            break
+        if row[1] in (None, ""):
+            continue
+        plant_data.append(row)
+
+    assert len(plant_data) == 2
+    # Resumen PLANTACIÓN columns (col A stripped):
+    # output col 0=predio, 1=especie a reforestar, 2=superficie plantación, 3=%
+    total_pct = 0.0
+    for r in plant_data:
+        total_pct += float(str(r[3]))
+    assert total_pct == pytest.approx(100.0, rel=1e-3)

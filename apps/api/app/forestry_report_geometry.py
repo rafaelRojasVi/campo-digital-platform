@@ -119,6 +119,10 @@ class FeatureInput:
     in_report: bool
     attributes: Mapping[str, Any]
     geometry: Mapping[str, Any] | None
+    # Per-rodal planning fields (migration 0018).
+    sector: str | None = None
+    reforest_species: list[str] | None = None  # ordered, no duplicates, ≤6 items each ≤40 chars
+    reforest_density: int | None = None  # pl/ha, 1–20 000
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +135,9 @@ class ResolvedFeature:
     geometry_changed: bool
     attributes: dict[str, Any]
     geometry: MultiPolygon
+    sector: str | None = None
+    reforest_species: list[str] | None = None
+    reforest_density: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,7 +219,17 @@ def resolve_features(
         if changed or attributes_changed:
             attributes["editada"] = EDITADA_WEB
         resolved.append(
-            ResolvedFeature(position, ordinal, item.in_report, changed, attributes, stored)
+            ResolvedFeature(
+                position,
+                ordinal,
+                item.in_report,
+                changed,
+                attributes,
+                stored,
+                item.sector,
+                item.reforest_species,
+                item.reforest_density,
+            )
         )
 
     _reject_overlaps(resolved)

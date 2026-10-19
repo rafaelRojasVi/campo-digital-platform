@@ -17,6 +17,9 @@ interface FeatureLike {
   in_report: boolean
   geometry_changed: boolean
   attributes: Attributes
+  sector?: string | null
+  reforest_species?: string[] | null
+  reforest_density?: number | null
 }
 
 interface SourceLike {
@@ -78,6 +81,10 @@ export function describeChanges(features: FeatureLike[], sources: SourceLike[]):
       const after = text(feature.attributes[key])
       if (before !== after) parts.push(`${label}: «${before ?? ''}» → «${after ?? ''}»`)
     }
+    if (feature.sector != null) parts.push(`Sector: ${feature.sector}`)
+    if (feature.reforest_species != null && feature.reforest_species.length > 0)
+      parts.push(`Esp. reforestar: ${feature.reforest_species.join(' + ')}`)
+    if (feature.reforest_density != null) parts.push(`Dens. refor.: ${feature.reforest_density} pl/ha`)
     items.push({ ordinal, title: `${name} agregado completo`, detail: parts.join(' · ') })
   }
   return items

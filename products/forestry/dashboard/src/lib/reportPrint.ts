@@ -10,10 +10,13 @@ export interface PrintRow {
   rodal: string
   code: string
   predio: string
+  sector: string | null
   uso: string
   species: string
   ha: number
   managed: boolean
+  reforestSpecies: string | null
+  reforestDensity: number | null
 }
 
 function text(value: unknown): string {
@@ -34,12 +37,18 @@ export function printRows(features: ReportFeature[]): {
       rodal: text(a.n_rodal) || '—',
       code: text(a.cod_uso_2026) || '—',
       predio: text(a.nom_predio) || '—',
+      sector: feature.sector ?? null,
       uso: text(a.uso_2026) || '—',
       species: group === NO_SPECIES_GROUP ? '—' : group.label,
       ha: Number.isFinite(supHa)
         ? supHa
         : multiPolygonAreaSquareMeters(feature.geometry.coordinates) / 10_000,
       managed: feature.in_report,
+      reforestSpecies:
+        feature.reforest_species != null && feature.reforest_species.length > 0
+          ? feature.reforest_species.join(' + ')
+          : null,
+      reforestDensity: feature.reforest_density ?? null,
     }
   })
   rows.sort(

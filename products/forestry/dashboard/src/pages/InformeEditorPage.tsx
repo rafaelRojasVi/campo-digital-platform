@@ -14,6 +14,7 @@ import { Header } from '../components/Header.tsx'
 import { Notice } from '../components/PageShell.tsx'
 import { ReportMap, type ChoosePiece, type MapMode } from '../components/ReportMap.tsx'
 import { ConafCard } from '../components/ConafCard.tsx'
+import { PlanificacionPanel } from '../components/PlanificacionPanel.tsx'
 import { ReportStatusChip } from '../components/ReportStatusChip.tsx'
 import { normalizeSolicitud } from '../lib/conafEstado.ts'
 import { createHistory, recordHistory, redoHistory, undoHistory, type History } from '../lib/history.ts'
@@ -27,6 +28,7 @@ import {
   pasteSources,
   removeSources,
   setAttribute,
+  setPlanningFields,
   toSaveFeatures,
   toggleInReport,
   type DraftFeature,
@@ -715,6 +717,15 @@ function Editor({
             </ol>
           ) : null}
 
+          {/* Above the list: the attribute forms of the selected rodales are
+              long, and the planning fields are what the selection is for. */}
+          <PlanificacionPanel
+            draft={draft}
+            selectedKeys={selectedKeys}
+            editable={editable}
+            onChangePlanning={(keys, fields) => change(setPlanningFields(draft, keys, fields))}
+          />
+
           <ul className="report-features">
             {draft.features.map((feature) => (
               <FeatureRow
@@ -723,7 +734,7 @@ function Editor({
                 editable={editable}
                 selected={selectedKeys.has(feature.key)}
                 baseValues={sourceValues.get(feature.source_feature_ordinal) ?? {}}
-                onSelect={() => onFeatureClick(feature.key, false)}
+                onSelect={(additive) => onFeatureClick(feature.key, additive)}
                 onToggle={() => change(toggleInReport(draft, feature.key))}
                 onEdit={(name, value, baseValue) => change(setAttribute(draft, feature.key, name, value, baseValue))}
               />
@@ -889,7 +900,7 @@ function FeatureRow({
   editable: boolean
   selected: boolean
   baseValues: Record<string, string | null>
-  onSelect: () => void
+  onSelect: (additive: boolean) => void
   onToggle: () => void
   onEdit: (name: string, value: string, baseValue: string | null) => void
 }) {
@@ -898,7 +909,7 @@ function FeatureRow({
   const use = feature.attributes.cod_uso === null || feature.attributes.cod_uso === undefined ? '' : ` · ${String(feature.attributes.cod_uso)}`
   return (
     <li className={`report-feature${feature.in_report ? ' report-feature--managed' : ''}${selected ? ' report-feature--selected' : ''}`}>
-      <button type="button" className="report-feature__main" onClick={onSelect} aria-expanded={selected}>
+      <button type="button" className="report-feature__main" onClick={(event) => onSelect(event.shiftKey)} aria-expanded={selected}>
         <span>{`${code}${use}`}</span>
         <span className="report-feature__ha">{`${ha.format(Number(feature.attributes.sup_ha ?? 0))} ha`}</span>
       </button>

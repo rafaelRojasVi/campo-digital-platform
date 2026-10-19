@@ -542,3 +542,132 @@ def submitted_report(connection: Connection, ctx: dict[str, int]) -> int:
         actor_app_user_id=ctx["operator"],
     )
     return report_id
+
+
+# ---------------------------------------------------------------------------
+# Planning fields (migration 0018)
+# ---------------------------------------------------------------------------
+
+
+def planning_input(ordinal: int, **planning: object) -> FeatureInput:
+    """A FeatureInput for ordinal ``ordinal`` with optional planning fields."""
+
+    return FeatureInput(
+        ordinal,
+        True,
+        {},
+        None,
+        sector=planning.get("sector"),
+        reforest_species=planning.get("reforest_species"),
+        reforest_density=planning.get("reforest_density"),
+    )
+
+
+def test_planning_fields_are_saved_and_read_back(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
+    """save_report_features stores planning fields; list_report_features returns them."""
+
+    report_id = new_report(integration_connection, ctx)
+    inputs = [
+        planning_input(
+            2,
+            sector="La Reina",
+            reforest_species=["pino radiata", "coigüe"],
+            reforest_density=1111,
+        ),
+        planning_input(3),  # all None
+    ]
+    save_report_features(
+        integration_connection, report_id=report_id, expected_revision=1, inputs=inputs
+    )
+
+    features = list_report_features(integration_connection, report_id)
+    f2 = next(f for f in features if f.source_feature_ordinal == 2)
+    f3 = next(f for f in features if f.source_feature_ordinal == 3)
+
+    assert f2.sector == "La Reina"
+    assert f2.reforest_species == ["pino radiata", "coigüe"]
+    assert f2.reforest_density == 1111
+    assert f3.sector is None
+    assert f3.reforest_species is None
+    assert f3.reforest_density is None
+
+
+def test_duplicate_report_copies_planning_fields(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
+    """duplicate_report preserves planning fields."""
+
+    report_id = new_report(integration_connection, ctx)
+    save_report_features(
+        integration_connection,
+        report_id=report_id,
+        expected_revision=1,
+        inputs=[planning_input(2, sector="Alto", reforest_species=["raulí"], reforest_density=800)],
+    )
+
+    copy_id = duplicate_report(
+        integration_connection, report_id=report_id, actor_app_user_id=ctx["operator"]
+    )
+    features = list_report_features(integration_connection, copy_id)
+    f = features[0]
+    assert f.sector == "Alto"
+    assert f.reforest_species == ["raulí"]
+    assert f.reforest_density == 800
+
+
+def test_sector_too_long_is_rejected(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
+    report_id = new_report(integration_connection, ctx)
+    with pytest.raises(ReportError) as raised:
+        save_report_features(
+            integration_connection,
+            report_id=report_id,
+            expected_revision=1,
+            inputs=[planning_input(2, sector="A" * 61)],
+        )
+    assert raised.value.code == "sector_too_long"
+
+
+def test_too_many_species_is_rejected(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
+    report_id = new_report(integration_connection, ctx)
+    with pytest.raises(ReportError) as raised:
+        save_report_features(
+            integration_connection,
+            report_id=report_id,
+            expected_revision=1,
+            inputs=[planning_input(2, reforest_species=["a", "b", "c", "d", "e", "f", "g"])],
+        )
+    assert raised.value.code == "too_many_reforest_species"
+
+
+def test_duplicate_species_is_rejected(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
+    report_id = new_report(integration_connection, ctx)
+    with pytest.raises(ReportError) as raised:
+        save_report_features(
+            integration_connection,
+            report_id=report_id,
+            expected_revision=1,
+            inputs=[planning_input(2, reforest_species=["pino", "pino"])],
+        )
+    assert raised.value.code == "reforest_species_duplicate"
+
+
+def test_invalid_density_is_rejected(
+    integration_connection: Connection, ctx: dict[str, int]
+) -> None:
+    report_id = new_report(integration_connection, ctx)
+    with pytest.raises(ReportError) as raised:
+        save_report_features(
+            integration_connection,
+            report_id=report_id,
+            expected_revision=1,
+            inputs=[planning_input(2, reforest_density=0)],
+        )
+    assert raised.value.code == "invalid_reforest_density"

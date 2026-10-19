@@ -58,7 +58,7 @@ describe('reports API', () => {
   it('saves features with PUT on the fixed path', async () => {
     csrfThen(json({ revision: 3, feature_count: 1, warnings: [] }))
     await saveReportFeatures(7, 2, [
-      { source_feature_ordinal: 1, in_report: true, attributes: {}, geometry: null },
+      { source_feature_ordinal: 1, in_report: true, attributes: {}, geometry: null, sector: null, reforest_species: null, reforest_density: null },
     ])
     const [url, init] = fetchMock.mock.calls[1] ?? []
     expect(url).toBe('/api/forestry/reports/features')

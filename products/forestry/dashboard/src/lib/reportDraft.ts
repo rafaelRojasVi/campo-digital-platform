@@ -35,6 +35,10 @@ export interface DraftFeature {
   /** Editable values that differ from the base polygon (what is sent). */
   edits: Record<string, string | null>
   coordinates: Coordinates
+  /** Per-polygon planning fields (migration 0018). */
+  sector: string | null
+  reforest_species: string[] | null
+  reforest_density: number | null
 }
 
 export interface ReportDraft {
@@ -74,6 +78,9 @@ export function draftFromDetail(detail: ReportDetail): ReportDraft {
       attributes: feature.attributes,
       edits,
       coordinates: feature.geometry.coordinates,
+      sector: feature.sector ?? null,
+      reforest_species: feature.reforest_species ?? null,
+      reforest_density: feature.reforest_density ?? null,
     }
   })
   return { features, nextKey: features.length + 1 }
@@ -101,6 +108,9 @@ export function pasteSources(
       attributes: { ...source.attributes },
       edits: {},
       coordinates: source.coordinates,
+      sector: null,
+      reforest_species: null,
+      reforest_density: null,
     })
     nextKey += 1
   }
@@ -168,6 +178,10 @@ export function applySplit(
         geometry_changed: true,
         attributes: withArea(feature.attributes, coordinates),
         coordinates,
+        // DECISION (2026-10-19): split pieces inherit planning fields from parent.
+        sector: feature.sector,
+        reforest_species: feature.reforest_species,
+        reforest_density: feature.reforest_density,
       }),
     )
     return replaceAt(draft, index, kept, nextKey)
@@ -184,6 +198,10 @@ export function applySplit(
     attributes: withArea({ ...feature.attributes, n_rodal: code }, managedCoordinates),
     edits: code === featureCode(feature) ? feature.edits : { ...feature.edits, n_rodal: code },
     coordinates: managedCoordinates,
+    // DECISION (2026-10-19): split pieces inherit planning fields from parent.
+    sector: feature.sector,
+    reforest_species: feature.reforest_species,
+    reforest_density: feature.reforest_density,
   }
   const restFeature: DraftFeature = {
     ...feature,
@@ -192,6 +210,9 @@ export function applySplit(
     geometry_changed: true,
     attributes: withArea(feature.attributes, restCoordinates),
     coordinates: restCoordinates,
+    sector: feature.sector,
+    reforest_species: feature.reforest_species,
+    reforest_density: feature.reforest_density,
   }
   return replaceAt(draft, index, [managedFeature, restFeature], nextKey)
 }
@@ -225,6 +246,42 @@ function updateFeature(
 
 export function toggleInReport(draft: ReportDraft, key: string): ReportDraft {
   return updateFeature(draft, key, (feature) => ({ ...feature, in_report: !feature.in_report }))
+}
+
+export interface PlanningFields {
+  sector: string | null
+  reforest_species: string[] | null
+  reforest_density: number | null
+}
+
+/**
+ * Apply planning fields to all features whose keys are in the set.
+ * Fields left undefined in the patch are not changed.
+ */
+export function setPlanningFields(
+  draft: ReportDraft,
+  keys: Set<string>,
+  fields: Partial<PlanningFields>,
+): ReportDraft {
+  if (keys.size === 0) return draft
+  return {
+    ...draft,
+    features: draft.features.map((feature) => {
+      if (!keys.has(feature.key)) return feature
+      return {
+        ...feature,
+        sector: 'sector' in fields ? (fields.sector ?? null) : feature.sector,
+        reforest_species:
+          'reforest_species' in fields
+            ? (fields.reforest_species ?? null)
+            : feature.reforest_species,
+        reforest_density:
+          'reforest_density' in fields
+            ? (fields.reforest_density ?? null)
+            : feature.reforest_density,
+      }
+    }),
+  }
 }
 
 /**
@@ -264,6 +321,9 @@ export function toSaveFeatures(draft: ReportDraft): SaveFeatureInput[] {
     geometry: feature.geometry_changed
       ? { type: 'MultiPolygon', coordinates: feature.coordinates }
       : null,
+    sector: feature.sector,
+    reforest_species: feature.reforest_species,
+    reforest_density: feature.reforest_density,
   }))
 }
 

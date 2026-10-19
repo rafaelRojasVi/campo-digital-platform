@@ -67,6 +67,10 @@ EXPORT_FIELDS: tuple[ExportField, ...] = (
     ExportField("FECHA", "C", 10, 0),
     ExportField("ESTADO", "C", 20, 0),
     ExportField("OID_ORIGEN", "N", 10, 0),
+    # Planning fields (migration 0018).  DBF names ≤10 chars.
+    ExportField("SECTOR", "C", 60, 0),
+    ExportField("ESP_REFOR", "C", 254, 0),
+    ExportField("DENS_REFOR", "N", 6, 0),
 )
 # Lineage keys of the 14 base fields, in EXPORT_FIELDS order.
 _BASE_KEYS = (
@@ -159,6 +163,9 @@ class ExportRow:
     geometry: MultiPolygon
     in_report: bool
     geometry_changed: bool
+    sector: str | None = None
+    reforest_species: list[str] | None = None
+    reforest_density: int | None = None
 
 
 def row_values(report: ExportReport, row: ExportRow) -> list[object]:
@@ -172,6 +179,7 @@ def row_values(report: ExportReport, row: ExportRow) -> list[object]:
     fecha = (
         report.report_date.isoformat() if report.report_date is not None else report.report_month
     )
+    esp_refor = " + ".join(row.reforest_species) if row.reforest_species else None
     return [
         *base,
         "si" if row.in_report else "no",
@@ -180,6 +188,9 @@ def row_values(report: ExportReport, row: ExportRow) -> list[object]:
         fecha,
         STATUS_LABELS[report.status],
         source_objectid,
+        row.sector,
+        esp_refor,
+        row.reforest_density,
     ]
 
 

@@ -21,15 +21,19 @@ Column mapping decisions (FACT, Javier Campo Digital 2026-10-19 unless noted):
 - ``año corta``        = year of ``report_date``; falls back to the year in
                          ``report_month`` for legacy month-only reports.
 - ``plan de manejo``   = «sí» if the report has a CONAF solicitud number, else «no»
-- ``sector``           = blank (FACT, Javier 2026-10-19: sector is general,
-                         approximate knowledge, not recorded in the base)
+- ``sector``           = ``ExportRow.sector`` (per-rodal planning field, migration 0018).
+                         NULL → blank cell.
 - ``pendiente (%)``    = blank (not in the base)
 - ``densidad actual``  = blank (not in the base)
-- ``especie a reforestar`` = blank in this version (FACT, Javier 2026-10-19:
-                         the reforestation species changes per rodal and can be
-                         several; capturing it needs per-polygon fields in the
-                         report editor — NEXT STEP, not built here)
-- ``densidad reforestación`` = blank in this version (same reason as above)
+- ``especie a reforestar`` = ``ExportRow.reforest_species`` joined with « + »
+                         (per-rodal planning field, migration 0018).  NULL → blank cell.
+- ``densidad reforestación`` = ``ExportRow.reforest_density`` (migration 0018).  NULL → blank.
+
+DECISION (2026-10-19): the «Resumen» sheet gains a second table,
+«PLANTACIÓN TEMPORADA <year>-<year+1>», listing managed rows that have a
+non-empty ``reforest_species``.  Columns: predio, especie a reforestar,
+superficie plantación (= sup_ha of the managed polygon), % (over the table
+total).  Rows without species are omitted.
 
 Sheets are ordered by species (SPECIES_ORDER from forestry_species) then predio.
 Sheet names are ≤31 chars, unique, and contain no ``[]:*?/\\`` characters.
@@ -180,6 +184,7 @@ def write_harvest_xlsx(report: ExportReport, rows: Sequence[ExportRow]) -> bytes
     _write_resumen(
         workbook,
         sorted_groups,
+        managed,
         year,
         title_fmt,
         bold,
@@ -257,6 +262,7 @@ def _group_key_to_title_label(key: str) -> str:
 def _write_resumen(
     workbook: xlsxwriter.Workbook,
     sorted_groups: list[tuple[tuple[str, str], list[ExportRow]]],
+    managed_rows: list[ExportRow],
     year: int,
     title_fmt: Any,
     bold: Any,
@@ -269,6 +275,9 @@ def _write_resumen(
 ) -> None:
     ws = workbook.add_worksheet("Resumen")
 
+    # --------------------------------------------------------------------------
+    # Section 1: COSECHA TEMPORADA
+    # --------------------------------------------------------------------------
     # Row 2, col B: title
     ws.write(1, 1, f"COSECHA TEMPORADA {year}-{year + 1}", title_fmt)
 
@@ -294,10 +303,47 @@ def _write_resumen(
     ws.write(data_row, 2, None, total_fmt)
     ws.write_number(data_row, 3, total_sup, num_total_fmt)
 
+    # --------------------------------------------------------------------------
+    # Section 2: PLANTACIÓN TEMPORADA (rows with reforest_species only)
+    # DECISION (2026-10-19): rows without reforest_species are omitted.
+    # Superficie = sup_ha of the managed polygon (superficie corta).
+    # % is calculated over the table total.
+    # --------------------------------------------------------------------------
+    plant_rows = [r for r in managed_rows if r.reforest_species]
+    if plant_rows:
+        plant_title_row = data_row + 2  # one blank row gap
+        ws.write(plant_title_row, 1, f"PLANTACIÓN TEMPORADA {year}-{year + 1}", title_fmt)
+
+        hdr = plant_title_row + 1
+        ws.write(hdr, 1, "predio", header_fmt)
+        ws.write(hdr, 2, "especie a reforestar", header_fmt)
+        ws.write(hdr, 3, "superficie plantación", header_fmt)
+        ws.write(hdr, 4, "%", header_fmt)
+
+        plant_total = sum(float(r.attributes.get("sup_ha") or 0.0) for r in plant_rows)
+        plant_data_row = hdr + 1
+        for r in plant_rows:
+            predio = str(r.attributes.get("nom_predio") or "")
+            esp = " + ".join(r.reforest_species)
+            sup = float(r.attributes.get("sup_ha") or 0.0)
+            pct = (sup / plant_total * 100) if plant_total > 0 else 0.0
+            ws.write(plant_data_row, 1, predio, cell_fmt)
+            ws.write(plant_data_row, 2, esp, cell_fmt)
+            ws.write_number(plant_data_row, 3, sup, num_fmt)
+            ws.write_number(plant_data_row, 4, pct, num_fmt)
+            plant_data_row += 1
+
+        # Total row
+        ws.write(plant_data_row, 1, "Total", total_fmt)
+        ws.write(plant_data_row, 2, None, total_fmt)
+        ws.write_number(plant_data_row, 3, plant_total, num_total_fmt)
+        ws.write_number(plant_data_row, 4, 100.0, num_total_fmt)
+
     # Sensible column widths
     ws.set_column(1, 1, 25)  # predio
-    ws.set_column(2, 2, 30)  # especie cosechar
-    ws.set_column(3, 3, 20)  # superficie cosecha
+    ws.set_column(2, 2, 35)  # especie
+    ws.set_column(3, 3, 22)  # superficie
+    ws.set_column(4, 4, 8)  # %
 
 
 def _write_detail_sheet(
@@ -376,8 +422,9 @@ def _write_detail_sheet(
         sp_lbl = species_label(code)
         ano_plant = plantation_year(code)
 
+        esp_refor = " + ".join(row.reforest_species) if row.reforest_species else None
         ws.write(r, _COL_PREDIO, predio, cell_fmt)
-        ws.write(r, _COL_SECTOR, None, cell_fmt)  # blank
+        ws.write(r, _COL_SECTOR, row.sector, cell_fmt)
         ws.write(r, _COL_ACTIVIDAD, actividad, cell_fmt)
         ws.write(r, _COL_RODAL, rodal, cell_fmt)
         ws.write_number(r, _COL_SUP, sup, num_fmt)
@@ -386,12 +433,15 @@ def _write_detail_sheet(
             ws.write_number(r, _COL_ANO_PLANT, ano_plant, cell_fmt)
         else:
             ws.write(r, _COL_ANO_PLANT, None, cell_fmt)
-        ws.write(r, _COL_PENDIENTE, None, cell_fmt)  # blank
-        ws.write(r, _COL_DENSIDAD, None, cell_fmt)  # blank
+        ws.write(r, _COL_PENDIENTE, None, cell_fmt)  # blank — not in the base
+        ws.write(r, _COL_DENSIDAD, None, cell_fmt)  # blank — not in the base
         ws.write_number(r, _COL_SUP_CORTA, sup_corta, num_fmt)
         ws.write_number(r, _COL_ANO_CORTA, year, cell_fmt)
-        ws.write(r, _COL_ESP_REFOR, None, cell_fmt)  # blank
-        ws.write(r, _COL_DENS_REFOR, None, cell_fmt)  # blank
+        ws.write(r, _COL_ESP_REFOR, esp_refor, cell_fmt)
+        if row.reforest_density is not None:
+            ws.write_number(r, _COL_DENS_REFOR, row.reforest_density, cell_fmt)
+        else:
+            ws.write(r, _COL_DENS_REFOR, None, cell_fmt)
         ws.write(r, _COL_PLAN, plan_de_manejo, cell_fmt)
 
         total_sup += sup

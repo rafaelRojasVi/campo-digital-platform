@@ -29,7 +29,7 @@ Spanish guide: [Informes de manejo](es/informes-de-manejo.md).
   the report's base snapshot, not by OBJECTID, which may repeat within a
   snapshot. OBJECTID is still exported from the copied attributes.
 
-## Data (migrations 0014, 0017)
+## Data (migrations 0014, 0017, 0018)
 
 **DECISION (2026-10-19):** Javier (Campo Digital) confirmed that reports need
 the exact day, not just the month. `report_date DATE` was added alongside
@@ -42,7 +42,7 @@ derives `report_month` from it. A CHECK constraint keeps them consistent:
 |---|---|
 | `forestry.report` | name (1–120 characters, unique among non-archived reports ignoring case), type, month `YYYY-MM`, exact date `YYYY-MM-DD` (nullable; legacy rows NULL), status, base snapshot, `revision`, creator, decision time and decider |
 | `forestry.report_note` | append-only review notes; a change request always has text (≤ 2,000 characters) |
-| `forestry.report_feature` | position, `source_feature_ordinal`, `in_report` (the EN_INFORME mark), `geometry_changed`, `attributes` (JSONB, source-contract lineage keys), `geometry` (`MultiPolygon`, EPSG:32718) |
+| `forestry.report_feature` | position, `source_feature_ordinal`, `in_report` (the EN_INFORME mark), `geometry_changed`, `attributes` (JSONB, source-contract lineage keys), `geometry` (`MultiPolygon`, EPSG:32718), planning fields `sector`, `reforest_species`, `reforest_density` (0018, see «Planificación») |
 
 ## Lifecycle and roles
 
@@ -221,7 +221,7 @@ uses the `in_report=True` rows.
 | Column | Content |
 |---|---|
 | `predio` | `nom_predio` |
-| `sector` | blank — FACT (Javier 2026-10-19): sector is general knowledge, not recorded |
+| `sector` | the polygon's «Planificación» sector; blank when not entered — FACT (Javier 2026-10-19): sector is approximate general knowledge, recorded nowhere else |
 | `actividad` | report type in lower case (cosecha / manejo / reforestación) |
 | `rodal` | `n_rodal` of the managed polygon |
 | `superficie (ha)` | sum of `sup_ha` over **all** rows sharing the same source `objectid` — FACT (Javier 2026-10-19): «superficie» is the area of the whole source rodal |
@@ -231,8 +231,8 @@ uses the `in_report=True` rows.
 | `densidad actual` | blank — not in the base |
 | `superficie corta (ha)` | the managed polygon's own `sup_ha` — FACT (Javier 2026-10-19): «superficie corta» is the area that will actually be harvested |
 | `año corta` | year of `report_date`; falls back to year in `report_month` for legacy reports |
-| `especie a reforestar` | blank — FACT (Javier 2026-10-19): reforestation species changes per rodal and can be several per rodal; capturing it needs per-polygon fields in the report editor (NEXT STEP, not built here) |
-| `densidad reforestación` | blank — same reason as `especie a reforestar` |
+| `especie a reforestar` | the polygon's «Planificación» species joined with « + »; blank when not entered — FACT (Javier 2026-10-19): it changes per rodal and can be several |
+| `densidad reforestación` | the polygon's total density in pl/ha (one value for all its species — DECISION 2026-10-19); blank when not entered |
 | `plan de manejo` | «sí» if the report has a CONAF solicitud number, else «no» |
 
 Sheets are ordered by species (`SPECIES_ORDER` in `forestry_species.py`) then
@@ -243,6 +243,37 @@ Species parsing is shared with the dashboard:
 `apps/api/app/forestry_species.py` mirrors
 `products/forestry/dashboard/src/lib/species.ts`; both files must change
 together (stated in each file's header comment).
+
+«Resumen» also carries «PLANTACIÓN TEMPORADA `<year>`-`<year+1>`»:
+`predio | especie a reforestar | superficie plantación | %`, one row per
+predio and species combination (joined with « + »), summing the managed
+polygons' `superficie corta`; polygons with no species entered are left out,
+and % is over that table's total.
+
+### Planificación per rodal (migration 0018, 2026-10-19)
+
+- **FACT (Javier, 2026-10-19):** «sector» is approximate general knowledge,
+  written nowhere; the species to reforest changes from rodal to rodal and can
+  be one or more.
+- **DECISION (2026-10-19):** three nullable fields on `forestry.report_feature`:
+  `sector` (text ≤ 60), `reforest_species` (JSONB array of 1–6 distinct
+  strings of 1–40 characters, checked through the IMMUTABLE function
+  `forestry.reforest_species_ok`, since a CHECK cannot hold a subquery) and
+  `reforest_density` (integer 1–20,000 pl/ha). **One total density per
+  rodal**, not per species.
+- **Editor:** the «Planificación» section appears above the polygon list when
+  one or more managed polygons are selected. A value typed there applies to
+  every selected managed polygon in one undoable step. A field whose values
+  differ shows «Varios valores» and is written only when the user types a new
+  value: focusing and leaving it never overwrites the polygons' own values.
+  Read-only once the report is not editable.
+- **DECISION:** a split copies the fields to both pieces; unmarking keeps them
+  (exports and review only show them on managed polygons); duplicating a
+  report copies them.
+- **Exports:** the harvest Excel fills its three columns; Shapefile,
+  GeoPackage and CSV add `SECTOR`, `ESP_REFOR` and `DENS_REFOR`.
+- **LIMITATION:** «pendiente» and «densidad actual» stay blank; they are not
+  in the base.
 
 ### «Imprimir / PDF» (2026-10-18)
 

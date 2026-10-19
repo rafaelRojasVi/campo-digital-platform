@@ -74,33 +74,46 @@ El libro tiene una hoja **Resumen** (especie, superficie por predio) y una
 hoja por cada combinación especie–predio, con sus datos de rodales, cabecera
 de dos filas y fila de TOTALES.
 
-**Columnas que se llenan automáticamente:**
+**Columnas que se llenan solas:**
 
 | Columna | Fuente |
 |---|---|
 | Predio | campo `nom_predio` del rodal |
+| Sector | lo anotado en «Planificación» |
 | Actividad | tipo del informe en minúsculas |
 | Rodal | código del rodal (`n_rodal`) |
 | Superficie (ha) | superficie total del rodal de origen |
 | Superficie corta (ha) | superficie del polígono de manejo (puede ser menor si se dividió) |
 | Especie | especie según el código `cod_uso_2026` |
 | Año plantación | año de plantación según el código |
-| Año corta | año del informe |
+| Año corta | año de la fecha del informe |
+| Especie a reforestar | lo anotado en «Planificación» (si son varias, unidas con «+») |
+| Densidad reforestación | lo anotado en «Planificación», en plantas por hectárea |
 | Plan de manejo | «sí» si hay número CONAF, «no» si no hay |
 
 **Columnas que quedan en blanco** (se completan a mano en Excel):
+**Pendiente (%)** y **Densidad actual**, porque no están en la base.
 
-- **Sector** — HECHO (Javier, 2026-10-19): es un dato general y aproximado
-  que no está registrado en la base de datos.
-- **Pendiente (%)** — no está en la base.
-- **Densidad actual** — no está en la base.
-- **Especie a reforestar** — HECHO (Javier, 2026-10-19): puede ser una o
-  varias por rodal y cambia de rodal a rodal. Para capturarla automáticamente
-  se necesitarían campos por polígono en el editor web (próximo paso).
-- **Densidad reforestación** — misma razón que especie a reforestar.
+La hoja **Resumen** trae también la tabla de **plantación**: superficie por
+predio y especie a reforestar, con su porcentaje.
 
-**Próximo paso:** agregar campo «especie a reforestar» (y densidad) por
-polígono en el editor de informes para que se exporte automáticamente.
+### Planificación por rodal
+
+En el editor, al seleccionar uno o varios rodales del área de manejo aparece
+la sección **«Planificación»**:
+
+- **Sector:** texto libre (por ejemplo «La Reina»). Javier explicó que es un
+  dato aproximado que no está escrito en ninguna parte; la plataforma sugiere
+  los sectores ya usados en el informe.
+- **Especie(s) a reforestar:** una o varias; se elige de una lista o se
+  escribe.
+- **Densidad reforestación (pl/ha):** un solo número por rodal, el total.
+
+Con varios rodales seleccionados, lo que se escribe se aplica a todos de una
+vez, y se puede deshacer. Si los rodales tienen valores distintos aparece
+«Varios valores», y no se cambia nada mientras no se escriba algo nuevo.
+Estos datos también salen en el Shapefile, GeoPackage y CSV (campos SECTOR,
+ESP_REFOR y DENS_REFOR) y en la revisión de Javier.
 
 ## Estado CONAF
 

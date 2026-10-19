@@ -150,6 +150,9 @@ class FeatureModel(BaseModel):
     geometry_changed: bool
     attributes: dict[str, Any]
     geometry: dict[str, Any]
+    sector: str | None = None
+    reforest_species: list[str] | None = None
+    reforest_density: int | None = None
 
 
 class SourceModel(BaseModel):
@@ -199,6 +202,9 @@ class FeatureInputModel(BaseModel):
     in_report: bool = False
     attributes: dict[str, Any] = Field(default_factory=dict)
     geometry: dict[str, Any] | None = None
+    sector: str | None = None
+    reforest_species: list[str] | None = None
+    reforest_density: int | None = None
 
 
 class SaveFeaturesRequest(BaseModel):
@@ -336,6 +342,9 @@ def get_report_detail(
                 geometry_changed=f.geometry_changed,
                 attributes=f.attributes,
                 geometry=dict(mapping(f.geometry)),
+                sector=f.sector,
+                reforest_species=f.reforest_species,
+                reforest_density=f.reforest_density,
             )
             for f in list_report_features(connection, report_id)
         ],
@@ -405,7 +414,15 @@ def export_report_file(
 ) -> Response:
     report = _visible_report(connection, role, report_id)
     rows = [
-        ExportRow(f.attributes, f.geometry, f.in_report, f.geometry_changed)
+        ExportRow(
+            f.attributes,
+            f.geometry,
+            f.in_report,
+            f.geometry_changed,
+            f.sector,
+            f.reforest_species,
+            f.reforest_density,
+        )
         for f in list_report_features(connection, report_id)
         if scope == "all" or f.in_report
     ]
@@ -477,7 +494,15 @@ def put_report_features(
     """«Guardar»: replace the report's features (checked against its base)."""
 
     inputs = [
-        FeatureInput(f.source_feature_ordinal, f.in_report, f.attributes, f.geometry)
+        FeatureInput(
+            f.source_feature_ordinal,
+            f.in_report,
+            f.attributes,
+            f.geometry,
+            f.sector,
+            f.reforest_species,
+            f.reforest_density,
+        )
         for f in request.features
     ]
     try:

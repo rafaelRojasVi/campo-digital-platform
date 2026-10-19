@@ -8,6 +8,7 @@ import {
   pasteSources,
   removeSources,
   setAttribute,
+  setPlanningFields,
   toSaveFeatures,
   toggleInReport,
   type ReportDraft,
@@ -52,6 +53,9 @@ function detail(): ReportDetail {
         geometry_changed: false,
         attributes: attributes('17', { cod_uso: 'Eg03', editada: 'wb' }),
         geometry: { type: 'MultiPolygon', coordinates: SQUARE },
+        sector: null,
+        reforest_species: null,
+        reforest_density: null,
       },
     ],
     sources: [
@@ -84,7 +88,7 @@ describe('report draft', () => {
     expect(draft.features).toHaveLength(1)
     expect(draft.features[0]?.edits).toEqual({ cod_uso: 'Eg03' })
     expect(toSaveFeatures(draft)).toEqual([
-      { source_feature_ordinal: 1, in_report: false, attributes: { cod_uso: 'Eg03' }, geometry: null },
+      { source_feature_ordinal: 1, in_report: false, attributes: { cod_uso: 'Eg03' }, geometry: null, sector: null, reforest_species: null, reforest_density: null },
     ])
   })
 
@@ -172,5 +176,91 @@ describe('report draft', () => {
     expect(undone?.value).toBe(before)
     const redone = redoHistory(undone?.history ?? createHistory(), before)
     expect(redone?.value).toBe(after)
+  })
+})
+
+describe('planning fields', () => {
+  function draftWithManaged() {
+    const draft = pasteSources(emptyDraft(), [
+      { ordinal: 1, attributes: attributes('17'), coordinates: SQUARE },
+      { ordinal: 2, attributes: attributes('18'), coordinates: OTHER },
+    ]).draft
+    const key1 = draft.features[0]?.key ?? ''
+    return toggleInReport(draft, key1)
+  }
+
+  it('setPlanningFields sets sector, species, density on the selected keys', () => {
+    const draft = draftWithManaged()
+    const managed = draft.features.filter((f) => f.in_report)
+    const keys = new Set(managed.map((f) => f.key))
+    const next = setPlanningFields(draft, keys, {
+      sector: 'Las Araucas',
+      reforest_species: ['pino radiata', 'coigüe'],
+      reforest_density: 850,
+    })
+    const updated = next.features.find((f) => f.in_report)
+    expect(updated?.sector).toBe('Las Araucas')
+    expect(updated?.reforest_species).toEqual(['pino radiata', 'coigüe'])
+    expect(updated?.reforest_density).toBe(850)
+  })
+
+  it('setPlanningFields does not change features not in the key set', () => {
+    const draft = draftWithManaged()
+    const keys = new Set(draft.features.filter((f) => f.in_report).map((f) => f.key))
+    const next = setPlanningFields(draft, keys, { sector: 'Sur' })
+    const unmanaged = next.features.find((f) => !f.in_report)
+    expect(unmanaged?.sector).toBeNull()
+  })
+
+  it('applySplit copies planning fields to both pieces', () => {
+    const base = pasteSources(emptyDraft(), [{ ordinal: 1, attributes: attributes('17'), coordinates: SQUARE }]).draft
+    const key = base.features[0]?.key ?? ''
+    const withPlanning = setPlanningFields(base, new Set([key]), {
+      sector: 'Norte',
+      reforest_species: ['eucalyptus globulus'],
+      reforest_density: 1200,
+    })
+    const split = applySplit(withPlanning, key, halves(), [0])
+    expect(split.features).toHaveLength(2)
+    for (const piece of split.features) {
+      expect(piece.sector).toBe('Norte')
+      expect(piece.reforest_species).toEqual(['eucalyptus globulus'])
+      expect(piece.reforest_density).toBe(1200)
+    }
+  })
+
+  it('pasteSources sets empty planning fields for new polygons', () => {
+    const result = pasteSources(emptyDraft(), [
+      { ordinal: 1, attributes: attributes('17'), coordinates: SQUARE },
+    ])
+    const f = result.draft.features[0]
+    expect(f?.sector).toBeNull()
+    expect(f?.reforest_species).toBeNull()
+    expect(f?.reforest_density).toBeNull()
+  })
+
+  it('draftFromDetail preserves planning fields from the server', () => {
+    const d = detail()
+    d.features[0]!.sector = 'Campo'
+    d.features[0]!.reforest_species = ['pino radiata']
+    d.features[0]!.reforest_density = 999
+    const draft = draftFromDetail(d)
+    expect(draft.features[0]?.sector).toBe('Campo')
+    expect(draft.features[0]?.reforest_species).toEqual(['pino radiata'])
+    expect(draft.features[0]?.reforest_density).toBe(999)
+  })
+
+  it('toSaveFeatures includes planning fields', () => {
+    const base = pasteSources(emptyDraft(), [{ ordinal: 1, attributes: attributes('17'), coordinates: SQUARE }]).draft
+    const key = base.features[0]?.key ?? ''
+    const withPlanning = setPlanningFields(base, new Set([key]), {
+      sector: 'Oriente',
+      reforest_species: ['coigüe'],
+      reforest_density: 500,
+    })
+    const saved = toSaveFeatures(withPlanning)
+    expect(saved[0]?.sector).toBe('Oriente')
+    expect(saved[0]?.reforest_species).toEqual(['coigüe'])
+    expect(saved[0]?.reforest_density).toBe(500)
   })
 })

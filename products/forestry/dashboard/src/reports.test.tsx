@@ -220,6 +220,9 @@ function reportDetail(overrides: Partial<import('./reportsApi.ts').Report> = {},
             geometry_changed: false,
             attributes: { objectid: 11, n_rodal: '17', sup_ha: 1 },
             geometry: { type: 'MultiPolygon' as const, coordinates: SQUARE },
+            sector: null,
+            reforest_species: null,
+            reforest_density: null,
           },
         ]
       : [],
@@ -265,7 +268,7 @@ describe('Informe editor', () => {
     await user.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(reportsApi.saveReportFeatures).toHaveBeenCalledWith(7, 1, [
-      { source_feature_ordinal: 1, in_report: false, attributes: {}, geometry: null },
+      { source_feature_ordinal: 1, in_report: false, attributes: {}, geometry: null, sector: null, reforest_species: null, reforest_density: null },
     ])
     expect(await screen.findByText('Informe guardado.')).toBeInTheDocument()
   })
@@ -411,6 +414,9 @@ function twoRodales() {
     geometry_changed: false,
     attributes: { objectid: 12, n_rodal: '18', sup_ha: 1 },
     geometry: { type: 'MultiPolygon' as const, coordinates: UPPER },
+    sector: null,
+    reforest_species: null,
+    reforest_density: null,
   })
   detail.sources.push({
     source_feature_ordinal: 2,
