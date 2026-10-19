@@ -1,26 +1,25 @@
 import campoDigitalLogo from '../assets/campo-digital-logo.png'
-import { canUpload } from '../api.ts'
-import { formatDate, shortFingerprint } from '../lib/format.ts'
+import { formatDate } from '../lib/format.ts'
 import { ROUTES, mapPath, onLinkClick } from '../router.ts'
 import type { Route } from '../router.ts'
 import { PLATFORM_FRONT_DOOR_PATH, platformFrontDoorEnabled } from '../runtime/frontDoor.ts'
-import type { ForestryRole, ForestrySnapshot, SnapshotSummary } from '../types.ts'
+import type { ForestryRole, ForestrySnapshot } from '../types.ts'
 
 interface HeaderProps {
   active: Route
   role: ForestryRole | null
   /** The version on the map, when the page shows one. */
   snapshot?: ForestrySnapshot
-  summary?: SnapshotSummary
   /** True when the map shows a version other than the published one. */
   preview?: boolean
 }
 
-const NAV: { route: Route; href: string; label: string; uploadersOnly: boolean }[] = [
-  { route: ROUTES.mapa, href: mapPath(), label: 'Mapa', uploadersOnly: false },
-  { route: ROUTES.versiones, href: ROUTES.versiones, label: 'Versiones', uploadersOnly: false },
-  { route: ROUTES.informes, href: ROUTES.informes, label: 'Informes', uploadersOnly: false },
-  { route: ROUTES.importar, href: ROUTES.importar, label: 'Cargar versión', uploadersOnly: true },
+// «Cargar versión» lives on the Versiones page (its button), not in the bar:
+// it is an occasional admin task, not a section.
+const NAV: { route: Route; href: string; label: string }[] = [
+  { route: ROUTES.mapa, href: mapPath(), label: 'Mapa' },
+  { route: ROUTES.informes, href: ROUTES.informes, label: 'Informes' },
+  { route: ROUTES.versiones, href: ROUTES.versiones, label: 'Versiones' },
 ]
 
 // The brand mark is Campo Digital's own white logo (the same asset the
@@ -31,7 +30,7 @@ const NAV: { route: Route; href: string; label: string; uploadersOnly: boolean }
 // The map shows the *published* version: the one an operator or admin chose
 // with «Publicar» or «Restaurar». Publication is a decision about what the
 // panel shows, not a claim that the source is the official estate state.
-export function Header({ active, role, snapshot, summary, preview = false }: HeaderProps) {
+export function Header({ active, snapshot, preview = false }: HeaderProps) {
   return (
     <header className="header">
       <div className="header__brand">
@@ -47,14 +46,16 @@ export function Header({ active, role, snapshot, summary, preview = false }: Hea
           <h1 className="header__title">Patrimonio Degenfeld</h1>
         </div>
         <nav className="header__nav" aria-label="Secciones de Rodales">
-          {NAV.filter((item) => !item.uploadersOnly || canUpload(role)).map((item) => (
+          {NAV.map((item) => (
             <a
               key={item.route}
               className="header__nav-link"
               href={item.href}
               aria-current={
                 item.route === active ||
-                (item.route === ROUTES.informes && active === ROUTES.informe)
+                (item.route === ROUTES.informes && active === ROUTES.informe) ||
+                (item.route === ROUTES.versiones &&
+                  (active === ROUTES.importar || active === ROUTES.revision))
                   ? 'page'
                   : undefined
               }
@@ -67,7 +68,7 @@ export function Header({ active, role, snapshot, summary, preview = false }: Hea
       </div>
 
       <div className="header__end">
-        {snapshot !== undefined && summary !== undefined ? (
+        {snapshot !== undefined ? (
           <dl
             className="header__provenance"
             title="Versión que muestra el mapa. Publicar una versión no la convierte en el estado oficial del patrimonio."
@@ -76,20 +77,6 @@ export function Header({ active, role, snapshot, summary, preview = false }: Hea
               <dt>{preview ? 'Vista previa' : 'Versión publicada'}</dt>
               <dd>
                 N.º {snapshot.shapefile_snapshot_id} · cargada el {formatDate(snapshot.created_at)}
-              </dd>
-            </div>
-            <div>
-              <dt>Capa de origen</dt>
-              <dd>{snapshot.layer_name}</dd>
-            </div>
-            <div>
-              <dt>CRS almacenado</dt>
-              <dd>EPSG:{summary.storage_srid}</dd>
-            </div>
-            <div>
-              <dt>Huella de familia</dt>
-              <dd>
-                <code>{shortFingerprint(snapshot.family_fingerprint)}</code>
               </dd>
             </div>
           </dl>

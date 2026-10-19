@@ -8,6 +8,7 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import { multiPolygonToLatLngs } from '../lib/mapData.ts'
+import { installKeyboardZoom } from '../lib/keyboardZoom.ts'
 import { lonLatToUtm, multiPolygonUtmBbox, utmBboxToLonLatBounds, utmToLonLat } from '../lib/proj.ts'
 import type { DraftFeature } from '../lib/reportDraft.ts'
 import type { Coordinates, Position } from '../lib/splitGeometry.ts'
@@ -119,7 +120,9 @@ export function ReportMap(props: ReportMapProps) {
       if (propsRef.current.mode === 'split') propsRef.current.onFinishLine()
     })
     mapRef.current = map
+    const uninstallKeyboardZoom = installKeyboardZoom(map)
     return () => {
+      uninstallKeyboardZoom()
       map.remove()
       mapRef.current = null
     }

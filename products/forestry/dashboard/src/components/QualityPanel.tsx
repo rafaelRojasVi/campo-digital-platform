@@ -26,9 +26,9 @@ export function QualityPanel({ summary, filters, onFiltersChange }: QualityPanel
   return (
     <div className="quality">
       <p className="quality__intro">
-        Evidencia de calidad de datos observada en la instantánea de origen. Son hechos
-        registrados durante la ingesta, no errores que el sistema corrija ni tareas
-        priorizadas; la decisión sobre cada caso corresponde a Campo Digital.
+        Casos de la base que conviene revisar en el original (ArcMap). La plataforma los
+        muestra tal como vienen y no los corrige; qué hacer con cada uno lo decide Campo
+        Digital.
       </p>
 
       <ul className="quality__list">

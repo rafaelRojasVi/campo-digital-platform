@@ -112,7 +112,9 @@
 }
 
 .report-tool:disabled {
-  opacity: 0.45;
+  color: var(--ink-3);
+  background: var(--panel-2);
+  border-color: var(--border);
   cursor: not-allowed;
 }
 
@@ -418,4 +420,150 @@
 
 .report-conaf__form .report-form__error {
   flex-basis: 100%;
+}
+
+/* ---------- «Imprimir / PDF»: the printable report ---------- */
+
+.print-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  color: var(--ink);
+  background: #fff;
+}
+
+.print-page__status {
+  padding: 24px;
+}
+
+.print-page__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.print-page__header h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.print-page__header p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.print-page__kicker {
+  font-size: 11px !important;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3) !important;
+}
+
+.print-map {
+  position: relative;
+  border: 1px solid var(--border-strong);
+}
+
+.print-map__canvas {
+  height: 520px;
+}
+
+.print-map__north {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  display: grid;
+  justify-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #14130f;
+  background: rgb(255 255 255 / 0.85);
+  border-radius: 6px;
+  padding: 4px 6px 2px;
+}
+
+.print-page__legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+}
+
+.print-page__legend span {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #fff;
+  outline: 1px solid var(--border-strong);
+  vertical-align: -2px;
+  margin-right: 4px;
+}
+
+.print-page__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.print-page__table th,
+.print-page__table td {
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 6px;
+}
+
+.print-page__table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.print-page__table tfoot td {
+  font-weight: 700;
+  border-top: 2px solid var(--ink-3);
+}
+
+.print-page__footer {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  .print-page__actions {
+    display: none;
+  }
+
+  .print-page {
+    max-width: none;
+    padding: 0;
+  }
+
+  html,
+  body {
+    background: #fff;
+  }
+
+  .print-map__canvas {
+    height: 105mm;
+  }
+
+  .print-page__table tr {
+    break-inside: avoid;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

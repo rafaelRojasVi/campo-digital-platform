@@ -3,6 +3,7 @@ import { fetchFeatureDetail } from '../api.ts'
 import { formatHa } from '../lib/format.ts'
 import { qualityFlagLabel } from '../lib/qualityLabels.ts'
 import { sourceUnitsToHa } from '../lib/format.ts'
+import { NO_SPECIES_GROUP, speciesGroup } from '../lib/species.ts'
 import type { GeoFeature, SourceFeatureDetail } from '../types.ts'
 
 interface InspectorProps {
@@ -10,6 +11,8 @@ interface InspectorProps {
   feature: GeoFeature
   onClose: () => void
   onZoom: () => void
+  /** Present for operators and admins: sends this polygon to a report. */
+  onAddToReport?: () => void
 }
 
 type DetailState =
@@ -26,10 +29,11 @@ function Row({ label, value }: { label: string; value: string }) {
   )
 }
 
-// Detail view of one selected source polygon: listing fields immediately from
-// the loaded collection, full attribute row + validity evidence from the
-// per-feature endpoint.
-export function Inspector({ snapshotId, feature, onClose, onZoom }: InspectorProps) {
+// Detail view of one selected polygon. The everyday facts (species, use,
+// code, area) come first in plain words; source evidence (2024 fields,
+// geometry validity, OBJECTID, the original attribute row) sits behind
+// «Detalle técnico».
+export function Inspector({ snapshotId, feature, onClose, onZoom, onAddToReport }: InspectorProps) {
   const [detailState, setDetailState] = useState<DetailState>({ status: 'loading' })
   const [attributesOpen, setAttributesOpen] = useState(false)
 
@@ -58,6 +62,8 @@ export function Inspector({ snapshotId, feature, onClose, onZoom }: InspectorPro
   const usoDiffers = p.uso_2024 !== p.uso_2026
   const codeDiffers = p.cod_uso !== p.cod_uso_2026
   const detail = detailState.status === 'ready' ? detailState.detail : null
+  const species = speciesGroup(p.cod_uso_2026)
+  const speciesText = species === NO_SPECIES_GROUP ? null : species.label
 
   return (
     <aside className="inspector" aria-label="Detalle del polígono seleccionado">
@@ -90,53 +96,31 @@ export function Inspector({ snapshotId, feature, onClose, onZoom }: InspectorPro
         </div>
       </div>
 
+      {onAddToReport !== undefined ? (
+        <div className="inspector__primary">
+          <button type="button" className="button" onClick={onAddToReport}>
+            Agregar a un informe
+          </button>
+        </div>
+      ) : null}
+
       <div className="inspector__body">
         <section className="inspector__section">
-          <h3>Uso del suelo</h3>
           <dl>
+            {speciesText !== null ? <Row label="Especie" value={speciesText} /> : null}
             <Row label="Uso 2026" value={p.uso_2026 ?? '(vacío)'} />
-            <Row label="Uso 2024" value={p.uso_2024 ?? '(vacío)'} />
-            {usoDiffers ? (
-              <p className="inspector__difference">Los campos Uso2024 y Uso2026 difieren.</p>
-            ) : null}
-            <Row label="Código 2026 (CodUso_2026)" value={p.cod_uso_2026 ?? '(vacío)'} />
-            <Row label="Código estado 2024 (Cod_Uso)" value={p.cod_uso ?? '(vacío)'} />
-            {codeDiffers ? (
-              <p className="inspector__difference">
-                Los campos Cod_Uso y CodUso_2026 difieren.
-              </p>
-            ) : null}
-            <Row label="Descripción (DescUso)" value={p.desc_uso ?? '(vacío)'} />
-          </dl>
-        </section>
-
-        <section className="inspector__section">
-          <h3>Superficie</h3>
-          <dl>
+            <Row label="Código 2026" value={p.cod_uso_2026 ?? '(vacío)'} />
+            <Row label="Descripción" value={p.desc_uso ?? '(vacío)'} />
             <Row
-              label="Sup_ha (fuente)"
+              label="Superficie"
               value={p.sup_ha !== null ? `${formatHa(p.sup_ha)} ha` : '(vacío)'}
             />
-            <Row
-              label="Área derivada de la geometría"
-              value={`${formatHa(sourceUnitsToHa(p.geometry_area_source_units))} ha`}
-            />
-          </dl>
-        </section>
-
-        <section className="inspector__section">
-          <h3>Geometría</h3>
-          <dl>
-            <Row label="Validez OGC" value={p.geometry_is_valid ? 'Válida' : 'Inválida'} />
-            {detail !== null && detail.geometry_invalid_reason !== null ? (
-              <Row label="Motivo" value={detail.geometry_invalid_reason} />
-            ) : null}
           </dl>
         </section>
 
         {p.quality_flags.length > 0 ? (
-          <section className="inspector__section">
-            <h3>Evidencia de calidad de datos</h3>
+          <section className="inspector__section inspector__section--review">
+            <h3>Para revisar en la base</h3>
             <ul className="inspector__flags">
               {p.quality_flags.map((flag) => (
                 <li key={flag}>{qualityFlagLabel(flag)}</li>
@@ -145,17 +129,33 @@ export function Inspector({ snapshotId, feature, onClose, onZoom }: InspectorPro
           </section>
         ) : null}
 
-        <section className="inspector__section">
-          <h3>Evidencia de fuente</h3>
+        <details className="inspector__technical">
+          <summary>Detalle técnico</summary>
           <dl>
+            <Row label="Uso 2024" value={p.uso_2024 ?? '(vacío)'} />
+            {usoDiffers ? (
+              <p className="inspector__difference">El uso 2024 y el uso 2026 son distintos.</p>
+            ) : null}
+            <Row label="Código 2024" value={p.cod_uso ?? '(vacío)'} />
+            {codeDiffers ? (
+              <p className="inspector__difference">El código 2024 y el código 2026 son distintos.</p>
+            ) : null}
             <Row
-              label="OBJECTID (evidencia de fuente)"
+              label="Área calculada del dibujo"
+              value={`${formatHa(sourceUnitsToHa(p.geometry_area_source_units))} ha`}
+            />
+            <Row label="Geometría" value={p.geometry_is_valid ? 'Válida' : 'Inválida'} />
+            {detail !== null && detail.geometry_invalid_reason !== null ? (
+              <Row label="Motivo" value={detail.geometry_invalid_reason} />
+            ) : null}
+            <Row
+              label="OBJECTID"
               value={p.source_objectid !== null ? String(p.source_objectid) : '(vacío)'}
             />
             <Row label="Registro N° en el shapefile" value={String(p.feature_ordinal)} />
-            <Row label="Instantánea" value={String(snapshotId)} />
+            <Row label="Versión" value={String(snapshotId)} />
           </dl>
-        </section>
+        </details>
 
         <section className="inspector__section">
           {detailState.status === 'loading' ? (

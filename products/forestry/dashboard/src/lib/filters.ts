@@ -1,10 +1,12 @@
 import type { GeoFeature, QualityFlag, SourceFeatureProperties } from '../types.ts'
+import { NO_SPECIES_GROUP, speciesGroup } from './species.ts'
 
 // Snapshot-local, literal source-field filters. Each one mirrors a filter the
 // read API also supports; they run client-side over the loaded collection so
 // map, table, and aggregates stay synchronized without re-downloading
 // geometry. "changed"/"unchanged" are literal field comparisons within the
-// snapshot, not workflow transitions.
+// snapshot, not workflow transitions. `especie` is the one derived filter:
+// the species group read from CodUso_2026 (see species.ts).
 
 export type ChangeFilter = 'changed' | 'unchanged'
 
@@ -18,6 +20,8 @@ export interface FilterState {
   uso2024: string | null
   descUso: string | null
   codUso2026: string | null
+  /** Species group key from species.ts (e.g. 'Pi', 'Po+Ra'). */
+  especie: string | null
   codUso: string | null
   nRodal: string | null
   quality: QualityFilter | null
@@ -34,6 +38,7 @@ export const EMPTY_FILTERS: FilterState = {
   uso2024: null,
   descUso: null,
   codUso2026: null,
+  especie: null,
   codUso: null,
   nRodal: null,
   quality: null,
@@ -51,6 +56,7 @@ export function countActiveFilters(filters: FilterState): number {
   if (filters.uso2024 !== null) active += 1
   if (filters.descUso !== null) active += 1
   if (filters.codUso2026 !== null) active += 1
+  if (filters.especie !== null) active += 1
   if (filters.codUso !== null) active += 1
   if (filters.nRodal !== null) active += 1
   if (filters.quality !== null) active += 1
@@ -133,6 +139,9 @@ export function featureMatchesFilters(
   if (!matchesEquality(properties.desc_uso, filters.descUso)) return false
   if (!matchesEquality(properties.cod_uso_2026, filters.codUso2026)) return false
   if (!matchesEquality(properties.cod_uso, filters.codUso)) return false
+  if (filters.especie !== null && speciesGroup(properties.cod_uso_2026).key !== filters.especie) {
+    return false
+  }
   if (!matchesEquality(properties.n_rodal, filters.nRodal)) return false
 
   if (filters.quality !== null) {
@@ -195,4 +204,26 @@ export function filterOptions(
   return [...counts.entries()]
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, 'es'))
+}
+
+export interface LabeledFilterOption extends FilterOption {
+  label: string
+}
+
+/** Species groups across the whole collection, most polygons first; polygons
+ * without a species last. */
+export function speciesFilterOptions(features: GeoFeature[]): LabeledFilterOption[] {
+  const options = new Map<string, LabeledFilterOption>()
+
+  for (const feature of features) {
+    const group = speciesGroup(feature.properties.cod_uso_2026)
+    const option = options.get(group.key) ?? { value: group.key, label: group.label, count: 0 }
+    option.count += 1
+    options.set(group.key, option)
+  }
+
+  const last = (option: LabeledFilterOption) => Number(option.value === NO_SPECIES_GROUP.key)
+  return [...options.values()].sort(
+    (a, b) => last(a) - last(b) || b.count - a.count || a.label.localeCompare(b.label, 'es'),
+  )
 }

@@ -477,3 +477,17 @@ def test_rodales_hashed_assets_stay_cacheable_and_its_shell_does_not() -> None:
     client = _headers_app("production")
     assert "cache-control" not in client.get("/rodales/assets/index-abc.js").headers
     assert client.get("/rodales/").headers["cache-control"] == "no-store"
+
+
+def test_only_rodales_pages_may_ask_for_the_device_location() -> None:
+    client = _headers_app("production")
+    # «¿Dónde estoy?» on the Rodales map; same origin only, never a frame.
+    assert (
+        client.get("/rodales/").headers["permissions-policy"]
+        == "camera=(), microphone=(), geolocation=(self)"
+    )
+    for path in ("/", "/transelec/", "/api/forestry/snapshots", "/rodalesx"):
+        assert (
+            client.get(path).headers["permissions-policy"]
+            == "camera=(), microphone=(), geolocation=()"
+        ), path

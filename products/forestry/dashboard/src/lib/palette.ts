@@ -1,10 +1,12 @@
 import type { GeoFeature } from '../types.ts'
 import { aggregateByField } from './aggregate.ts'
 import { codeFieldsDiffer, usoFieldsDiffer } from './filters.ts'
+import { NO_SPECIES_GROUP, speciesGroup } from './species.ts'
 
 // Map color encoding. Colors mark factual categories only (source field
 // values, literal field differences, quality evidence); they never encode
-// business status, priority, or progress.
+// business status, priority, or progress. The one derived category is the
+// species read from the 2026 use code (see species.ts).
 //
 // The 8 categorical hues and their order are the validated default palette of
 // the dataviz method (CVD-checked adjacent-pair ordering; see
@@ -35,11 +37,12 @@ export const UNCHANGED_COLOR = '#d6d5ce'
 export const QUALITY_COLOR = '#eb6834'
 export const NO_QUALITY_COLOR = '#d6d5ce'
 
-export type ColorDimension = 'uso2026' | 'uso2024' | 'predio' | 'cambio' | 'calidad'
+export type ColorDimension = 'uso2026' | 'uso2024' | 'especie' | 'predio' | 'cambio' | 'calidad'
 
 export const COLOR_DIMENSIONS: readonly { id: ColorDimension; label: string }[] = [
   { id: 'uso2026', label: 'Uso 2026' },
   { id: 'uso2024', label: 'Uso 2024' },
+  { id: 'especie', label: 'Especie' },
   { id: 'predio', label: 'Predio' },
   { id: 'cambio', label: 'Comparación 2024 → 2026' },
   { id: 'calidad', label: 'Evidencia de calidad' },
@@ -142,6 +145,61 @@ function categoricalEncoding(
   }
 }
 
+// Species are summed over the filtered polygons, so the legend answers "how
+// many hectares of each species" for the current filters. Colors are ranked
+// over the whole base so they stay stable while filters change. Every species
+// keeps its own legend row (no "Otros" fold): the hectares per species are
+// the point of this view; species beyond the 8 hues share the neutral gray.
+function speciesEncoding(allFeatures: GeoFeature[], filteredFeatures: GeoFeature[]): ColorEncoding {
+  const sum = (features: GeoFeature[]) => {
+    const groups = new Map<string, { label: string; featureCount: number; supHaTotal: number }>()
+    for (const feature of features) {
+      const group = speciesGroup(feature.properties.cod_uso_2026)
+      const entry = groups.get(group.key) ?? { label: group.label, featureCount: 0, supHaTotal: 0 }
+      entry.featureCount += 1
+      entry.supHaTotal += feature.properties.sup_ha ?? 0
+      groups.set(group.key, entry)
+    }
+    return groups
+  }
+
+  const ranked = [...sum(allFeatures).entries()]
+    .filter(([key]) => key !== NO_SPECIES_GROUP.key)
+    .sort((a, b) => b[1].supHaTotal - a[1].supHaTotal || a[0].localeCompare(b[0]))
+  const colorByKey = new Map<string, string>([[NO_SPECIES_GROUP.key, BLANK_COLOR]])
+  ranked.forEach(([key], index) => colorByKey.set(key, CATEGORICAL_COLORS[index] ?? OTHER_COLOR))
+
+  const shown = sum(filteredFeatures)
+  const order = [...ranked.map(([key]) => key), NO_SPECIES_GROUP.key]
+  const legend: LegendEntry[] = order.flatMap((key) => {
+    const entry = shown.get(key)
+    if (entry === undefined) return []
+    return [
+      {
+        key,
+        label: entry.label,
+        color: colorByKey.get(key) ?? OTHER_COLOR,
+        featureCount: entry.featureCount,
+        supHaTotal: entry.supHaTotal,
+        filterValue: key,
+        isFold: false,
+      },
+    ]
+  })
+  legend.sort(
+    (a, b) =>
+      Number(a.key === NO_SPECIES_GROUP.key) - Number(b.key === NO_SPECIES_GROUP.key) ||
+      b.supHaTotal - a.supHaTotal,
+  )
+
+  return {
+    dimension: 'especie',
+    legend,
+    colorFor: (feature) =>
+      colorByKey.get(speciesGroup(feature.properties.cod_uso_2026).key) ?? OTHER_COLOR,
+  }
+}
+
 function changeEncoding(features: GeoFeature[]): ColorEncoding {
   let changedCount = 0
   let changedSupHa = 0
@@ -234,17 +292,20 @@ function qualityEncoding(features: GeoFeature[]): ColorEncoding {
 /**
  * Build the color encoding for one dimension over the FULL collection, so
  * colors stay stable while filters change (color follows the category, not
- * the filtered subset).
+ * the filtered subset). Only the species legend sums `filteredFeatures`.
  */
 export function buildColorEncoding(
   dimension: ColorDimension,
   allFeatures: GeoFeature[],
+  filteredFeatures: GeoFeature[] = allFeatures,
 ): ColorEncoding {
   switch (dimension) {
     case 'uso2026':
     case 'uso2024':
     case 'predio':
       return categoricalEncoding(dimension, allFeatures)
+    case 'especie':
+      return speciesEncoding(allFeatures, filteredFeatures)
     case 'cambio':
       return changeEncoding(allFeatures)
     case 'calidad':

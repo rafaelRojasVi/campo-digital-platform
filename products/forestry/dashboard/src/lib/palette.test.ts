@@ -89,3 +89,42 @@ describe('calidad encoding', () => {
     expect(evidenceEntry?.featureCount).toBe(4)
   })
 })
+
+describe('especie encoding', () => {
+  const stand = (ordinal: number, code: string | null, supHa: number, predio = 'HT') =>
+    makeFeature({ feature_ordinal: ordinal, cod_uso_2026: code, sup_ha: supHa, cod_predial: predio })
+
+  it('colors and sums by species read from the 2026 code, largest first', () => {
+    const features = [stand(1, 'Pi06', 30), stand(2, 'Pi26', 10), stand(3, 'En22', 25), stand(4, 'BN', 50)]
+    const encoding = buildColorEncoding('especie', features)
+
+    expect(encoding.legend.map((entry) => [entry.label, entry.supHaTotal, entry.featureCount])).toEqual([
+      ['Pino radiata', 40, 2],
+      ['Eucalyptus nitens', 25, 1],
+      ['Sin especie en el código', 50, 1],
+    ])
+    expect(encoding.colorFor(features[1]!)).toBe(CATEGORICAL_COLORS[0])
+    expect(encoding.colorFor(features[3]!)).toBe(BLANK_COLOR)
+    expect(encoding.legend[0]?.filterValue).toBe('Pi')
+  })
+
+  it('sums the filtered polygons while keeping colors from the whole base', () => {
+    const features = [stand(1, 'Pi06', 40), stand(2, 'En22', 25, 'SS'), stand(3, 'En23', 5, 'SS')]
+    const filtered = features.filter((feature) => feature.properties.cod_predial === 'SS')
+    const encoding = buildColorEncoding('especie', features, filtered)
+
+    expect(encoding.legend.map((entry) => [entry.key, entry.supHaTotal])).toEqual([['En', 30]])
+    expect(encoding.colorFor(features[1]!)).toBe(CATEGORICAL_COLORS[1])
+  })
+
+  it('lists every species beyond the 8 colors instead of folding them', () => {
+    const codes = ['Pi', 'En', 'Po', 'Eg', 'Ro', 'Co', 'Ar', 'Ra', 'UlTe', 'Se']
+    const features = codes.map((code, index) => stand(index + 1, `${code}01`, 100 - index))
+    const encoding = buildColorEncoding('especie', features)
+
+    expect(encoding.legend.some((entry) => entry.isFold)).toBe(false)
+    expect(encoding.legend).toHaveLength(10)
+    expect(encoding.legend[9]).toMatchObject({ label: 'Se (especie por confirmar)', color: OTHER_COLOR })
+    expect(encoding.colorFor(features[9]!)).toBe(OTHER_COLOR)
+  })
+})

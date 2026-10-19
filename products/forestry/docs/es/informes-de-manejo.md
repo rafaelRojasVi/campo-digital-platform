@@ -40,6 +40,14 @@ guarda su propia copia de los rodales.
 7. Un informe aprobado queda fijo. Para cambiarlo, use **Duplicar como
    borrador**.
 
+## Desde el mapa
+
+En **Mapa**, la ficha de un rodal tiene **Agregar a un informe**; con un filtro
+puesto (por ejemplo, una especie en un predio), el panel de filtros ofrece
+agregar todos los polígonos filtrados (hasta 300). Se elige un informe en
+borrador o se crea uno nuevo, y el editor se abre con esos polígonos ya
+pegados y sin guardar.
+
 ## Exportar
 
 Desde el informe: **Shapefile (.zip)**, **GeoPackage (.gpkg)** o **CSV**,
@@ -47,6 +55,12 @@ con la opción **Solo áreas de manejo**. El archivo trae los 14 campos de la
 base y además EN_INFORME, INFORME, TIPO, FECHA, ESTADO y OID_ORIGEN (el
 OBJECTID del rodal original). Las filas cambiadas en la web llevan
 Editada = wb.
+
+**Imprimir / PDF** abre una página con el mapa del informe sobre imagen
+satelital (área de manejo en naranja, número de rodal, escala y norte), la
+leyenda con hectáreas y la tabla de rodales con totales. Con «Imprimir o
+guardar como PDF» el navegador la guarda como PDF, lista para el Plan de
+Manejo. Muestra la última versión guardada del informe.
 
 ## Estado CONAF
 

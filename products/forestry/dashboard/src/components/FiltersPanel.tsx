@@ -1,5 +1,10 @@
 import { useId, useMemo, useState } from 'react'
-import { EMPTY_FILTERS, countActiveFilters, filterOptions } from '../lib/filters.ts'
+import {
+  EMPTY_FILTERS,
+  countActiveFilters,
+  filterOptions,
+  speciesFilterOptions,
+} from '../lib/filters.ts'
 import type { ChangeFilter, FilterState, QualityFilter } from '../lib/filters.ts'
 import type { SelectionStats } from '../lib/aggregate.ts'
 import { formatHa, formatInt } from '../lib/format.ts'
@@ -12,12 +17,17 @@ interface FiltersPanelProps {
   filters: FilterState
   onFiltersChange: (filters: FilterState) => void
   filteredStats: SelectionStats
+  /** Present for operators and admins: sends the filtered polygons to a report. */
+  onAddFilteredToReport?: () => void
 }
+
+/** A report holds a handful of rodales; a bigger set is almost always a mistake. */
+const MAX_POLYGONS_TO_ADD = 300
 
 interface SelectFilterProps {
   label: string
   value: string | null
-  options: { value: string; count: number }[]
+  options: { value: string; count: number; label?: string }[]
   onChange: (value: string | null) => void
   anyLabel?: string
 }
@@ -39,7 +49,7 @@ function SelectFilter({ label, value, options, onChange, anyLabel }: SelectFilte
         <option value="">{anyLabel ?? 'Todos'}</option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
-            {option.value} ({formatInt(option.count)})
+            {option.label ?? option.value} ({formatInt(option.count)})
           </option>
         ))}
       </select>
@@ -84,6 +94,7 @@ export function FiltersPanel({
   filters,
   onFiltersChange,
   filteredStats,
+  onAddFilteredToReport,
 }: FiltersPanelProps) {
   const searchId = useId()
   const rodalId = useId()
@@ -96,6 +107,7 @@ export function FiltersPanel({
     () => ({
       predio: filterOptions(collection.features, 'nom_predio'),
       uso2026: filterOptions(collection.features, 'uso_2026'),
+      especie: speciesFilterOptions(collection.features),
       uso2024: filterOptions(collection.features, 'uso_2024'),
       descUso: filterOptions(collection.features, 'desc_uso'),
       codUso2026: filterOptions(collection.features, 'cod_uso_2026'),
@@ -131,6 +143,25 @@ export function FiltersPanel({
         <strong>{formatHa(filteredStats.supHaTotal)}</strong> ha
       </p>
 
+      {onAddFilteredToReport !== undefined &&
+      activeCount > 0 &&
+      filteredStats.featureCount > 0 ? (
+        filteredStats.featureCount <= MAX_POLYGONS_TO_ADD ? (
+          <button
+            type="button"
+            className="button button--ghost filters__add"
+            onClick={onAddFilteredToReport}
+          >
+            Agregar {filteredStats.featureCount === 1 ? 'este polígono' : 'estos polígonos'} a un
+            informe
+          </button>
+        ) : (
+          <p className="filters__add-hint">
+            Para agregar a un informe, filtre hasta {formatInt(MAX_POLYGONS_TO_ADD)} polígonos.
+          </p>
+        )
+      ) : null}
+
       <SelectFilter
         label="Predio"
         value={filters.nomPredio}
@@ -143,6 +174,14 @@ export function FiltersPanel({
         value={filters.uso2026}
         options={options.uso2026}
         onChange={(value) => set({ uso2026: value })}
+      />
+
+      <SelectFilter
+        label="Especie"
+        value={filters.especie}
+        options={options.especie}
+        onChange={(value) => set({ especie: value })}
+        anyLabel="Todas"
       />
 
       <div className="field">

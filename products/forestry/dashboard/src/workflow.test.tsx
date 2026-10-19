@@ -246,7 +246,7 @@ describe('Root', () => {
     expect(await screen.findByText('Sin acceso a Rodales')).toBeInTheDocument()
   })
 
-  it('navigates in-app between sections from the header', async () => {
+  it('reaches «Cargar versión» from the versions page, not the header', async () => {
     api.fetchForestryRole.mockResolvedValue('operator')
     api.fetchVersions.mockResolvedValue(testVersions())
     window.history.replaceState(null, '', '/rodales/versiones')
@@ -255,7 +255,8 @@ describe('Root', () => {
 
     await screen.findByText('Versiones de la capa de rodales')
     const nav = screen.getByRole('navigation', { name: 'Secciones de Rodales' })
-    await user.click(within(nav).getByRole('link', { name: 'Cargar versión' }))
+    expect(within(nav).queryByRole('link', { name: 'Cargar versión' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('link', { name: 'Cargar versión' }))
 
     expect(window.location.pathname).toBe('/rodales/importar')
     expect(await screen.findByText('Cargar una nueva versión')).toBeInTheDocument()

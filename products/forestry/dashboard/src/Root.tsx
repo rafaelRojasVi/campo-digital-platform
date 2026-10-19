@@ -9,6 +9,7 @@ import { ApiError, devLogin, fetchForestryRole } from './api.ts'
 import { ErrorView, ForbiddenView, LoadingView, SignedOutView } from './components/StatusViews.tsx'
 import { ImportarPage } from './pages/ImportarPage.tsx'
 import { InformeEditorPage } from './pages/InformeEditorPage.tsx'
+import { InformePrintPage } from './pages/InformePrintPage.tsx'
 import { InformesPage } from './pages/InformesPage.tsx'
 import { RevisionPage } from './pages/RevisionPage.tsx'
 import { VersionesPage } from './pages/VersionesPage.tsx'
@@ -89,6 +90,8 @@ export default function Root() {
           reportId={reportParam(location.search)}
         />
       )
+    case ROUTES.imprimir:
+      return <InformePrintPage key={location.search.toString()} reportId={reportParam(location.search)} />
     default:
       return (
         <App

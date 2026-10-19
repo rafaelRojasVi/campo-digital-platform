@@ -12,12 +12,13 @@ import {
   isSignedOut,
 } from './api.ts'
 import { Header } from './components/Header.tsx'
-import { KpiStrip } from './components/KpiStrip.tsx'
+import { AddToReportDialog } from './components/AddToReportDialog.tsx'
 import { FiltersPanel } from './components/FiltersPanel.tsx'
 import { LegendPanel } from './components/LegendPanel.tsx'
 import { MapView } from './components/MapView.tsx'
 import { DataPanel } from './components/DataPanel.tsx'
 import { Inspector } from './components/Inspector.tsx'
+import { SelectionPanel } from './components/SelectionPanel.tsx'
 import { ActiveFilterBar } from './components/ActiveFilterBar.tsx'
 import {
   ErrorView,
@@ -58,7 +59,7 @@ type LoadPhase =
     }
 
 export interface ZoomRequest {
-  featureOrdinal: number
+  featureOrdinals: number[]
   nonce: number
 }
 
@@ -96,12 +97,14 @@ export default function App({ versionId = null, role = null }: AppProps) {
   const [reloadNonce, setReloadNonce] = useState(0)
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS)
   const [colorDimension, setColorDimension] = useState<ColorDimension>('uso2026')
-  const [selectedOrdinal, setSelectedOrdinal] = useState<number | null>(null)
+  // Ordered; one polygon opens the inspector, two or more the selection panel.
+  const [selection, setSelection] = useState<number[]>([])
   const [zoomRequest, setZoomRequest] = useState<ZoomRequest | null>(null)
   const [fitNonce, setFitNonce] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mapFocus, setMapFocus] = useState(false)
+  const [addToReport, setAddToReport] = useState<number[] | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -184,32 +187,71 @@ export default function App({ versionId = null, role = null }: AppProps) {
 
   const encoding = useMemo(
     () =>
-      collection === null ? null : buildColorEncoding(colorDimension, collection.features),
-    [collection, colorDimension],
+      collection === null
+        ? null
+        : buildColorEncoding(colorDimension, collection.features, filteredFeatures),
+    [collection, colorDimension, filteredFeatures],
   )
 
   const filteredStats = useMemo(() => selectionStats(filteredFeatures), [filteredFeatures])
 
-  const selectedFeature = useMemo(() => {
-    if (collection === null || selectedOrdinal === null) {
-      return null
-    }
-    return (
-      collection.features.find(
-        (feature) => feature.properties.feature_ordinal === selectedOrdinal,
-      ) ?? null
+  const selectedFeatures = useMemo(() => {
+    if (collection === null || selection.length === 0) return []
+    const byOrdinal = new Map(
+      collection.features.map((feature) => [feature.properties.feature_ordinal, feature]),
     )
-  }, [collection, selectedOrdinal])
+    return selection.flatMap((ordinal) => byOrdinal.get(ordinal) ?? [])
+  }, [collection, selection])
+  const selectedFeature = selectedFeatures.length === 1 ? selectedFeatures[0]! : null
+  const selectedOrdinal = selection.length > 0 ? selection[selection.length - 1]! : null
+
+  const handleSelect = useCallback((featureOrdinal: number | null, additive: boolean) => {
+    setSelection((current) => {
+      if (featureOrdinal === null) return additive ? current : []
+      if (!additive) return [featureOrdinal]
+      return current.includes(featureOrdinal)
+        ? current.filter((ordinal) => ordinal !== featureOrdinal)
+        : [...current, featureOrdinal]
+    })
+  }, [])
+
+  const handleSelectMany = useCallback((featureOrdinals: number[]) => {
+    setSelection((current) => [...new Set([...current, ...featureOrdinals])])
+  }, [])
+
+  // Esc clears a selection (not while typing or inside a dialog).
+  useEffect(() => {
+    if (selection.length === 0) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof Element && target.closest('[role="dialog"]') !== null)
+      ) {
+        return
+      }
+      setSelection([])
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [selection.length])
 
   const activeFilterCount = countActiveFilters(filters)
 
-  const selectAndZoom = useCallback((featureOrdinal: number) => {
-    setSelectedOrdinal(featureOrdinal)
-    setZoomRequest((previous) => ({
-      featureOrdinal,
-      nonce: (previous?.nonce ?? 0) + 1,
-    }))
+  const zoomTo = useCallback((featureOrdinals: number[]) => {
+    setZoomRequest((previous) => ({ featureOrdinals, nonce: (previous?.nonce ?? 0) + 1 }))
   }, [])
+
+  const selectAndZoom = useCallback(
+    (featureOrdinal: number) => {
+      setSelection([featureOrdinal])
+      zoomTo([featureOrdinal])
+    },
+    [zoomTo],
+  )
 
   const handleRetry = useCallback(() => setReloadNonce((nonce) => nonce + 1), [])
 
@@ -255,6 +297,8 @@ export default function App({ versionId = null, role = null }: AppProps) {
 
   const { snapshot, summary, comparison, previewOf } = phase
   const previewing = versionId !== null && previewOf !== null
+  // Reports are built on the published base, so a preview offers no «Agregar».
+  const canAddToReport = canUpload(role) && !previewing
 
   return (
     <div className={`app${mapFocus ? ' app--map-focus' : ''}`}>
@@ -262,7 +306,6 @@ export default function App({ versionId = null, role = null }: AppProps) {
         active={ROUTES.mapa}
         role={role}
         snapshot={snapshot}
-        summary={summary}
         preview={previewing}
       />
       {previewing ? (
@@ -280,8 +323,6 @@ export default function App({ versionId = null, role = null }: AppProps) {
           </a>
         </div>
       ) : null}
-      <KpiStrip summary={summary} comparison={comparison} collection={phase.collection} />
-
       <div className="app__body">
         <button
           type="button"
@@ -305,6 +346,14 @@ export default function App({ versionId = null, role = null }: AppProps) {
             filters={filters}
             onFiltersChange={setFilters}
             filteredStats={filteredStats}
+            onAddFilteredToReport={
+              canAddToReport
+                ? () =>
+                    setAddToReport(
+                      filteredFeatures.map((feature) => feature.properties.feature_ordinal),
+                    )
+                : undefined
+            }
           />
           {encoding !== null ? (
             <LegendPanel
@@ -322,8 +371,9 @@ export default function App({ versionId = null, role = null }: AppProps) {
             collection={phase.collection}
             filteredFeatures={filteredFeatures}
             encoding={encoding}
-            selectedOrdinal={selectedOrdinal}
-            onSelect={setSelectedOrdinal}
+            selectedOrdinals={selection}
+            onSelect={handleSelect}
+            onSelectMany={handleSelectMany}
             zoomRequest={zoomRequest}
             fitNonce={fitNonce}
             onFitToResults={() => setFitNonce((nonce) => nonce + 1)}
@@ -341,8 +391,22 @@ export default function App({ versionId = null, role = null }: AppProps) {
             key={selectedFeature.properties.feature_ordinal}
             snapshotId={snapshot.shapefile_snapshot_id}
             feature={selectedFeature}
-            onClose={() => setSelectedOrdinal(null)}
+            onClose={() => setSelection([])}
             onZoom={() => selectAndZoom(selectedFeature.properties.feature_ordinal)}
+            onAddToReport={
+              canAddToReport
+                ? () => setAddToReport([selectedFeature.properties.feature_ordinal])
+                : undefined
+            }
+          />
+        ) : null}
+        {selectedFeatures.length > 1 ? (
+          <SelectionPanel
+            features={selectedFeatures}
+            onClear={() => setSelection([])}
+            onZoom={() => zoomTo(selection)}
+            onSelectOne={selectAndZoom}
+            onAddToReport={canAddToReport ? () => setAddToReport(selection) : undefined}
           />
         ) : null}
       </div>
@@ -357,8 +421,15 @@ export default function App({ versionId = null, role = null }: AppProps) {
         onFiltersChange={setFilters}
         selectedOrdinal={selectedOrdinal}
         onSelectFeature={selectAndZoom}
-        snapshotId={snapshot.shapefile_snapshot_id}
+        snapshot={snapshot}
       />
+      {addToReport !== null ? (
+        <AddToReportDialog
+          snapshotId={snapshot.shapefile_snapshot_id}
+          ordinals={addToReport}
+          onClose={() => setAddToReport(null)}
+        />
+      ) : null}
     </div>
   )
 }

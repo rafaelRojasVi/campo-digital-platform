@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { ComparisonPanel } from './ComparisonPanel.tsx'
 import { FeatureTable } from './FeatureTable.tsx'
+import { KpiStrip } from './KpiStrip.tsx'
 import { QualityPanel } from './QualityPanel.tsx'
 import type { FilterState } from '../lib/filters.ts'
 import type { SelectionStats } from '../lib/aggregate.ts'
-import { formatInt } from '../lib/format.ts'
+import { formatDate, formatInt, shortFingerprint } from '../lib/format.ts'
 import type {
   FeatureCollection,
+  ForestrySnapshot,
   GeoFeature,
   SnapshotSummary,
   SourceFieldComparison,
@@ -22,10 +24,14 @@ interface DataPanelProps {
   onFiltersChange: (filters: FilterState) => void
   selectedOrdinal: number | null
   onSelectFeature: (featureOrdinal: number) => void
-  snapshotId: number
+  snapshot: ForestrySnapshot
 }
 
-type TabId = 'tabla' | 'comparacion' | 'calidad'
+type TabId = 'tabla' | 'comparacion' | 'revision'
+
+// Closed on arrival so the map gets the screen; any tab opens it. Technical
+// evidence about the base (counts, CRS, fingerprint, quality cases) lives in
+// «Revisión de la base», away from the everyday view.
 
 export function DataPanel({
   collection,
@@ -37,20 +43,21 @@ export function DataPanel({
   onFiltersChange,
   selectedOrdinal,
   onSelectFeature,
-  snapshotId,
+  snapshot,
 }: DataPanelProps) {
   const [tab, setTab] = useState<TabId>('tabla')
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
+  const snapshotId = snapshot.shapefile_snapshot_id
 
   const tabs: { id: TabId; label: string }[] = [
     { id: 'tabla', label: `Tabla (${formatInt(filteredStats.featureCount)})` },
     {
       id: 'comparacion',
-      label: `2024 → 2026 (${formatInt(
+      label: `Cambios 2024 → 2026 (${formatInt(
         comparison.cod_uso_vs_cod_uso_2026.changed_feature_count,
       )})`,
     },
-    { id: 'calidad', label: 'Calidad de datos' },
+    { id: 'revision', label: 'Revisión de la base' },
   ]
 
   return (
@@ -65,8 +72,10 @@ export function DataPanel({
               key={entry.id}
               type="button"
               role="tab"
-              aria-selected={tab === entry.id}
-              className={`data-panel__tab${tab === entry.id ? ' data-panel__tab--active' : ''}`}
+              aria-selected={!collapsed && tab === entry.id}
+              className={`data-panel__tab${
+                !collapsed && tab === entry.id ? ' data-panel__tab--active' : ''
+              }`}
               onClick={() => {
                 setTab(entry.id)
                 setCollapsed(false)
@@ -82,7 +91,7 @@ export function DataPanel({
           aria-expanded={!collapsed}
           onClick={() => setCollapsed((value) => !value)}
         >
-          {collapsed ? 'Mostrar panel' : 'Ocultar panel'}
+          {collapsed ? 'Abrir panel' : 'Cerrar panel'}
         </button>
       </div>
 
@@ -105,12 +114,33 @@ export function DataPanel({
               onSelectFeature={onSelectFeature}
             />
           ) : null}
-          {tab === 'calidad' ? (
-            <QualityPanel
-              summary={summary}
-              filters={filters}
-              onFiltersChange={onFiltersChange}
-            />
+          {tab === 'revision' ? (
+            <div className="base-review">
+              <dl className="base-review__provenance" aria-label="Procedencia de la versión">
+                <div>
+                  <dt>Versión</dt>
+                  <dd>
+                    N.º {snapshotId} · cargada el {formatDate(snapshot.created_at)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Capa de origen</dt>
+                  <dd>{snapshot.layer_name}</dd>
+                </div>
+                <div>
+                  <dt>Sistema de coordenadas</dt>
+                  <dd>EPSG:{summary.storage_srid}</dd>
+                </div>
+                <div>
+                  <dt>Huella del archivo</dt>
+                  <dd>
+                    <code>{shortFingerprint(snapshot.family_fingerprint)}</code>
+                  </dd>
+                </div>
+              </dl>
+              <KpiStrip summary={summary} comparison={comparison} collection={collection} />
+              <QualityPanel summary={summary} filters={filters} onFiltersChange={onFiltersChange} />
+            </div>
           ) : null}
         </div>
       ) : null}

@@ -118,6 +118,13 @@ grants **all** products. It must stay unset in Railway.
   constant, not configurable). Without `data:` every pan logged CSP
   violations. Images cannot execute script; `script-src`, `style-src`,
   `connect-src` and `frame-ancestors` are unchanged.
+- **DECISION** (2026-10-18) — `/rodales` pages send
+  `Permissions-Policy: camera=(), microphone=(), geolocation=(self)` so
+  «Mi ubicación» can show the device's position over the rodales (field
+  use). Same origin only: no frame may ask. The browser asks the person
+  first; the position is used in the page to find the rodal under it and is
+  never sent to the API or stored. Every other path keeps `geolocation=()`
+  (`app.http_hardening`, `test_only_rodales_pages_may_ask_for_the_device_location`).
 
 ## Differences between the deploy branch and main (FACT, 2026-09-29)
 
