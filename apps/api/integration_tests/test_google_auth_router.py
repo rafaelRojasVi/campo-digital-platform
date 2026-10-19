@@ -574,3 +574,104 @@ def test_a_transelec_admin_not_named_for_forestry_gets_no_rodales_access(
         {"product_key": "transelect", "role": "admin"}
     ]
     assert client.get("/api/forestry/snapshots").status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Invited external accounts (PLATFORM_EXTERNAL_ACCOUNTS)
+# ---------------------------------------------------------------------------
+
+_GUEST_EMAIL = "editor.externo@gmail.com"
+
+
+def _guest(**overrides: object) -> GoogleSignIn:
+    values: dict[str, object] = {
+        "subject": "200000000000000000001",
+        "email": _GUEST_EMAIL,
+        "display_name": "Editor Externo",
+        "hosted_domain": None,
+        "workspace_member": False,
+    }
+    values.update(overrides)
+    return GoogleSignIn(**values)
+
+
+def test_an_invited_account_gets_its_configured_role_on_that_product_only(
+    client: TestClient,
+) -> None:
+    provider = _use(
+        FakeGoogleOidcClient(sign_in=_guest()),
+        platform_external_accounts=f"forestry:operator:{_GUEST_EMAIL}",
+    )
+
+    assert _complete_sign_in(client, provider).status_code == 302
+
+    assert client.get("/auth/me").json()["product_grants"] == [
+        {"product_key": "forestry", "role": "operator"}
+    ]
+    assert client.get("/api/transelec/summary").status_code == 403
+
+
+def test_an_invited_account_never_receives_a_bootstrap_admin_grant(client: TestClient) -> None:
+    # Even a configuration mistake naming the guest as a first admin is inert.
+    provider = _use(
+        FakeGoogleOidcClient(sign_in=_guest()),
+        platform_external_accounts=f"forestry:viewer:{_GUEST_EMAIL}",
+        transelec_bootstrap_admin_email=_GUEST_EMAIL,
+        platform_bootstrap_admins=f"forestry:{_GUEST_EMAIL}",
+    )
+
+    _complete_sign_in(client, provider)
+
+    assert client.get("/auth/me").json()["product_grants"] == [
+        {"product_key": "forestry", "role": "viewer"}
+    ]
+
+
+def test_an_admins_later_change_is_not_undone_by_the_next_sign_in(
+    client: TestClient, integration_engine: Engine
+) -> None:
+    provider = _use(
+        FakeGoogleOidcClient(sign_in=_guest()),
+        platform_external_accounts=f"forestry:operator:{_GUEST_EMAIL}",
+    )
+    _complete_sign_in(client, provider)
+    with integration_engine.connect() as conn:
+        conn.execute(text("UPDATE platform.product_grant SET role = 'viewer'"))
+        conn.commit()
+
+    _complete_sign_in(client, provider)
+
+    assert client.get("/auth/me").json()["product_grants"] == [
+        {"product_key": "forestry", "role": "viewer"}
+    ]
+
+
+def test_another_google_account_presenting_an_invited_address_is_refused(
+    client: TestClient,
+) -> None:
+    provider = _use(
+        FakeGoogleOidcClient(sign_in=_guest()),
+        platform_external_accounts=f"forestry:viewer:{_GUEST_EMAIL}",
+    )
+    _complete_sign_in(client, provider)
+    client.cookies.clear()
+
+    provider.sign_in = _guest(subject="999999999999999999999", email=_GUEST_EMAIL.upper())
+    response = _complete_sign_in(client, provider)
+
+    assert response.status_code == 401
+    assert SESSION_COOKIE_NAME not in response.cookies
+
+
+def test_a_workspace_member_is_unaffected_by_invitations(client: TestClient) -> None:
+    provider = _use(
+        FakeGoogleOidcClient(sign_in=_sign_in()),
+        transelec_bootstrap_admin_email=_BOOTSTRAP_EMAIL,
+        platform_external_accounts=f"forestry:viewer:{_GUEST_EMAIL}",
+    )
+
+    _complete_sign_in(client, provider)
+
+    assert client.get("/auth/me").json()["product_grants"] == [
+        {"product_key": "transelect", "role": "admin"}
+    ]

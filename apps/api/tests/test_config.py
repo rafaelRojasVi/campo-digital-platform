@@ -3,7 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from app.config import Settings, parse_bootstrap_admins
+from app.config import (
+    Settings,
+    external_account_emails,
+    parse_bootstrap_admins,
+    parse_external_accounts,
+)
 from pydantic import ValidationError
 from pytest import MonkeyPatch
 
@@ -150,4 +155,49 @@ def test_a_malformed_bootstrap_admins_value_fails_settings(value: str) -> None:
             app_env="production",
             postgres_password="x",
             platform_bootstrap_admins=value,
+        )
+
+
+# ---------------------------------------------------------------------------
+# PLATFORM_EXTERNAL_ACCOUNTS
+# ---------------------------------------------------------------------------
+
+
+def test_external_accounts_parse_into_product_role_email() -> None:
+    assert parse_external_accounts(None) == ()
+    assert parse_external_accounts(
+        " forestry:operator:Ana@Gmail.com , forestry:Viewer:b@gmail.com,"
+    ) == (
+        ("forestry", "operator", "ana@gmail.com"),
+        ("forestry", "viewer", "b@gmail.com"),
+    )
+
+
+def test_external_account_emails_are_the_casefolded_addresses() -> None:
+    settings = Settings(
+        _env_file=None,
+        postgres_password="x",
+        platform_external_accounts="forestry:viewer:Ana@Gmail.com,lidar:viewer:ana@gmail.com",
+    )
+    assert external_account_emails(settings) == frozenset({"ana@gmail.com"})
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "forestry:admin:ana@gmail.com",  # an external account is never an admin
+        "forestry:ana@gmail.com",  # no role
+        "forestry:viewer:ana",  # not an address
+        "rodales:viewer:ana@gmail.com",  # the product key is "forestry"
+        "forestry:owner:ana@gmail.com",  # not a role
+        "forestry:viewer:ana@gmail.com,forestry:operator:Ana@gmail.com",  # listed twice
+    ],
+)
+def test_a_malformed_external_accounts_value_fails_settings(value: str) -> None:
+    with pytest.raises(ValidationError, match="PLATFORM_EXTERNAL_ACCOUNTS"):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            postgres_password="x",
+            platform_external_accounts=value,
         )

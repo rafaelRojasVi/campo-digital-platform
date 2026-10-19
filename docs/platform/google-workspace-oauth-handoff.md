@@ -49,6 +49,10 @@ organization:
      claim to equal `campodigital.cl` (`app.google_auth.verify_id_token`),
      and that is the control this application enforces. The Google-side
      audience is defence in depth, not the boundary.
+   - **Since 2026-10-19 (ADR-011):** invited personal accounts
+     (`PLATFORM_EXTERNAL_ACCOUNTS`) need an **External** audience, "In
+     production" or with those accounts as test users. Internal refuses
+     them before this application sees the sign-in.
    - App name: `Campo Digital — Transelec`.
    - Support email and developer contact: a `campodigital.cl` address.
    - Scopes: **`openid`, `email`, `profile` only.** Nothing else. This

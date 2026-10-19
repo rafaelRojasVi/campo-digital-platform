@@ -8,7 +8,7 @@ from sqlalchemy import Connection, text
 
 from app.access import Role
 from app.audit import PRODUCT_GRANT_CHANGED_EVENT, record_audit_event
-from app.config import Settings, parse_bootstrap_admins
+from app.config import Settings, parse_bootstrap_admins, parse_external_accounts
 
 
 @dataclass(frozen=True, slots=True)
@@ -381,3 +381,79 @@ def maybe_grant_configured_product_admins(
         granted.append(product_key)
 
     return tuple(granted)
+
+
+def maybe_grant_external_accounts(
+    connection: Connection,
+    *,
+    settings: Settings,
+    email: str,
+    app_user_id: int,
+) -> tuple[str, ...]:
+    """Grant an invited external account its configured role, once per product.
+
+    ``PLATFORM_EXTERNAL_ACCOUNTS`` names, for each product, the role
+    (operator or viewer, never admin) an address outside the Workspace
+    receives at its first sign-in. Like the first-admin bootstrap, an
+    existing grant of any role is never changed here: a product admin's later
+    decision is not undone by the next sign-in. Other products are untouched.
+
+    Returns the product keys granted, each audited as
+    ``product_grant.changed`` with no actor and ``via: external_config``.
+    """
+
+    normalized_email = email.strip().casefold()
+    granted: list[str] = []
+
+    for product_key, role, configured_email in parse_external_accounts(
+        settings.platform_external_accounts
+    ):
+        if configured_email != normalized_email:
+            continue
+        if get_product_role(connection, app_user_id=app_user_id, product_key=product_key):
+            continue
+
+        grant_product_role(
+            connection, app_user_id=app_user_id, product_key=product_key, role=Role(role)
+        )
+        record_audit_event(
+            connection,
+            actor_app_user_id=None,
+            event_type=PRODUCT_GRANT_CHANGED_EVENT,
+            product_key=product_key,
+            subject_kind="app_user",
+            subject_id=str(app_user_id),
+            metadata={"previous_role": None, "role": role, "via": "external_config"},
+        )
+        granted.append(product_key)
+
+    return tuple(granted)
+
+
+def other_identity_holds_email(
+    connection: Connection, *, identity_kind: str, identity_key: str, email: str
+) -> bool:
+    """Whether another identity of ``identity_kind`` was first seen with ``email``.
+
+    An invitation names an address, but the user is the Google account
+    (``sub``) that first signed in with it. A different account later
+    presenting the same address is refused rather than given a second user.
+    """
+
+    return connection.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM platform.app_user
+                WHERE identity_kind = :identity_kind
+                  AND identity_key <> :identity_key
+                  AND lower(email) = :email
+            )
+            """
+        ),
+        {
+            "identity_kind": identity_kind,
+            "identity_key": identity_key,
+            "email": email.strip().casefold(),
+        },
+    ).scalar_one()
