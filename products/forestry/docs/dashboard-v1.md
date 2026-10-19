@@ -181,11 +181,11 @@ and the `Especie` filter answer it from `CodUso_2026`
   (E. nitens), `Eg` (E. globulus), `Ar` («Regeneracion de Aromo» on `Ar Rn`,
   «AROMO» on `Ar`) and `Ro` («AROMO ROBLE» on `Ar Ro`; «Renovales de
   Nothofagus» on `Ro`).
-- **INFERENCE** — `Co` coigüe, `Ra` raulí, `Ul` ulmo and `Te` tepa: their
-  rows only say «Plantacion de nativas»; the names are the usual Chilean
-  abbreviations, sent to Javier for correction.
-- **OPEN QUESTION** — `Al`, `Se`, `Ci`, `Ss` (3.66 ha of 10,422.61 ha).
-  They are shown as «<code> (especie por confirmar)».
+- **FACT (2026-10-19, Javier's written answers)** — `Co` coigüe, `Ra`
+  raulí, `Ul` ulmo and `Te` tepa (their rows only say «Plantacion de
+  nativas»), and `Al` aliso, `Ci` ciprés, `Se` secuoya, `Ss` *Sequoia
+  sempervirens* (3.66 ha of 10,422.61 ha together). Every prefix is now
+  named; none is shown «por confirmar».
 
 **DECISION** — Reading rule: only the code's first word is read (later words
 such as `Pi Rn` or `Rzg` describe regeneration around the stand); an all-caps

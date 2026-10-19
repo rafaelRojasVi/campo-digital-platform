@@ -124,7 +124,7 @@ describe('especie encoding', () => {
 
     expect(encoding.legend.some((entry) => entry.isFold)).toBe(false)
     expect(encoding.legend).toHaveLength(10)
-    expect(encoding.legend[9]).toMatchObject({ label: 'Se (especie por confirmar)', color: OTHER_COLOR })
+    expect(encoding.legend[9]).toMatchObject({ label: 'Secuoya', color: OTHER_COLOR })
     expect(encoding.colorFor(features[9]!)).toBe(OTHER_COLOR)
   })
 })

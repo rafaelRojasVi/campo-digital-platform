@@ -18,8 +18,9 @@ polígonos, 13 predios, 10.422,61 ha) tal como viene en la fuente.
   leyenda suma las hectáreas de cada una para los polígonos filtrados (por
   ejemplo, solo un predio). También hay un filtro **Especie**. La especie se
   lee del código 2026 (Pi06 = pino radiata de 2006); las plantaciones mixtas
-  se muestran juntas, sin repartir la superficie, y Al, Se, Ci y Ss aparecen
-  «por confirmar» hasta que Campo Digital confirme su nombre.
+  se muestran juntas, sin repartir la superficie. Al (aliso), Ci (ciprés),
+  Se (secuoya) y Ss (*Sequoia sempervirens*) los confirmó Javier el 19 de
+  octubre.
 - **Buscar y filtrar**: por predio, uso, especie, rodal, código, descripción, y
   combinar filtros. El mapa, la tabla y el total (polígonos y hectáreas) se
   actualizan juntos.

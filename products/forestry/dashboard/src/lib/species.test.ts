@@ -43,35 +43,30 @@ describe('speciesTokens', () => {
 })
 
 describe('speciesGroup', () => {
-  it('names a single confirmed species', () => {
-    expect(speciesGroup('Pi06')).toEqual({ key: 'Pi', label: 'Pino radiata', confirmed: true })
+  it('names a single species', () => {
+    expect(speciesGroup('Pi06')).toEqual({ key: 'Pi', label: 'Pino radiata' })
     expect(speciesGroup('Eg97 Rzg')).toEqual({
       key: 'Eg',
       label: 'Eucalyptus globulus',
-      confirmed: true,
     })
   })
 
-  it('marks a species that Campo Digital has not confirmed', () => {
-    expect(speciesGroup('Se18')).toEqual({
-      key: 'Se',
-      label: 'Se (especie por confirmar)',
-      confirmed: false,
-    })
+  it('names the species Campo Digital confirmed on 2026-10-19', () => {
+    expect(speciesGroup('Se18')).toEqual({ key: 'Se', label: 'Secuoya' })
+    expect(speciesGroup('Al05').label).toBe('Aliso')
+    expect(speciesGroup('Ci10').label).toBe('Ciprés')
   })
 
   it('keeps a mixed plantation as its own group, whatever order the code uses', () => {
     expect(speciesGroup('PoRaCo98')).toEqual({
       key: 'Po+Co+Ra',
       label: 'Mixta: pino oregón + coigüe + raulí',
-      confirmed: true,
     })
     expect(speciesGroup('RaCo07')).toEqual(speciesGroup('CoRa03'))
     expect(speciesGroup('Co06Po06').key).toBe('Po+Co')
     expect(speciesGroup('PoSs05')).toEqual({
       key: 'Po+Ss',
-      label: 'Mixta: pino oregón + Ss (por confirmar)',
-      confirmed: false,
+      label: 'Mixta: pino oregón + Sequoia sempervirens',
     })
   })
 
