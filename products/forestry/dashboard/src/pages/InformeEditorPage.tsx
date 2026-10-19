@@ -822,6 +822,13 @@ function Editor({
               <a
                 className={`button button--ghost${dirty ? ' is-disabled' : ''}`}
                 aria-disabled={dirty}
+                href={dirty ? undefined : exportUrl(report.report_id, 'xlsx', 'all')}
+              >
+                Excel de cosecha (formato Campo Digital)
+              </a>
+              <a
+                className={`button button--ghost${dirty ? ' is-disabled' : ''}`}
+                aria-disabled={dirty}
                 href={dirty ? undefined : printPath(report.report_id)}
                 target="_blank"
                 rel="noopener"

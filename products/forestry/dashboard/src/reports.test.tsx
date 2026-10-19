@@ -389,6 +389,16 @@ describe('Informe editor', () => {
     expect(screen.queryByRole('button', { name: 'Dividir con línea' })).not.toBeInTheDocument()
     expect(screen.queryByText('Saca el rodal 18.')).not.toBeInTheDocument()
   })
+
+  it('shows the Excel de cosecha export link with scope=all', async () => {
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'aprobado', revision: 5 }, true))
+    render(<RealEditor role="viewer" reportId={7} />)
+    const link = await screen.findByRole('link', { name: 'Excel de cosecha (formato Campo Digital)' })
+    expect(link).toHaveAttribute(
+      'href',
+      '/api/forestry/reports/7/export?format=xlsx&scope=all',
+    )
+  })
 })
 
 function twoRodales() {

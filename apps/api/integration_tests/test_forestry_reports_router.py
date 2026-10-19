@@ -542,3 +542,28 @@ def test_export_fecha_contains_iso_date(
         )
         records = [record.as_dict() for record in reader.records()]
     assert all(r["FECHA"] == "2027-01-15" for r in records)
+
+
+def test_xlsx_export_returns_valid_workbook(
+    client: TestClient, integration_engine: Engine, base: int
+) -> None:
+    """format=xlsx returns a valid .xlsx with a Resumen sheet."""
+
+    import io as _io
+
+    from python_calamine import CalamineWorkbook
+
+    sign_in(client, integration_engine, "marco", Role.OPERATOR)
+    report_id = create(client)
+    save(client, report_id, 1, SPLIT)
+
+    response = client.get(f"/api/forestry/reports/{report_id}/export?format=xlsx")
+    assert response.status_code == 200
+    content_type = response.headers["content-type"]
+    assert "spreadsheetml" in content_type
+    assert "cosecha.xlsx" in response.headers["content-disposition"]
+
+    wb = CalamineWorkbook.from_filelike(_io.BytesIO(response.content))
+    assert "Resumen" in wb.sheet_names
+    # At least one detail sheet (the base has rodal 17 with cod_uso="Pi06").
+    assert len(wb.sheet_names) >= 2

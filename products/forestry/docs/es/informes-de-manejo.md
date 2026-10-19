@@ -64,6 +64,44 @@ leyenda con hectáreas y la tabla de rodales con totales. Con «Imprimir o
 guardar como PDF» el navegador la guarda como PDF, lista para el Plan de
 Manejo. Muestra la última versión guardada del informe.
 
+### Excel de cosecha (formato Campo Digital)
+
+El botón **«Excel de cosecha (formato Campo Digital)»** descarga un archivo
+`.xlsx` con la tabla de identificación de rodales, en el mismo formato que
+usa Campo Digital para el Plan de Manejo.
+
+El libro tiene una hoja **Resumen** (especie, superficie por predio) y una
+hoja por cada combinación especie–predio, con sus datos de rodales, cabecera
+de dos filas y fila de TOTALES.
+
+**Columnas que se llenan automáticamente:**
+
+| Columna | Fuente |
+|---|---|
+| Predio | campo `nom_predio` del rodal |
+| Actividad | tipo del informe en minúsculas |
+| Rodal | código del rodal (`n_rodal`) |
+| Superficie (ha) | superficie total del rodal de origen |
+| Superficie corta (ha) | superficie del polígono de manejo (puede ser menor si se dividió) |
+| Especie | especie según el código `cod_uso_2026` |
+| Año plantación | año de plantación según el código |
+| Año corta | año del informe |
+| Plan de manejo | «sí» si hay número CONAF, «no» si no hay |
+
+**Columnas que quedan en blanco** (se completan a mano en Excel):
+
+- **Sector** — HECHO (Javier, 2026-10-19): es un dato general y aproximado
+  que no está registrado en la base de datos.
+- **Pendiente (%)** — no está en la base.
+- **Densidad actual** — no está en la base.
+- **Especie a reforestar** — HECHO (Javier, 2026-10-19): puede ser una o
+  varias por rodal y cambia de rodal a rodal. Para capturarla automáticamente
+  se necesitarían campos por polígono en el editor web (próximo paso).
+- **Densidad reforestación** — misma razón que especie a reforestar.
+
+**Próximo paso:** agregar campo «especie a reforestar» (y densidad) por
+polígono en el editor de informes para que se exporte automáticamente.
+
 ## Estado CONAF
 
 En el informe, la sección **«Estado en CONAF»** (al final del panel) tiene

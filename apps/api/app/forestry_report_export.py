@@ -35,7 +35,7 @@ from shapely.geometry.polygon import orient
 
 from forestry_ingestion.shapefile_contract import EXPECTED_PRJ_WKT
 
-ExportFormat = Literal["shp", "gpkg", "csv"]
+ExportFormat = Literal["shp", "gpkg", "csv", "xlsx"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +150,7 @@ class ExportReport:
     report_month: str
     status: str
     report_date: dt.date | None = None
+    conaf_solicitud: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,6 +307,12 @@ def export_report(
         return write_shapefile_zip(report, rows), "application/zip", f"{slug}.zip"
     if fmt == "gpkg":
         return write_geopackage(report, rows), "application/geopackage+sqlite3", f"{slug}.gpkg"
+    if fmt == "xlsx":
+        from app.forestry_report_harvest_xlsx import write_harvest_xlsx
+
+        content = write_harvest_xlsx(report, rows)
+        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return content, media, f"{slug}_cosecha.xlsx"
     return write_csv(report, rows), "text/csv; charset=utf-8", f"{slug}.csv"
 
 

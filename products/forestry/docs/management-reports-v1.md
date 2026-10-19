@@ -80,7 +80,7 @@ message.
 | `POST …/{report_id}/submit`, `/approve`, `/request-changes`, `/archive` | transitions (body: `revision`, optional `note`) |
 | `POST …/{report_id}/duplicate` | new draft (`201`) |
 | `DELETE /api/forestry/reports/{report_id}` | never-submitted draft only (`204`) |
-| `GET …/{report_id}/export?format=shp\|gpkg\|csv&scope=all\|marked` | download |
+| `GET …/{report_id}/export?format=shp\|gpkg\|csv\|xlsx&scope=all\|marked` | download |
 
 A feature sent without `geometry` is an untouched copy of its source polygon
 (how «Pegar» works); the server copies the base geometry exactly.
@@ -181,6 +181,7 @@ anything is stored; a refusal stores nothing.
 | `shp` | ZIP of `.shp/.shx/.dbf/.prj/.cpg`, written with pyshp; `.prj` is the base's exact ESRI WKT for UTM 18S; `.cpg` is `UTF-8` |
 | `gpkg` | GeoPackage 1.3 written with sqlite3: one `MULTIPOLYGON` layer in EPSG:32718 named after the report |
 | `csv` | attributes only; UTF-8 with BOM, comma, CRLF (as the dashboard's CSV); text starting with `=`, `+`, `-`, `@`, tab or CR gets a leading `'` so a spreadsheet does not run it as a formula |
+| `xlsx` | harvest table (Excel de cosecha, formato Campo Digital); see §«Harvest Excel» below |
 
 Columns: `OBJECTID` (0 for split pieces), `Nom_Predio`, `N_Rodal`, `Sup_ha`,
 `Cod_Uso`, `Editada`, `Uso2024`, `DescUso`, `Cod_Predia`, `N_Rodal_te`,
@@ -191,6 +192,57 @@ OBJECTID). File name: the report name in ASCII, for example
 `Cosecha_pino_enero_2027.zip`. `scope=marked` exports only marked rows.
 Exports are not stored; each one writes the audit event
 `forestry.report.exported`.
+
+### Harvest Excel (`xlsx`, 2026-10-19)
+
+Written with xlsxwriter.  Filename: `<slug>_cosecha.xlsx`.  Media type:
+`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
+The `scope` query parameter is accepted but ignored: the xlsx writer always
+uses the `in_report=True` rows.
+
+**Sheet layout** — «Resumen»:
+- Title cell: «COSECHA TEMPORADA `<year>`-`<year+1>`» where `year` is the
+  `report_date` year, falling back to the `report_month` year for legacy
+  month-only reports.
+- Headers: `predio | especie cosechar | superficie cosecha`.
+- One row per (predio, species group), totalling the managed `sup_ha`.
+- TOTAL row.
+
+**Sheet layout** — one per (species group, predio):
+- Title: «TABLA DE IDENTIFICACIÓN DE RODALES `<SPECIES>` QUE ESTAN
+  CONSIDERADOS EN COSECHA FORESTAL DURANTE LA TEMPORADA `<year>` - PREDIO
+  `<NOMBRE>`».
+- Two header rows (labels + units).  Freeze panes below row 5.
+- One data row per managed polygon (`in_report = True`).
+- TOTAL row with sums of `superficie` and `superficie corta`.
+
+**Column mapping** (14 data columns, B–O):
+
+| Column | Content |
+|---|---|
+| `predio` | `nom_predio` |
+| `sector` | blank — FACT (Javier 2026-10-19): sector is general knowledge, not recorded |
+| `actividad` | report type in lower case (cosecha / manejo / reforestación) |
+| `rodal` | `n_rodal` of the managed polygon |
+| `superficie (ha)` | sum of `sup_ha` over **all** rows sharing the same source `objectid` — FACT (Javier 2026-10-19): «superficie» is the area of the whole source rodal |
+| `especie` | parsed from `cod_uso_2026`; see `forestry_species.py` |
+| `año plantación` | two-digit year in `cod_uso_2026`, converted to 4-digit; `??` → blank; see `forestry_species.py` |
+| `pendiente (%)` | blank — not in the base |
+| `densidad actual` | blank — not in the base |
+| `superficie corta (ha)` | the managed polygon's own `sup_ha` — FACT (Javier 2026-10-19): «superficie corta» is the area that will actually be harvested |
+| `año corta` | year of `report_date`; falls back to year in `report_month` for legacy reports |
+| `especie a reforestar` | blank — FACT (Javier 2026-10-19): reforestation species changes per rodal and can be several per rodal; capturing it needs per-polygon fields in the report editor (NEXT STEP, not built here) |
+| `densidad reforestación` | blank — same reason as `especie a reforestar` |
+| `plan de manejo` | «sí» if the report has a CONAF solicitud number, else «no» |
+
+Sheets are ordered by species (`SPECIES_ORDER` in `forestry_species.py`) then
+predio.  Sheet names ≤ 31 chars, unique, stripped of `[]:*?/\`.  Polygons
+with no recognised species go to a «Sin especie» sheet.
+
+Species parsing is shared with the dashboard:
+`apps/api/app/forestry_species.py` mirrors
+`products/forestry/dashboard/src/lib/species.ts`; both files must change
+together (stated in each file's header comment).
 
 ### «Imprimir / PDF» (2026-10-18)
 

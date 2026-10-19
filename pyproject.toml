@@ -44,6 +44,7 @@ api = [
   "cryptography>=49.0",
   "sentry-sdk[fastapi]>=2.30,<3",
   "pyshp>=3.0",
+  "xlsxwriter>=3.2,<4",
 ]
 
 [project.scripts]

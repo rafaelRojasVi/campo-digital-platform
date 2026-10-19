@@ -14,7 +14,7 @@ export type ReportStatus =
   | 'cambios_solicitados'
   | 'archivado'
 export type ReportAction = 'submit' | 'approve' | 'request-changes' | 'archive'
-export type ExportFormat = 'shp' | 'gpkg' | 'csv'
+export type ExportFormat = 'shp' | 'gpkg' | 'csv' | 'xlsx'
 export type ExportScope = 'all' | 'marked'
 
 export const REPORT_TYPES: ReportType[] = [

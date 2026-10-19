@@ -417,6 +417,7 @@ def export_report_file(
             report.report_month,
             report.status,
             report.report_date,
+            report.conaf_solicitud,
         ),
         rows,
     )

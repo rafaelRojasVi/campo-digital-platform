@@ -271,6 +271,7 @@ api = [
     { name = "sentry-sdk", extra = ["fastapi"] },
     { name = "sqlalchemy" },
     { name = "uvicorn" },
+    { name = "xlsxwriter" },
 ]
 geometry-extra = [
     { name = "open3d" },
@@ -323,6 +324,7 @@ requires-dist = [
     { name = "trimesh", specifier = ">=4.4" },
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.30" },
+    { name = "xlsxwriter", marker = "extra == 'api'", specifier = ">=3.2,<4" },
 ]
 provides-extras = ["analysis", "transelec", "geometry-extra", "api"]
 
