@@ -1665,3 +1665,90 @@ details.report-warnings ul {
     transition: none;
   }
 }
+
+/* Species picker (combobox) and its list, portalled above the map. */
+.species-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 170px;
+}
+
+.species-picker__input {
+  flex: 1;
+  min-width: 110px;
+}
+
+.plan-chip button {
+  display: inline-grid;
+  place-items: center;
+}
+
+.species-list {
+  position: fixed;
+  z-index: 2000;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: var(--shadow-overlay);
+  font-size: 14px;
+  animation: card-in 140ms var(--ease);
+}
+
+.species-list__group {
+  margin: 6px 8px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.species-list__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.species-list__option--active {
+  background: var(--green-tint);
+}
+
+.species-list__option--chosen {
+  font-weight: 700;
+  color: var(--green-900);
+}
+
+.species-list__option mark {
+  background: transparent;
+  color: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.species-list__check {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  color: var(--green-700);
+}
+
+.species-list__empty {
+  margin: 8px;
+  color: var(--ink-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .species-list {
+    animation: none;
+  }
+}

@@ -9,37 +9,11 @@
  */
 import { useState } from 'react'
 import { Hint } from '../Hint.tsx'
+import { SpeciesPicker } from './SpeciesPicker.tsx'
 import { featureCode, type DraftFeature, type PlanningFields } from '../../lib/reportDraft.ts'
 
 const ha = new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const plants = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 })
-
-const MAX_SPECIES = 6
-
-// Suggested only: any species can be typed. The base's 14 species
-// (lib/species.ts) plus natives Campo Digital plants after harvest.
-const REFOREST_SUGGESTIONS = [
-  'pino radiata',
-  'pino oregón',
-  'Eucalyptus nitens',
-  'Eucalyptus globulus',
-  'Sequoia sempervirens',
-  'secuoya',
-  'ciprés',
-  'aliso',
-  'aromo',
-  'roble',
-  'raulí',
-  'coigüe',
-  'ulmo',
-  'tepa',
-  'canelo',
-  'arrayán',
-  'luma',
-  'mañío',
-  'lingue',
-  'laurel',
-]
 
 type OnChange = (keys: Set<string>, fields: Partial<PlanningFields>) => void
 
@@ -75,7 +49,6 @@ export function PlanificacionTable({
     a.localeCompare(b, 'es'),
   )
   const used = features.flatMap((f) => f.reforest_species ?? [])
-  const suggestions = [...new Set([...used, ...REFOREST_SUGGESTIONS])]
 
   if (managed.length === 0) {
     return (
@@ -91,11 +64,6 @@ export function PlanificacionTable({
       <datalist id="plan-sectors">
         {sectors.map((sector) => (
           <option key={sector} value={sector} />
-        ))}
-      </datalist>
-      <datalist id="plan-species">
-        {suggestions.map((name) => (
-          <option key={name} value={name} />
         ))}
       </datalist>
       <table className="plan-table">
@@ -115,7 +83,7 @@ export function PlanificacionTable({
         </thead>
         <tbody>
           {editable && managed.length > 1 ? (
-            <AllRow count={managed.length} onApply={(fields) => onChange(new Set(managed.map((f) => f.key)), fields)} />
+            <AllRow count={managed.length} used={used} onApply={(fields) => onChange(new Set(managed.map((f) => f.key)), fields)} />
           ) : null}
           {managed.map((feature) => (
             <PlanRow
@@ -124,6 +92,7 @@ export function PlanificacionTable({
               feature={feature}
               editable={editable}
               active={activeKey === feature.key}
+              used={used}
               onRodal={onRodal}
               onHover={onHover}
               onChange={(fields) => onChange(new Set([feature.key]), fields)}
@@ -139,6 +108,7 @@ function PlanRow({
   feature,
   editable,
   active,
+  used,
   onRodal,
   onHover,
   onChange,
@@ -146,6 +116,7 @@ function PlanRow({
   feature: DraftFeature
   editable: boolean
   active: boolean
+  used: string[]
   onRodal?: (key: string) => void
   onHover?: (key: string | null) => void
   onChange: (fields: Partial<PlanningFields>) => void
@@ -231,8 +202,9 @@ function PlanRow({
         />
       </td>
       <td>
-        <SpeciesCell
+        <SpeciesPicker
           label={`Especies a reforestar del rodal ${code}`}
+          used={used}
           species={species}
           onChange={(next) => onChange({ reforest_species: next.length > 0 ? next : null })}
         />
@@ -263,64 +235,19 @@ function PlanRow({
   )
 }
 
-function SpeciesCell({
-  label,
-  species,
-  onChange,
-}: {
-  label: string
-  species: string[]
-  onChange: (next: string[]) => void
-}) {
-  const [text, setText] = useState('')
-  const add = () => {
-    const clean = text.trim()
-    setText('')
-    if (clean === '' || species.length >= MAX_SPECIES) return
-    if (species.some((name) => name.toLocaleLowerCase('es') === clean.toLocaleLowerCase('es'))) return
-    onChange([...species, clean])
-  }
-  return (
-    <div className="plan-species">
-      {species.map((name) => (
-        <span key={name} className="plan-chip">
-          {name}
-          <button
-            type="button"
-            aria-label={`Quitar ${name}`}
-            onClick={() => onChange(species.filter((item) => item !== name))}
-          >
-            ×
-          </button>
-        </span>
-      ))}
-      {species.length < MAX_SPECIES ? (
-        <input
-          className="plan-table__input plan-species__input"
-          aria-label={label}
-          list="plan-species"
-          maxLength={40}
-          placeholder={species.length === 0 ? 'Agregar…' : '+'}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onBlur={add}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              add()
-            }
-          }}
-        />
-      ) : null}
-    </div>
-  )
-}
-
 /**
  * «Todos los rodales»: fill any of the three cells and «Aplicar a todos»
  * writes those values (only the ones filled) into every row.
  */
-function AllRow({ count, onApply }: { count: number; onApply: (fields: Partial<PlanningFields>) => void }) {
+function AllRow({
+  count,
+  used,
+  onApply,
+}: {
+  count: number
+  used: string[]
+  onApply: (fields: Partial<PlanningFields>) => void
+}) {
   const [sector, setSector] = useState('')
   const [species, setSpecies] = useState<string[]>([])
   const [density, setDensity] = useState('')
@@ -378,7 +305,7 @@ function AllRow({ count, onApply }: { count: number; onApply: (fields: Partial<P
         />
       </td>
       <td>
-        <SpeciesCell label="Especies a reforestar para todos los rodales" species={species} onChange={setSpecies} />
+        <SpeciesPicker label="Especies a reforestar para todos los rodales" used={used} species={species} onChange={setSpecies} />
       </td>
       <td>
         <span className="plan-table__density">

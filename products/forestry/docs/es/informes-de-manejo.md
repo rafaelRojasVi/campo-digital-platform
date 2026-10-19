@@ -119,8 +119,10 @@ En la tabla del informe hay una fila por cada rodal del área de manejo:
 - **Sector:** texto libre (por ejemplo «La Reina»). Javier explicó que es un
   dato aproximado que no está escrito en ninguna parte; la plataforma sugiere
   los sectores ya usados en el informe.
-- **Especie(s) a reforestar:** una o varias; se elige de una lista o se
-  escribe y se presiona Enter.
+- **Especie(s) a reforestar:** una o varias. Al tocar el campo se abre una
+  lista agrupada («Usadas en este informe», «Plantaciones», «Nativas»);
+  escribir filtra la lista (sin importar tildes) y lo elegido lleva ✓. Si la
+  especie no está, aparece «Agregar "…"». Con el teclado: ↑↓, Enter, Esc.
 - **Densidad (pl/ha):** un solo número por rodal, el total.
 
 La primera fila, **«Todos»**, sirve para poner el mismo valor en todos los

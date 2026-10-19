@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { DraftFeature, PlanningFields } from '../../lib/reportDraft.ts'
@@ -66,16 +66,46 @@ describe('PlanificacionTable', () => {
     expect(onChange).toHaveBeenCalledWith(new Set(['f1']), { sector: null })
   })
 
-  it('adds species as chips, ignores a repeat, and removes one', async () => {
+  it('adds species from the grouped list, ignores a repeat, and removes one', async () => {
     const user = userEvent.setup()
     const onChange = setup([feature('f1', '10', { reforest_species: ['pino oregón'] })])
-    await user.type(screen.getByLabelText('Especies a reforestar del rodal 10'), 'Ulmo{Enter}')
-    expect(onChange).toHaveBeenLastCalledWith(new Set(['f1']), { reforest_species: ['pino oregón', 'Ulmo'] })
+    const field = screen.getByLabelText('Especies a reforestar del rodal 10')
+    await user.click(field)
+    const list = screen.getByRole('listbox', { name: 'Especies a reforestar del rodal 10' })
+    expect(within(list).getByRole('group', { name: 'Plantaciones' })).toBeInTheDocument()
+    expect(within(list).getByRole('group', { name: 'Nativas' })).toBeInTheDocument()
+    expect(within(list).getByRole('option', { name: /pino oregón/ })).toHaveAttribute('aria-selected', 'true')
+
+    await user.type(field, 'coigue')
+    await user.click(within(list).getByRole('option', { name: /coigüe/ }))
+    expect(onChange).toHaveBeenLastCalledWith(new Set(['f1']), { reforest_species: ['pino oregón', 'coigüe'] })
+
     onChange.mockClear()
-    await user.type(screen.getByLabelText('Especies a reforestar del rodal 10'), 'PINO OREGÓN{Enter}')
+    await user.type(field, 'PINO OREGÓN{Enter}')
     expect(onChange).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Quitar pino oregón' }))
     expect(onChange).toHaveBeenLastCalledWith(new Set(['f1']), { reforest_species: null })
+  })
+
+  it('adds a species that is not on the list, by keyboard', async () => {
+    const user = userEvent.setup()
+    const onChange = setup([feature('f1', '10')])
+    await user.type(screen.getByLabelText('Especies a reforestar del rodal 10'), 'lenga')
+    expect(screen.getByRole('option', { name: 'Agregar «lenga»' })).toBeInTheDocument()
+    await user.keyboard('{Enter}')
+    expect(onChange).toHaveBeenLastCalledWith(new Set(['f1']), { reforest_species: ['lenga'] })
+  })
+
+  it('moves with the arrows and closes with Escape', async () => {
+    const user = userEvent.setup()
+    const onChange = setup([feature('f1', '10')])
+    const field = screen.getByLabelText('Especies a reforestar del rodal 10')
+    await user.click(field)
+    await user.keyboard('{ArrowDown}{Enter}')
+    // The second option of the first group.
+    expect(onChange).toHaveBeenLastCalledWith(new Set(['f1']), { reforest_species: ['pino oregón'] })
+    await user.keyboard('{Escape}')
+    expect(field).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('refuses a density outside 1–20.000 with a message by the cell', async () => {
