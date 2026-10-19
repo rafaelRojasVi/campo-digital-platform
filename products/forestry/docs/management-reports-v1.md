@@ -135,6 +135,10 @@ A feature sent without `geometry` is an untouched copy of its source polygon
     informe» when it is outside the report.
   - Hovering a row highlights its polygon, and the rodal number in a row
     shows it on the map.
+  - A progress guide at the top, taken from option A, shows three cards with
+    icons: Rodales (count and hectares), Planificación (a «planned of
+    managed» bar) and Exportar. Each gets a check once done. The cards are not
+    tabs: one only scrolls to its part.
   - The harvest Excel is the main download at the top. Other formats, CONAF
     and duplicate/archive/delete sit under «Otros formatos, CONAF y más».
     Save and send live in a sticky bar.

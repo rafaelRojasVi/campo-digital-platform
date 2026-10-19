@@ -25,7 +25,9 @@ guarda su propia copia de los rodales.
 ## Paso a paso
 
 Desde el 19 de octubre de 2026 el informe es **una tabla a la izquierda y el
-mapa a la derecha**, sin pestañas ni «selección». Javier pidió que fuera lo
+mapa a la derecha**, sin pestañas ni «selección». Arriba, tres tarjetas con
+ícono muestran el avance (Rodales, Planificación, Exportar) y se marcan con
+un ✓ al completarse; tocarlas lleva a esa parte. Javier pidió que fuera lo
 más simple posible; los «?» explican cada parte.
 
 1. En **Informes**, use **Nuevo informe**: nombre, tipo (Cosecha, Manejo,

@@ -18,6 +18,7 @@ import { Hint } from '../components/Hint.tsx'
 import { Icon } from '../components/report/Icon.tsx'
 import { PlanificacionTable } from '../components/report/PlanificacionTable.tsx'
 import { RodalCard } from '../components/report/RodalCard.tsx'
+import { ReportProgress } from '../components/report/ReportProgress.tsx'
 import { ReportStatusChip } from '../components/ReportStatusChip.tsx'
 import { normalizeSolicitud } from '../lib/conafEstado.ts'
 import { createHistory, recordHistory, redoHistory, undoHistory, type History } from '../lib/history.ts'
@@ -687,6 +688,18 @@ function Editor({
     return keys
   }, [selectedKeys, cardFeature, hoverKey])
   const exportDisabled = dirty ? 'Guarde los cambios antes de descargar.' : undefined
+  const planned = managed.filter(
+    (f) => f.sector !== null || (f.reforest_species?.length ?? 0) > 0 || f.reforest_density !== null,
+  ).length
+  const sent = report.status !== 'borrador' && report.status !== 'cambios_solicitados'
+  const goTo = (id: string, open = false) => {
+    const target = document.getElementById(id)
+    if (target === null) return
+    if (open && target instanceof HTMLDetailsElement) target.open = true
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+    if (target instanceof HTMLInputElement) target.focus({ preventScroll: true })
+  }
 
   return (
     <div className="report-editor">
@@ -711,6 +724,36 @@ function Editor({
               Excel de cosecha
             </a>
           </div>
+
+          <ReportProgress
+            parts={[
+              {
+                id: 'rodales',
+                label: 'Rodales',
+                icon: 'map',
+                status: managed.length === 0 ? 'Clic en el mapa' : `${plural(managed.length, 'rodal', 'rodales')} · ${ha.format(summary.managedHa)} ha`,
+                done: managed.length > 0,
+                onGo: () => goTo('rodal-search'),
+              },
+              {
+                id: 'planificacion',
+                label: 'Planificación',
+                icon: 'clipboard',
+                status: managed.length === 0 ? 'Sin rodales aún' : `${planned} de ${managed.length}`,
+                done: managed.length > 0 && planned === managed.length,
+                progress: managed.length === 0 ? undefined : planned / managed.length,
+                onGo: () => goTo('report-table'),
+              },
+              {
+                id: 'exportar',
+                label: 'Exportar',
+                icon: 'file',
+                status: sent ? 'Enviado' : 'Excel y envío',
+                done: sent,
+                onGo: () => goTo('report-more', true),
+              },
+            ]}
+          />
 
           {showNotes && latestChangeNote !== undefined && report.status === 'cambios_solicitados' ? (
             <Notice tone="warn" title={`${latestChangeNote.author_display_name} pidió cambios`}>
@@ -774,10 +817,8 @@ function Editor({
             </div>
           ) : null}
 
-          <h3 className="report-section__title report-table__title">
-            {managed.length === 0
-              ? 'Rodales del informe'
-              : `${plural(managed.length, 'rodal', 'rodales')} · ${ha.format(summary.managedHa)} ha `}
+          <h3 id="report-table" className="report-section__title report-table__title">
+            {'Rodales del informe '}
             <Hint text="Cada fila es un rodal del área de manejo (naranjo en el mapa). Escriba sector, especies a reforestar y densidad como en una planilla: salen en el Excel de cosecha. Toque el número para verlo en el mapa." />
           </h3>
           <PlanificacionTable
@@ -789,7 +830,7 @@ function Editor({
             onChange={(keys, fields) => change(setPlanningFields(draft, keys, fields))}
           />
 
-          <details className="more-actions">
+          <details id="report-more" className="more-actions">
             <summary>Otros formatos, CONAF y más</summary>
             <section className="report-section" aria-label="Exportar">
               <h3 className="report-section__title">Descargar</h3>

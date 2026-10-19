@@ -69,6 +69,29 @@ const PATHS = {
       <path d="M6 14h12v8H6Z" />
     </>
   ),
+  map: (
+    <>
+      <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Z" />
+      <path d="M9 3v15" />
+      <path d="M15 6v15" />
+    </>
+  ),
+  clipboard: (
+    <>
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="M9 12h6" />
+      <path d="M9 16h4" />
+    </>
+  ),
+  file: (
+    <>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="M12 11v7" />
+      <path d="m9 15 3 3 3-3" />
+    </>
+  ),
   restore: (
     <>
       <path d="M12 5v14" />
