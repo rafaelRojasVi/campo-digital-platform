@@ -167,10 +167,8 @@ A feature sent without `geometry` is an untouched copy of its source polygon
       reprojection by the coordinates array, the longest task is 271 ms
       (first reprojection), zero when arriving from the main map;
     - labels redraw once per move, not twice.
-    **DECISION:** the panel is a size container; under 560 px each rodal row
-    becomes a stacked card with visible field labels, and the progress cards
-    drop their status line. The «Haga clic en un rodal» hint shows only while
-    the report is empty.
+    A stacked-card layout for a narrow panel was tried and dropped the same
+    day (Rafael: less concise, less clean); the table stays a table.
     Opacity and numbers are a per-viewer convenience kept in localStorage,
     guarded by try/catch.
   - **Phones:** the map sits above and the table below, and the panel scrolls

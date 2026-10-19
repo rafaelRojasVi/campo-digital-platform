@@ -171,9 +171,9 @@ function PlanRow({
     return (
       <tr {...rowProps}>
         {rodalCell}
-        <td data-label="Sector">{feature.sector ?? '—'}</td>
-        <td data-label="Especie(s) a reforestar">{species.length > 0 ? species.join(' + ') : '—'}</td>
-        <td data-label="Densidad">{feature.reforest_density === null ? '—' : `${plants.format(feature.reforest_density)} pl/ha`}</td>
+        <td>{feature.sector ?? '—'}</td>
+        <td>{species.length > 0 ? species.join(' + ') : '—'}</td>
+        <td>{feature.reforest_density === null ? '—' : `${plants.format(feature.reforest_density)} pl/ha`}</td>
       </tr>
     )
   }
@@ -199,7 +199,7 @@ function PlanRow({
   return (
     <tr {...rowProps}>
       {rodalCell}
-      <td data-label="Sector">
+      <td>
         <input
           className="plan-table__input"
           aria-label={`Sector del rodal ${code}`}
@@ -213,7 +213,7 @@ function PlanRow({
           }}
         />
       </td>
-      <td data-label="Especie(s) a reforestar">
+      <td>
         <SpeciesPicker
           label={`Especies a reforestar del rodal ${code}`}
           used={used}
@@ -221,7 +221,7 @@ function PlanRow({
           onChange={(next) => onChange({ reforest_species: next.length > 0 ? next : null })}
         />
       </td>
-      <td data-label="Densidad">
+      <td>
         <span className="plan-table__density">
           <input
             className="plan-table__input plan-table__input--number"
@@ -320,7 +320,7 @@ function AllRow({
           {applied}
         </span>
       </th>
-      <td data-label="Sector">
+      <td>
         <input
           className="plan-table__input"
           aria-label="Sector para todos los rodales"
@@ -331,10 +331,10 @@ function AllRow({
           onKeyDown={onEnter}
         />
       </td>
-      <td data-label="Especie(s) a reforestar">
+      <td>
         <SpeciesPicker label="Especies a reforestar para todos los rodales" used={used} species={species} onChange={setSpecies} />
       </td>
-      <td data-label="Densidad">
+      <td>
         <span className="plan-table__density">
           <input
             className="plan-table__input plan-table__input--number"
@@ -353,7 +353,7 @@ function AllRow({
           </span>
         ) : null}
       </td>
-      {withRemove ? <td className="plan-table__spacer" /> : null}
+      {withRemove ? <td /> : null}
     </tr>
   )
 }
