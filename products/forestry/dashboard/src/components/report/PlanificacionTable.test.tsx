@@ -1,0 +1,138 @@
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
+import type { DraftFeature, PlanningFields } from '../../lib/reportDraft.ts'
+import { PlanificacionTable } from './PlanificacionTable.tsx'
+
+function feature(key: string, rodal: string, planning: Partial<PlanningFields> = {}, inReport = true): DraftFeature {
+  return {
+    key,
+    source_feature_ordinal: Number(key.slice(1)),
+    in_report: inReport,
+    geometry_changed: false,
+    attributes: { n_rodal: rodal, sup_ha: 2 },
+    edits: {},
+    coordinates: [],
+    sector: planning.sector ?? null,
+    reforest_species: planning.reforest_species ?? null,
+    reforest_density: planning.reforest_density ?? null,
+  }
+}
+
+function setup(features: DraftFeature[], editable = true) {
+  const onChange = vi.fn()
+  render(<PlanificacionTable features={features} editable={editable} onChange={onChange} />)
+  return onChange
+}
+
+describe('PlanificacionTable', () => {
+  it('lists only the rodales in the management area', () => {
+    setup([feature('f1', '10'), feature('f2', '11', {}, false)])
+    expect(screen.getByLabelText('Sector del rodal 10')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Sector del rodal 11')).not.toBeInTheDocument()
+  })
+
+  it('explains how to add rodales when the report has none', () => {
+    setup([feature('f1', '10', {}, false)])
+    expect(screen.getByText('Todavía no hay rodales en el informe.')).toBeInTheDocument()
+  })
+
+  it('shows a rodal on the map from its number, and highlights the hovered row', async () => {
+    const user = userEvent.setup()
+    const onRodal = vi.fn()
+    const onHover = vi.fn()
+    render(
+      <PlanificacionTable features={[feature('f1', '10')]} editable onChange={vi.fn()} onRodal={onRodal} onHover={onHover} />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Ver el rodal 10 en el mapa' }))
+    expect(onRodal).toHaveBeenCalledWith('f1')
+    expect(onHover).toHaveBeenCalledWith('f1')
+  })
+
+  it('never writes a cell that was only focused and left', async () => {
+    const user = userEvent.setup()
+    const onChange = setup([feature('f1', '10', { sector: 'Norte', reforest_density: 1111 })])
+    await user.click(screen.getByLabelText('Sector del rodal 10'))
+    await user.click(screen.getByLabelText('Densidad del rodal 10 en plantas por hectárea'))
+    await user.tab()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('clears a cell when its text is deleted', async () => {
+    const user = userEvent.setup()
+    const onChange = setup([feature('f1', '10', { sector: 'Norte' })])
+    await user.clear(screen.getByLabelText('Sector del rodal 10'))
+    await user.tab()
+    expect(onChange).toHaveBeenCalledWith(new Set(['f1']), { sector: null })
+  })
+
+  it('adds species from the grouped list, ignores a repeat, and removes one', async () => {
+    const user = userEvent.setup()
+    const onChange = setup([feature('f1', '10', { reforest_species: ['pino oregón'] })])
+    const field = screen.getByLabelText('Especies a reforestar del rodal 10')
+    await user.click(field)
+    const list = screen.getByRole('listbox', { name: 'Opciones: Especies a reforestar del rodal 10' })
+    expect(within(list).getByRole('group', { name: 'Plantaciones' })).toBeInTheDocument()
+    expect(within(list).getByRole('group', { name: 'Nativas' })).toBeInTheDocument()
+    expect(within(list).getByRole('option', { name: /pino oregón/ })).toHaveAttribute('aria-selected', 'true')
+
+    await user.type(field, 'coigue')
+    await user.click(within(list).getByRole('option', { name: /coigüe/ }))
+    expect(onChange).toHaveBeenLastCalledWith(new Set(['f1']), { reforest_species: ['pino oregón', 'coigüe'] })
+
+    onChange.mockClear()
+    await user.type(field, 'PINO OREGÓN{Enter}')
+    expect(onChange).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Quitar pino oregón' }))
+    expect(onChange).toHaveBeenLastCalledWith(new Set(['f1']), { reforest_species: null })
+  })
+
+  it('adds a species that is not on the list, by keyboard', async () => {
+    const user = userEvent.setup()
+    const onChange = setup([feature('f1', '10')])
+    await user.type(screen.getByLabelText('Especies a reforestar del rodal 10'), 'lenga')
+    expect(screen.getByRole('option', { name: 'Agregar «lenga»' })).toBeInTheDocument()
+    await user.keyboard('{Enter}')
+    expect(onChange).toHaveBeenLastCalledWith(new Set(['f1']), { reforest_species: ['lenga'] })
+  })
+
+  it('moves with the arrows and closes with Escape', async () => {
+    const user = userEvent.setup()
+    const onChange = setup([feature('f1', '10')])
+    const field = screen.getByLabelText('Especies a reforestar del rodal 10')
+    await user.click(field)
+    await user.keyboard('{ArrowDown}{Enter}')
+    // The second option of the first group.
+    expect(onChange).toHaveBeenLastCalledWith(new Set(['f1']), { reforest_species: ['pino oregón'] })
+    await user.keyboard('{Escape}')
+    expect(field).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('refuses a density outside 1–20.000 with a message by the cell', async () => {
+    const user = userEvent.setup()
+    const onChange = setup([feature('f1', '10')])
+    await user.type(screen.getByLabelText('Densidad del rodal 10 en plantas por hectárea'), '0{Enter}')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Entre 1 y 20.000 pl/ha.')
+  })
+
+  it('«Aplicar a todos» writes only the filled values into every managed rodal', async () => {
+    const user = userEvent.setup()
+    const onChange = setup([feature('f1', '10'), feature('f2', '11'), feature('f3', '12', {}, false)])
+    const apply = screen.getByRole('button', { name: 'Aplicar a todos' })
+    expect(apply).toBeDisabled()
+    await user.type(screen.getByLabelText('Sector para todos los rodales'), 'La Reina')
+    await user.type(screen.getByLabelText('Densidad para todos los rodales en plantas por hectárea'), '1.600')
+    await user.click(apply)
+    expect(onChange).toHaveBeenCalledWith(new Set(['f1', 'f2']), { sector: 'La Reina', reforest_density: 1600 })
+    expect(screen.getByRole('status')).toHaveTextContent('Aplicado a los 2 rodales.')
+  })
+
+  it('is plain text when the report cannot be edited', () => {
+    setup([feature('f1', '10', { sector: 'Norte', reforest_species: ['coigüe', 'canelo'], reforest_density: 1600 })], false)
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(screen.getByText('coigüe + canelo')).toBeInTheDocument()
+    expect(screen.getByText('1.600 pl/ha')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Aplicar a todos' })).not.toBeInTheDocument()
+  })
+})

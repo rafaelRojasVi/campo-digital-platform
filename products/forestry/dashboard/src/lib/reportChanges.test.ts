@@ -42,4 +42,24 @@ describe('describeChanges', () => {
     )
     expect(changes[0]?.title).toBe('Polígono 13 agregado completo')
   })
+
+  it('includes planning fields in the review detail when set', () => {
+    const changes = describeChanges(
+      [
+        {
+          source_feature_ordinal: 4,
+          in_report: true,
+          geometry_changed: false,
+          attributes: { n_rodal: '22', sup_ha: 5.0 },
+          sector: 'Norte',
+          reforest_species: ['pino radiata', 'coigüe'],
+          reforest_density: 850,
+        },
+      ],
+      [base(4, '22')],
+    )
+    expect(changes[0]?.detail).toContain('Sector: Norte')
+    expect(changes[0]?.detail).toContain('Esp. reforestar: pino radiata + coigüe')
+    expect(changes[0]?.detail).toContain('Dens. refor.: 850 pl/ha')
+  })
 })

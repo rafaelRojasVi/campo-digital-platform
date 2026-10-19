@@ -93,10 +93,13 @@ export function InformePrintPage({ reportId }: { reportId: number | null }) {
             <th>Rodal</th>
             <th>Código</th>
             <th>Predio</th>
+            <th>Sector</th>
             <th>Uso 2026</th>
             <th>Especie</th>
             <th className="num">Superficie (ha)</th>
             <th>Área de manejo</th>
+            <th>Esp. reforestar</th>
+            <th className="num">Dens. refor. (pl/ha)</th>
           </tr>
         </thead>
         <tbody>
@@ -105,18 +108,22 @@ export function InformePrintPage({ reportId }: { reportId: number | null }) {
               <td>{row.rodal}</td>
               <td>{row.code}</td>
               <td>{row.predio}</td>
+              <td>{row.sector ?? ''}</td>
               <td>{row.uso}</td>
               <td>{row.species}</td>
               <td className="num">{ha.format(row.ha)}</td>
               <td>{row.managed ? 'Sí' : 'No'}</td>
+              <td>{row.reforestSpecies ?? ''}</td>
+              <td className="num">{row.reforestDensity != null ? String(row.reforestDensity) : ''}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={5}>Total ({rows.length} polígonos)</td>
+            <td colSpan={7}>Total ({rows.length} polígonos)</td>
             <td className="num">{ha.format(totalHa)}</td>
             <td>{ha.format(managedHa)} ha</td>
+            <td colSpan={2} />
           </tr>
         </tfoot>
       </table>

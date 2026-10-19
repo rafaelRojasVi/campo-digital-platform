@@ -158,3 +158,138 @@ def test_deleting_a_report_deletes_its_features_and_notes(
         {"id": report_id},
     ).scalar_one()
     assert remaining == 0
+
+
+# ---------------------------------------------------------------------------
+# Migration 0018: planning fields CHECK constraints
+# ---------------------------------------------------------------------------
+
+
+def _insert_feature(
+    connection: Connection,
+    *,
+    report_id: int,
+    sector: str | None = None,
+    reforest_species: str | None = None,
+    reforest_density: int | None = None,
+) -> None:
+    """Insert one report_feature row with optional planning fields."""
+    connection.execute(
+        text(
+            """
+            INSERT INTO forestry.report_feature (
+                report_id, position, source_feature_ordinal, in_report, geometry_changed,
+                attributes, geometry,
+                sector, reforest_species, reforest_density
+            )
+            VALUES (:report_id, 1, 1, true, false, '{}'::jsonb,
+                    ST_Multi(ST_GeomFromText('POLYGON((0 0,0 1,1 1,1 0,0 0))', 32718)),
+                    :sector, CAST(:reforest_species AS jsonb), :reforest_density)
+            """
+        ),
+        {
+            "report_id": report_id,
+            "sector": sector,
+            "reforest_species": reforest_species,
+            "reforest_density": reforest_density,
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "sector",
+    ["La Reina", "A" * 60, None],
+)
+def test_valid_sector_is_accepted(
+    integration_connection: Connection, seeded: tuple[int, int], sector: str | None
+) -> None:
+    snapshot_id, user_id = seeded
+    report_id = _insert_report(
+        integration_connection, snapshot_id=snapshot_id, user_id=user_id, name=f"S-{sector}"
+    )
+    _insert_feature(integration_connection, report_id=report_id, sector=sector)
+
+
+@pytest.mark.parametrize(
+    "sector",
+    ["A" * 61, "  leading space"],
+)
+def test_invalid_sector_is_rejected(
+    integration_connection: Connection, seeded: tuple[int, int], sector: str
+) -> None:
+    snapshot_id, user_id = seeded
+    report_id = _insert_report(
+        integration_connection, snapshot_id=snapshot_id, user_id=user_id, name=f"SI-{sector[:10]}"
+    )
+    with pytest.raises(IntegrityError), integration_connection.begin_nested():
+        _insert_feature(integration_connection, report_id=report_id, sector=sector)
+
+
+@pytest.mark.parametrize(
+    "reforest_species",
+    [
+        '["pino radiata", "coigüe"]',
+        '["pino radiata"]',
+        "null",
+    ],
+)
+def test_valid_reforest_species_is_accepted(
+    integration_connection: Connection, seeded: tuple[int, int], reforest_species: str
+) -> None:
+    snapshot_id, user_id = seeded
+    report_id = _insert_report(
+        integration_connection,
+        snapshot_id=snapshot_id,
+        user_id=user_id,
+        name=f"RS-{reforest_species[:10]}",
+    )
+    _insert_feature(
+        integration_connection,
+        report_id=report_id,
+        reforest_species=reforest_species if reforest_species != "null" else None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("reforest_species", "reason"),
+    [
+        ('["a", "b", "c", "d", "e", "f", "g"]', "too many"),
+        ('["' + "A" * 41 + '"]', "too long"),
+        ('["pino", "pino"]', "duplicate"),
+        ('"not an array"', "not array"),
+    ],
+)
+def test_invalid_reforest_species_is_rejected(
+    integration_connection: Connection, seeded: tuple[int, int], reforest_species: str, reason: str
+) -> None:
+    snapshot_id, user_id = seeded
+    report_id = _insert_report(
+        integration_connection, snapshot_id=snapshot_id, user_id=user_id, name=f"RSI-{reason}"
+    )
+    with pytest.raises(IntegrityError), integration_connection.begin_nested():
+        _insert_feature(
+            integration_connection, report_id=report_id, reforest_species=reforest_species
+        )
+
+
+@pytest.mark.parametrize("density", [1, 100, 20000, None])
+def test_valid_reforest_density_is_accepted(
+    integration_connection: Connection, seeded: tuple[int, int], density: int | None
+) -> None:
+    snapshot_id, user_id = seeded
+    report_id = _insert_report(
+        integration_connection, snapshot_id=snapshot_id, user_id=user_id, name=f"D-{density}"
+    )
+    _insert_feature(integration_connection, report_id=report_id, reforest_density=density)
+
+
+@pytest.mark.parametrize("density", [0, -1, 20001])
+def test_invalid_reforest_density_is_rejected(
+    integration_connection: Connection, seeded: tuple[int, int], density: int
+) -> None:
+    snapshot_id, user_id = seeded
+    report_id = _insert_report(
+        integration_connection, snapshot_id=snapshot_id, user_id=user_id, name=f"DI-{density}"
+    )
+    with pytest.raises(IntegrityError), integration_connection.begin_nested():
+        _insert_feature(integration_connection, report_id=report_id, reforest_density=density)

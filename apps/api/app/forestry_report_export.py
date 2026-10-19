@@ -35,7 +35,7 @@ from shapely.geometry.polygon import orient
 
 from forestry_ingestion.shapefile_contract import EXPECTED_PRJ_WKT
 
-ExportFormat = Literal["shp", "gpkg", "csv"]
+ExportFormat = Literal["shp", "gpkg", "csv", "xlsx"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +67,10 @@ EXPORT_FIELDS: tuple[ExportField, ...] = (
     ExportField("FECHA", "C", 10, 0),
     ExportField("ESTADO", "C", 20, 0),
     ExportField("OID_ORIGEN", "N", 10, 0),
+    # Planning fields (migration 0018).  DBF names ≤10 chars.
+    ExportField("SECTOR", "C", 60, 0),
+    ExportField("ESP_REFOR", "C", 254, 0),
+    ExportField("DENS_REFOR", "N", 6, 0),
 )
 # Lineage keys of the 14 base fields, in EXPORT_FIELDS order.
 _BASE_KEYS = (
@@ -150,6 +154,7 @@ class ExportReport:
     report_month: str
     status: str
     report_date: dt.date | None = None
+    conaf_solicitud: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +163,9 @@ class ExportRow:
     geometry: MultiPolygon
     in_report: bool
     geometry_changed: bool
+    sector: str | None = None
+    reforest_species: list[str] | None = None
+    reforest_density: int | None = None
 
 
 def row_values(report: ExportReport, row: ExportRow) -> list[object]:
@@ -171,6 +179,7 @@ def row_values(report: ExportReport, row: ExportRow) -> list[object]:
     fecha = (
         report.report_date.isoformat() if report.report_date is not None else report.report_month
     )
+    esp_refor = " + ".join(row.reforest_species) if row.reforest_species else None
     return [
         *base,
         "si" if row.in_report else "no",
@@ -179,6 +188,9 @@ def row_values(report: ExportReport, row: ExportRow) -> list[object]:
         fecha,
         STATUS_LABELS[report.status],
         source_objectid,
+        row.sector,
+        esp_refor,
+        row.reforest_density,
     ]
 
 
@@ -306,6 +318,12 @@ def export_report(
         return write_shapefile_zip(report, rows), "application/zip", f"{slug}.zip"
     if fmt == "gpkg":
         return write_geopackage(report, rows), "application/geopackage+sqlite3", f"{slug}.gpkg"
+    if fmt == "xlsx":
+        from app.forestry_report_harvest_xlsx import write_harvest_xlsx
+
+        content = write_harvest_xlsx(report, rows)
+        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return content, media, f"{slug}_cosecha.xlsx"
     return write_csv(report, rows), "text/csv; charset=utf-8", f"{slug}.csv"
 
 

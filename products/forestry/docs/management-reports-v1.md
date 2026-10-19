@@ -29,7 +29,7 @@ Spanish guide: [Informes de manejo](es/informes-de-manejo.md).
   the report's base snapshot, not by OBJECTID, which may repeat within a
   snapshot. OBJECTID is still exported from the copied attributes.
 
-## Data (migrations 0014, 0017)
+## Data (migrations 0014, 0017, 0018)
 
 **DECISION (2026-10-19):** Javier (Campo Digital) confirmed that reports need
 the exact day, not just the month. `report_date DATE` was added alongside
@@ -42,7 +42,7 @@ derives `report_month` from it. A CHECK constraint keeps them consistent:
 |---|---|
 | `forestry.report` | name (1–120 characters, unique among non-archived reports ignoring case), type, month `YYYY-MM`, exact date `YYYY-MM-DD` (nullable; legacy rows NULL), status, base snapshot, `revision`, creator, decision time and decider |
 | `forestry.report_note` | append-only review notes; a change request always has text (≤ 2,000 characters) |
-| `forestry.report_feature` | position, `source_feature_ordinal`, `in_report` (the EN_INFORME mark), `geometry_changed`, `attributes` (JSONB, source-contract lineage keys), `geometry` (`MultiPolygon`, EPSG:32718) |
+| `forestry.report_feature` | position, `source_feature_ordinal`, `in_report` (the EN_INFORME mark), `geometry_changed`, `attributes` (JSONB, source-contract lineage keys), `geometry` (`MultiPolygon`, EPSG:32718), planning fields `sector`, `reforest_species`, `reforest_density` (0018, see «Planificación») |
 
 ## Lifecycle and roles
 
@@ -80,7 +80,7 @@ message.
 | `POST …/{report_id}/submit`, `/approve`, `/request-changes`, `/archive` | transitions (body: `revision`, optional `note`) |
 | `POST …/{report_id}/duplicate` | new draft (`201`) |
 | `DELETE /api/forestry/reports/{report_id}` | never-submitted draft only (`204`) |
-| `GET …/{report_id}/export?format=shp\|gpkg\|csv&scope=all\|marked` | download |
+| `GET …/{report_id}/export?format=shp\|gpkg\|csv\|xlsx&scope=all\|marked` | download |
 
 A feature sent without `geometry` is an untouched copy of its source polygon
 (how «Pegar» works); the server copies the base geometry exactly.
@@ -115,6 +115,64 @@ A feature sent without `geometry` is an untouched copy of its source polygon
   approve → Shapefile export; also checked at 800 px width.
 - **LIMITATION:** no snapping, vertex editing or new polygons (out of
   scope); editing is not optimized for touch.
+- **DECISION (2026-10-19, «simple editor»):** a walkthrough found the editor
+  confusing. Copy and paste were needed inside one report, added rodales landed
+  outside the management area, a selection stayed stuck, and the panel jumped.
+  Javier asked for «Simple». Four clickable alternatives were compared on a
+  design canvas, and Rafael chose «one click = in» plus a card:
+  - The editor is one screen: the report's table on the left
+    (`PlanificacionTable`, one row per managed rodal with sector, species and
+    density; a «Todos» row applies a value to all; a cell is written only when
+    its text changed) and the map on the right. There are no steps and no
+    selection state.
+  - **A click on a base rodal adds it** to the management area
+    (`pasteSources` sets `in_report = true`), with a «Deshacer» toast.
+  - **A click on a report rodal opens its card** (`RodalCard`: «Dividir»,
+    «Sacar del informe», «Editar datos», or «Incluir» for a «Resto»), so a
+    planned rodal is never removed by a stray click. A second click or a click
+    outside closes the card.
+  - «Buscar rodal» flies to a rodal and opens its card, with «Agregar al
+    informe» when it is outside the report.
+  - Hovering a row highlights its polygon, and the rodal number in a row
+    shows it on the map.
+  - A progress guide at the top, taken from option A, shows three cards with
+    icons: Rodales (count and hectares), Planificación (a «planned of
+    managed» bar) and Exportar. Each gets a check once done. The cards are not
+    tabs: one only scrolls to its part.
+  - The harvest Excel is the main download at the top. Other formats, CONAF
+    and duplicate/archive/delete sit under «Otros formatos, CONAF y más».
+    Save and send live in a sticky bar.
+  - Icons sit on the actions, and «?» hints explain the parts.
+  - **Motion:** the card and toast ease in, a row's highlight fades, and all
+    of it stops under prefers-reduced-motion.
+  - **Map:** half-level wheel zoom, imagery capped at native zoom 18, and a
+    redraw on resize. View controls borrowed from the main Map page:
+    - «Números» labels every report rodal and, from zoom 15, base rodals at
+      least 44 px across, up to 200, with overlaps dropped and report labels
+      first;
+    - «Opacidad» sets the report fill (10–100 %), and below 35 % the outline
+      takes the fill color;
+    - «Ver todo el informe» refits the view.
+    While a line is drawn, rodal tooltips are hidden, and three things show
+    instead: a dashed preview segment to the cursor, «+segment · total»
+    length beside the cursor (EPSG:32718 metres), and the cursor's UTM
+    coordinates. The bottom bar adds the line's length. No elevation is
+    shown: the base carries none.
+    **RESULT (2026-10-19, local dev, real Degenfeld base, CPU profile):**
+    - opening the editor had one 854 ms long task: interior label points were
+      computed for every base polygon before the viewport test, and
+      reprojection missed its cache (it was keyed by geometry objects the
+      editor re-wraps);
+    - after testing the bbox first, caching label points and boxes, and keying
+      reprojection by the coordinates array, the longest task is 271 ms
+      (first reprojection), zero when arriving from the main map;
+    - labels redraw once per move, not twice.
+    A stacked-card layout for a narrow panel was tried and dropped the same
+    day (Rafael: less concise, less clean); the table stays a table.
+    Opacity and numbers are a per-viewer convenience kept in localStorage,
+    guarded by try/catch.
+  - **Phones:** the map sits above and the table below, and the panel scrolls
+    as a whole.
 
 ## Rules on save
 
@@ -181,6 +239,7 @@ anything is stored; a refusal stores nothing.
 | `shp` | ZIP of `.shp/.shx/.dbf/.prj/.cpg`, written with pyshp; `.prj` is the base's exact ESRI WKT for UTM 18S; `.cpg` is `UTF-8` |
 | `gpkg` | GeoPackage 1.3 written with sqlite3: one `MULTIPOLYGON` layer in EPSG:32718 named after the report |
 | `csv` | attributes only; UTF-8 with BOM, comma, CRLF (as the dashboard's CSV); text starting with `=`, `+`, `-`, `@`, tab or CR gets a leading `'` so a spreadsheet does not run it as a formula |
+| `xlsx` | harvest table (Excel de cosecha, formato Campo Digital); see §«Harvest Excel» below |
 
 Columns: `OBJECTID` (0 for split pieces), `Nom_Predio`, `N_Rodal`, `Sup_ha`,
 `Cod_Uso`, `Editada`, `Uso2024`, `DescUso`, `Cod_Predia`, `N_Rodal_te`,
@@ -191,6 +250,88 @@ OBJECTID). File name: the report name in ASCII, for example
 `Cosecha_pino_enero_2027.zip`. `scope=marked` exports only marked rows.
 Exports are not stored; each one writes the audit event
 `forestry.report.exported`.
+
+### Harvest Excel (`xlsx`, 2026-10-19)
+
+Written with xlsxwriter.  Filename: `<slug>_cosecha.xlsx`.  Media type:
+`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
+The `scope` query parameter is accepted but ignored: the xlsx writer always
+uses the `in_report=True` rows.
+
+**Sheet layout** — «Resumen»:
+- Title cell: «COSECHA TEMPORADA `<year>`-`<year+1>`» where `year` is the
+  `report_date` year, falling back to the `report_month` year for legacy
+  month-only reports.
+- Headers: `predio | especie cosechar | superficie cosecha`.
+- One row per (predio, species group), totalling the managed `sup_ha`.
+- TOTAL row.
+
+**Sheet layout** — one per (species group, predio):
+- Title: «TABLA DE IDENTIFICACIÓN DE RODALES `<SPECIES>` QUE ESTAN
+  CONSIDERADOS EN COSECHA FORESTAL DURANTE LA TEMPORADA `<year>` - PREDIO
+  `<NOMBRE>`».
+- Two header rows (labels + units).  Freeze panes below row 5.
+- One data row per managed polygon (`in_report = True`).
+- TOTAL row with sums of `superficie` and `superficie corta`.
+
+**Column mapping** (14 data columns, B–O):
+
+| Column | Content |
+|---|---|
+| `predio` | `nom_predio` |
+| `sector` | the polygon's «Planificación» sector; blank when not entered — FACT (Javier 2026-10-19): sector is approximate general knowledge, recorded nowhere else |
+| `actividad` | report type in lower case (cosecha / manejo / reforestación) |
+| `rodal` | `n_rodal` of the managed polygon |
+| `superficie (ha)` | sum of `sup_ha` over **all** rows sharing the same source `objectid` — FACT (Javier 2026-10-19): «superficie» is the area of the whole source rodal |
+| `especie` | parsed from `cod_uso_2026`; see `forestry_species.py` |
+| `año plantación` | two-digit year in `cod_uso_2026`, converted to 4-digit; `??` → blank; see `forestry_species.py` |
+| `pendiente (%)` | blank — not in the base |
+| `densidad actual` | blank — not in the base |
+| `superficie corta (ha)` | the managed polygon's own `sup_ha` — FACT (Javier 2026-10-19): «superficie corta» is the area that will actually be harvested |
+| `año corta` | year of `report_date`; falls back to year in `report_month` for legacy reports |
+| `especie a reforestar` | the polygon's «Planificación» species joined with « + »; blank when not entered — FACT (Javier 2026-10-19): it changes per rodal and can be several |
+| `densidad reforestación` | the polygon's total density in pl/ha (one value for all its species — DECISION 2026-10-19); blank when not entered |
+| `plan de manejo` | «sí» if the report has a CONAF solicitud number, else «no» |
+
+Sheets are ordered by species (`SPECIES_ORDER` in `forestry_species.py`) then
+predio.  Sheet names ≤ 31 chars, unique, stripped of `[]:*?/\`.  Polygons
+with no recognised species go to a «Sin especie» sheet.
+
+Species parsing is shared with the dashboard:
+`apps/api/app/forestry_species.py` mirrors
+`products/forestry/dashboard/src/lib/species.ts`; both files must change
+together (stated in each file's header comment).
+
+«Resumen» also carries «PLANTACIÓN TEMPORADA `<year>`-`<year+1>`»:
+`predio | especie a reforestar | superficie plantación | %`, one row per
+predio and species combination (joined with « + »), summing the managed
+polygons' `superficie corta`; polygons with no species entered are left out,
+and % is over that table's total.
+
+### Planificación per rodal (migration 0018, 2026-10-19)
+
+- **FACT (Javier, 2026-10-19):** «sector» is approximate general knowledge,
+  written nowhere; the species to reforest changes from rodal to rodal and can
+  be one or more.
+- **DECISION (2026-10-19):** three nullable fields on `forestry.report_feature`:
+  `sector` (text ≤ 60), `reforest_species` (JSONB array of 1–6 distinct
+  strings of 1–40 characters, checked through the IMMUTABLE function
+  `forestry.reforest_species_ok`, since a CHECK cannot hold a subquery) and
+  `reforest_density` (integer 1–20,000 pl/ha). **One total density per
+  rodal**, not per species.
+- **Editor:** the «Planificación» section appears above the polygon list when
+  one or more managed polygons are selected. A value typed there applies to
+  every selected managed polygon in one undoable step. A field whose values
+  differ shows «Varios valores» and is written only when the user types a new
+  value: focusing and leaving it never overwrites the polygons' own values.
+  Read-only once the report is not editable.
+- **DECISION:** a split copies the fields to both pieces; unmarking keeps them
+  (exports and review only show them on managed polygons); duplicating a
+  report copies them.
+- **Exports:** the harvest Excel fills its three columns; Shapefile,
+  GeoPackage and CSV add `SECTOR`, `ESP_REFOR` and `DENS_REFOR`.
+- **LIMITATION:** «pendiente» and «densidad actual» stay blank; they are not
+  in the base.
 
 ### «Imprimir / PDF» (2026-10-18)
 

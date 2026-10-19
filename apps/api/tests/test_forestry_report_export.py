@@ -56,7 +56,15 @@ def attrs(**overrides: object) -> dict[str, object]:
 
 
 ROWS = [
-    ExportRow(attrs(n_rodal="17-1", editada="wb", sup_ha=0.96), MultiPolygon([HOLED]), True, True),
+    ExportRow(
+        attrs(n_rodal="17-1", editada="wb", sup_ha=0.96),
+        MultiPolygon([HOLED]),
+        True,
+        True,
+        sector="La Reina",
+        reforest_species=["pino radiata", "coigüe"],
+        reforest_density=1111,
+    ),
     ExportRow(attrs(objectid=12, n_rodal="18"), TWO_PARTS, False, False),
 ]
 
@@ -203,3 +211,52 @@ def test_csv_neutralizes_text_that_a_spreadsheet_would_run_as_a_formula() -> Non
     # Numbers stay numbers.
     assert cell["Sup_ha"] == "1.0"
     assert cell["OBJECTID"] == "11"
+
+
+def test_planning_fields_appear_in_shapefile_dbf() -> None:
+    members = read_zip(write_shapefile_zip(REPORT, ROWS))
+    reader = shapefile.Reader(
+        shp=io.BytesIO(members[".shp"]),
+        shx=io.BytesIO(members[".shx"]),
+        dbf=io.BytesIO(members[".dbf"]),
+        encoding="utf-8",
+    )
+    field_names = [f.name for f in reader.fields[1:]]
+    assert "SECTOR" in field_names
+    assert "ESP_REFOR" in field_names
+    assert "DENS_REFOR" in field_names
+
+    first = reader.records()[0].as_dict()
+    assert first["SECTOR"] == "La Reina"
+    assert first["ESP_REFOR"] == "pino radiata + coigüe"
+    assert first["DENS_REFOR"] == 1111
+
+    # Second row has no planning fields
+    second = reader.records()[1].as_dict()
+    assert second["SECTOR"] in (None, "")
+    assert second["ESP_REFOR"] in (None, "")
+    assert second["DENS_REFOR"] is None or second["DENS_REFOR"] == 0
+
+
+def test_planning_fields_appear_in_csv() -> None:
+    text = write_csv(REPORT, ROWS).decode("utf-8-sig")
+    [header, first_row, _second_row] = list(csv.reader(io.StringIO(text)))
+    cell = dict(zip(header, first_row, strict=True))
+    assert cell["SECTOR"] == "La Reina"
+    assert cell["ESP_REFOR"] == "pino radiata + coigüe"
+    assert cell["DENS_REFOR"] == "1111"
+
+
+def test_planning_fields_appear_in_geopackage() -> None:
+    gpkg = write_geopackage(REPORT, ROWS)
+    with tempfile.NamedTemporaryFile(suffix=".gpkg") as tmp:
+        tmp.write(gpkg)
+        tmp.flush()
+        with sqlite3.connect(tmp.name) as conn:
+            cursor = conn.execute(
+                'SELECT SECTOR, ESP_REFOR, DENS_REFOR FROM "Cosecha_pino_enero_2027" LIMIT 1'
+            )
+            row = cursor.fetchone()
+    assert row[0] == "La Reina"
+    assert row[1] == "pino radiata + coigüe"
+    assert row[2] == 1111

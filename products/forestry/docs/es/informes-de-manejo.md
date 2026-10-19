@@ -24,23 +24,46 @@ guarda su propia copia de los rodales.
 
 ## Paso a paso
 
+Desde el 19 de octubre de 2026 el informe es **una tabla a la izquierda y el
+mapa a la derecha**, sin pestañas ni «selección». Arriba, tres tarjetas con
+ícono muestran el avance (Rodales, Planificación, Exportar) y se marcan con
+un ✓ al completarse; tocarlas lleva a esa parte. Javier pidió que fuera lo
+más simple posible; los «?» explican cada parte.
+
 1. En **Informes**, use **Nuevo informe**: nombre, tipo (Cosecha, Manejo,
    Reforestación, Plantación u Otro) y fecha exacta (día, mes y año).
    Los informes anteriores al 2026-10-19 solo tienen mes; se les puede
    asignar una fecha exacta editando el encabezado del informe.
-2. En el mapa, haga clic en los rodales (Mayús + clic para elegir varios),
-   use **Copiar** y luego **Pegar al informe**.
-3. Si solo se maneja una parte de un rodal, use **Dividir con línea**: un
-   clic por cada quiebre, empezando y terminando fuera del rodal, y
-   **Terminar línea**. Toque la parte que se cosecha y **Listo**. Esa parte
-   recibe un código nuevo (por ejemplo 766-1) y queda marcada como área de
-   manejo; el resto mantiene el código original.
-4. **Deshacer** y **Rehacer** sirven para cualquier paso.
-5. **Guardar** y luego **Enviar a revisión**.
-6. Si Javier pide cambios, la nota aparece arriba del informe. Se corrige y
+2. **Un clic en un rodal del mapa lo agrega** al informe (en naranjo) y
+   aparece «Rodal 1208 agregado · Deshacer». También se puede buscar por
+   número («Buscar rodal», arriba del mapa).
+3. **Un clic en un rodal naranjo abre su tarjeta**: **Dividir**, **Sacar del
+   informe** y **Editar datos**. Así un rodal ya planificado no se saca por
+   un clic distraído. Otro clic, o un clic fuera, la cierra.
+4. **Dividir:** un clic por cada quiebre, empezando y terminando fuera del
+   rodal, y **Terminar línea**. Toque la parte que se maneja y **Listo**. Esa
+   parte recibe un código nuevo (por ejemplo 766-1); la otra queda como
+   **«Resto»**, fuera del área de manejo (su tarjeta tiene **Incluir**).
+5. En la **tabla**, una fila por rodal: sector, especie(s) a reforestar y
+   densidad (ver más abajo). Tocar el número de un rodal lo muestra en el
+   mapa.
+6. **Excel de cosecha** está arriba del panel; los otros formatos, el N.º de
+   CONAF, duplicar y borrar están en **«Otros formatos, CONAF y más»**.
+7. En el mapa: **Números** muestra el N.º de cada rodal (los de la base
+   aparecen al acercarse), **Opacidad** aclara el relleno para ver la imagen
+   satelital, y **Ver todo el informe** (⛶, junto a la búsqueda) encuadra el
+   informe. La opacidad y los números se recuerdan en este navegador.
+8. El borde entre el panel y el mapa se **arrastra** para hacer el panel
+   más ancho o angosto (doble clic: ancho normal); el botón ◧ del borde lo
+   **oculta** y deja el mapa completo, con una barra delgada para volver a
+   mostrarlo. Se recuerda en este navegador.
+9. **Guardar** y **Enviar a revisión** están siempre abajo del panel, que
+   indica si hay cambios sin guardar. **Deshacer** y **Rehacer** están arriba
+   del mapa.
+10. Si Javier pide cambios, la nota aparece arriba del informe. Se corrige y
    se vuelve a enviar.
-7. Un informe aprobado queda fijo. Para cambiarlo, use **Duplicar como
-   borrador**.
+11. Un informe aprobado queda fijo. Para cambiarlo, use **Duplicar como
+    borrador**.
 
 ## Desde el mapa
 
@@ -63,6 +86,58 @@ satelital (área de manejo en naranja, número de rodal, escala y norte), la
 leyenda con hectáreas y la tabla de rodales con totales. Con «Imprimir o
 guardar como PDF» el navegador la guarda como PDF, lista para el Plan de
 Manejo. Muestra la última versión guardada del informe.
+
+### Excel de cosecha (formato Campo Digital)
+
+El botón **«Excel de cosecha (formato Campo Digital)»** descarga un archivo
+`.xlsx` con la tabla de identificación de rodales, en el mismo formato que
+usa Campo Digital para el Plan de Manejo.
+
+El libro tiene una hoja **Resumen** (especie, superficie por predio) y una
+hoja por cada combinación especie–predio, con sus datos de rodales, cabecera
+de dos filas y fila de TOTALES.
+
+**Columnas que se llenan solas:**
+
+| Columna | Fuente |
+|---|---|
+| Predio | campo `nom_predio` del rodal |
+| Sector | lo anotado en «Planificación» |
+| Actividad | tipo del informe en minúsculas |
+| Rodal | código del rodal (`n_rodal`) |
+| Superficie (ha) | superficie total del rodal de origen |
+| Superficie corta (ha) | superficie del polígono de manejo (puede ser menor si se dividió) |
+| Especie | especie según el código `cod_uso_2026` |
+| Año plantación | año de plantación según el código |
+| Año corta | año de la fecha del informe |
+| Especie a reforestar | lo anotado en «Planificación» (si son varias, unidas con «+») |
+| Densidad reforestación | lo anotado en «Planificación», en plantas por hectárea |
+| Plan de manejo | «sí» si hay número CONAF, «no» si no hay |
+
+**Columnas que quedan en blanco** (se completan a mano en Excel):
+**Pendiente (%)** y **Densidad actual**, porque no están en la base.
+
+La hoja **Resumen** trae también la tabla de **plantación**: superficie por
+predio y especie a reforestar, con su porcentaje.
+
+### Planificación por rodal
+
+En la tabla del informe hay una fila por cada rodal del área de manejo:
+
+- **Sector:** texto libre (por ejemplo «La Reina»). Javier explicó que es un
+  dato aproximado que no está escrito en ninguna parte; la plataforma sugiere
+  los sectores ya usados en el informe.
+- **Especie(s) a reforestar:** una o varias. Al tocar el campo se abre una
+  lista agrupada («Usadas en este informe», «Plantaciones», «Nativas»);
+  escribir filtra la lista (sin importar tildes) y lo elegido lleva ✓. Si la
+  especie no está, aparece «Agregar "…"». Con el teclado: ↑↓, Enter, Esc.
+- **Densidad (pl/ha):** un solo número por rodal, el total.
+
+La primera fila, **«Todos»**, sirve para poner el mismo valor en todos los
+rodales: se escribe y se presiona **Aplicar a todos**; después se puede
+cambiar uno por uno. Hacer clic en una celda sin escribir nada no cambia
+nada. Estos datos también salen en el Shapefile, GeoPackage y CSV (campos
+SECTOR, ESP_REFOR y DENS_REFOR) y en la revisión de Javier.
 
 ## Estado CONAF
 

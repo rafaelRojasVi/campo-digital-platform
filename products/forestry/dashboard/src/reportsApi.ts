@@ -14,7 +14,7 @@ export type ReportStatus =
   | 'cambios_solicitados'
   | 'archivado'
 export type ReportAction = 'submit' | 'approve' | 'request-changes' | 'archive'
-export type ExportFormat = 'shp' | 'gpkg' | 'csv'
+export type ExportFormat = 'shp' | 'gpkg' | 'csv' | 'xlsx'
 export type ExportScope = 'all' | 'marked'
 
 export const REPORT_TYPES: ReportType[] = [
@@ -101,6 +101,9 @@ export interface ReportFeature {
   geometry_changed: boolean
   attributes: Attributes
   geometry: MultiPolygonGeometry
+  sector: string | null
+  reforest_species: string[] | null
+  reforest_density: number | null
 }
 
 export interface ReportSource {
@@ -131,6 +134,9 @@ export interface SaveFeatureInput {
   in_report: boolean
   attributes: Record<string, string | null>
   geometry: MultiPolygonGeometry | null
+  sector: string | null
+  reforest_species: string[] | null
+  reforest_density: number | null
 }
 
 export interface ReportWarning {

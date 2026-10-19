@@ -186,8 +186,8 @@ def test_migration_0016_extends_0015() -> None:
     assert down_revision == "0015"
 
 
-def test_migration_0017_extends_0016_as_the_single_head() -> None:
-    """0017 (exact date on reports) extends 0016 directly and is the single head."""
+def test_migration_0017_extends_0016() -> None:
+    """0017 (exact date on reports) extends 0016 directly."""
 
     root = Path(__file__).resolve().parents[3]
     revisions = _load_all_migrations(root)
@@ -196,6 +196,17 @@ def test_migration_0017_extends_0016_as_the_single_head() -> None:
     down_revision, _ = revisions["0017"]
     assert down_revision == "0016"
 
+
+def test_migration_0018_extends_0017_as_the_single_head() -> None:
+    """0018 (per-rodal planning fields) extends 0017 directly and is the single head."""
+
+    root = Path(__file__).resolve().parents[3]
+    revisions = _load_all_migrations(root)
+
+    assert "0018" in revisions, "Expected migration 0018 to be present."
+    down_revision, _ = revisions["0018"]
+    assert down_revision == "0017"
+
     down_revisions = {down for down, _ in revisions.values() if down is not None}
     heads = set(revisions) - down_revisions
-    assert heads == {"0017"}
+    assert heads == {"0018"}

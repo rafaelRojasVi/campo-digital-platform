@@ -57,6 +57,12 @@ _TRANSITIONS: dict[str, tuple[frozenset[str], ReportStatus]] = {
     ),
 }
 
+MAX_SECTOR_LENGTH = 60
+MAX_REFOREST_SPECIES = 6
+MAX_SPECIES_NAME_LENGTH = 40
+MAX_REFOREST_DENSITY = 20000
+MIN_REFOREST_DENSITY = 1
+
 REPORT_ERROR_MESSAGES: dict[str, str] = {
     "not_found": "No se encontró el informe.",
     "no_published_base": (
@@ -74,6 +80,18 @@ REPORT_ERROR_MESSAGES: dict[str, str] = {
     "note_too_long": "La nota no puede superar 2.000 caracteres.",
     "cannot_delete": "Sólo se puede borrar un borrador que nunca se envió; archívelo.",
     "invalid_conaf": "El N.º de solicitud CONAF debe tener solo dígitos (hasta 9).",
+    "sector_too_long": f"El sector no puede tener más de {MAX_SECTOR_LENGTH} caracteres.",
+    "too_many_reforest_species": (
+        f"Las especies a reforestar no pueden ser más de {MAX_REFOREST_SPECIES}."
+    ),
+    "reforest_species_too_long": (
+        f"Cada especie no puede tener más de {MAX_SPECIES_NAME_LENGTH} caracteres."
+    ),
+    "reforest_species_duplicate": "Las especies a reforestar no pueden repetirse.",
+    "invalid_reforest_density": (
+        f"La densidad de reforestación debe ser un entero de {MIN_REFOREST_DENSITY} "
+        f"a {MAX_REFOREST_DENSITY:,}."
+    ),
 }
 WARNING_MESSAGES: dict[str, str] = {
     "base_outdated": (
@@ -122,6 +140,9 @@ class StoredFeature:
     geometry_changed: bool
     attributes: dict[str, Any]
     geometry: MultiPolygon
+    sector: str | None = None
+    reforest_species: list[str] | None = None
+    reforest_density: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,7 +247,8 @@ def list_report_features(connection: Connection, report_id: int) -> list[StoredF
         text(
             """
             SELECT position, source_feature_ordinal, in_report, geometry_changed, attributes,
-                   ST_AsBinary(geometry) AS wkb
+                   ST_AsBinary(geometry) AS wkb,
+                   sector, reforest_species, reforest_density
             FROM forestry.report_feature
             WHERE report_id = :id
             ORDER BY position
@@ -242,6 +264,11 @@ def list_report_features(connection: Connection, report_id: int) -> list[StoredF
             geometry_changed=row.geometry_changed,
             attributes=dict(row.attributes),
             geometry=shapely.from_wkb(bytes(row.wkb)),
+            sector=row.sector,
+            reforest_species=list(row.reforest_species)
+            if row.reforest_species is not None
+            else None,
+            reforest_density=row.reforest_density,
         )
         for row in rows
     ]
@@ -353,6 +380,26 @@ def create_report(
     )
 
 
+def _validate_planning_fields(inputs: Sequence[FeatureInput]) -> None:
+    """Raise ReportError when any planning field in ``inputs`` violates its constraint."""
+
+    for item in inputs:
+        if item.sector is not None and len(item.sector) > MAX_SECTOR_LENGTH:
+            raise ReportError("sector_too_long")
+        if item.reforest_species is not None:
+            if len(item.reforest_species) > MAX_REFOREST_SPECIES:
+                raise ReportError("too_many_reforest_species")
+            for name in item.reforest_species:
+                if len(name) > MAX_SPECIES_NAME_LENGTH:
+                    raise ReportError("reforest_species_too_long")
+            if len(item.reforest_species) != len(set(item.reforest_species)):
+                raise ReportError("reforest_species_duplicate")
+        if item.reforest_density is not None and not (
+            MIN_REFOREST_DENSITY <= item.reforest_density <= MAX_REFOREST_DENSITY
+        ):
+            raise ReportError("invalid_reforest_density")
+
+
 def save_report_features(
     connection: Connection,
     *,
@@ -367,6 +414,8 @@ def save_report_features(
         raise ReportError("not_editable")
     if locked.revision != expected_revision:
         raise ReportError("stale_revision")
+
+    _validate_planning_fields(inputs)
 
     sources = load_source_polygons(
         connection,
@@ -384,11 +433,13 @@ def save_report_features(
                 """
                 INSERT INTO forestry.report_feature (
                     report_id, position, source_feature_ordinal, in_report, geometry_changed,
-                    attributes, geometry
+                    attributes, geometry,
+                    sector, reforest_species, reforest_density
                 )
                 VALUES (
                     :report_id, :position, :ordinal, :in_report, :changed,
-                    CAST(:attributes AS jsonb), ST_GeomFromWKB(:wkb, :srid)
+                    CAST(:attributes AS jsonb), ST_GeomFromWKB(:wkb, :srid),
+                    :sector, CAST(:reforest_species AS jsonb), :reforest_density
                 )
                 """
             ),
@@ -402,6 +453,13 @@ def save_report_features(
                     "attributes": json.dumps(feature.attributes, ensure_ascii=False),
                     "wkb": shapely.to_wkb(feature.geometry),
                     "srid": _STORAGE_SRID,
+                    "sector": feature.sector,
+                    "reforest_species": (
+                        json.dumps(feature.reforest_species, ensure_ascii=False)
+                        if feature.reforest_species is not None
+                        else None
+                    ),
+                    "reforest_density": feature.reforest_density,
                 }
                 for feature in resolution.features
             ],
@@ -575,10 +633,12 @@ def duplicate_report(connection: Connection, *, report_id: int, actor_app_user_i
             """
             INSERT INTO forestry.report_feature (
                 report_id, position, source_feature_ordinal, in_report, geometry_changed,
-                attributes, geometry
+                attributes, geometry,
+                sector, reforest_species, reforest_density
             )
             SELECT :new_id, position, source_feature_ordinal, in_report, geometry_changed,
-                   attributes, geometry
+                   attributes, geometry,
+                   sector, reforest_species, reforest_density
             FROM forestry.report_feature WHERE report_id = :id
             """
         ),

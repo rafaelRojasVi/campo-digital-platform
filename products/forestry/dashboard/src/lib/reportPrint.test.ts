@@ -5,7 +5,7 @@ import type { ReportFeature } from '../reportsApi.ts'
 const square = { type: 'MultiPolygon' as const, coordinates: [[[[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]]]] }
 
 function feature(position: number, attributes: ReportFeature['attributes'], inReport: boolean): ReportFeature {
-  return { position, source_feature_ordinal: position, in_report: inReport, geometry_changed: false, attributes, geometry: square }
+  return { position, source_feature_ordinal: position, in_report: inReport, geometry_changed: false, attributes, geometry: square, sector: null, reforest_species: null, reforest_density: null }
 }
 
 describe('printRows', () => {
