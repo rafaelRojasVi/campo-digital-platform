@@ -14,7 +14,7 @@ qué tan rápido carga.
   a «no existe» o a un formulario en blanco. «Copiar N.º» sigue disponible.
   Vuelve cuando se confirme qué número usar.
 - **Estado se puede filtrar.** Un clic en un grupo o un paso de las barras
-  (por ejemplo «En evaluación 31») deja en la tabla solo esos PMF; además hay
+  (por ejemplo «En evaluación») deja en la tabla solo esos PMF; además hay
   un buscador por PMF o N.º de ingreso. La tabla se desplaza por dentro con
   el encabezado fijo, y la página pasó de unos 12.000 px de alto a unos 1.400.
 - **El Explorador carga más liviano.** Antes descargaba todas las filas dos
