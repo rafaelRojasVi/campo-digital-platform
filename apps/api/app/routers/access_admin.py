@@ -7,6 +7,10 @@ platform-wide superadmin capability. A grantee must already have an
 app_user row: onboarding creates that (and records their email) at their own
 first sign-in (see app.access_repository.resolve_or_create_app_user); this
 router only grants a role to an identity that already exists.
+
+An account from outside the Google Workspace (invited through
+``PLATFORM_EXTERNAL_ACCOUNTS``) can be given operator or viewer, and only on
+a product it is invited to: never admin, never another product.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from app.access_repository import (
     list_grantees_for_product,
 )
 from app.audit import PRODUCT_GRANT_CHANGED_EVENT, record_audit_event
+from app.config import Settings, external_account_emails, get_settings, parse_external_accounts
 from app.csrf import require_csrf
 from app.deps import ensure_can, get_current_app_user, get_db_connection
 
@@ -52,6 +57,38 @@ def _view(grantee: ProductGrantee) -> ProductGranteeView:
         display_name=grantee.display_name,
         role=grantee.role.value,
     )
+
+
+def _is_external(user: AppUser, settings: Settings) -> bool:
+    """Whether ``user`` signed in from outside the Workspace, or may.
+
+    Erring towards "external" only ever restricts: an address invited by
+    ``PLATFORM_EXTERNAL_ACCOUNTS``, or a Google identity whose address is not
+    on the Workspace domain, is limited to its invitation.
+    """
+
+    email = (user.email or "").strip().casefold()
+    if email in external_account_emails(settings):
+        return True
+    workspace = settings.google_workspace_domain.strip().casefold()
+    return user.identity_kind == "google" and not email.endswith(f"@{workspace}")
+
+
+def _external_grant_allowed(
+    settings: Settings, *, email: str, product_key: str, role: Role
+) -> bool:
+    """An external account: operator or viewer, on a product it is invited to."""
+
+    if role is Role.ADMIN:
+        return False
+    invited = {
+        product
+        for product, _, invited_email in parse_external_accounts(
+            settings.platform_external_accounts
+        )
+        if invited_email == email.strip().casefold()
+    }
+    return product_key in invited
 
 
 def require_manage_access(
@@ -94,6 +131,7 @@ def grant_product_role_by_email(
     payload: GrantProductRoleRequest,
     caller: Annotated[AppUser, Depends(get_current_app_user)],
     connection: Annotated[Connection, Depends(get_db_connection)],
+    settings: Annotated[Settings, Depends(get_settings)],
     _: Annotated[Role, Depends(require_manage_access)],
 ) -> ProductGranteeView:
     """Grant ``payload.role`` on ``product_key`` to the user with ``payload.email``.
@@ -108,6 +146,17 @@ def grant_product_role_by_email(
         raise HTTPException(
             status_code=404,
             detail="No user has signed in with that email yet.",
+        )
+
+    if _is_external(target, settings) and not _external_grant_allowed(
+        settings, email=target.email or "", product_key=product_key, role=payload.role
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "An account outside the Workspace can only hold operator or viewer "
+                "on a product it is invited to (PLATFORM_EXTERNAL_ACCOUNTS)."
+            ),
         )
 
     previous_role = get_product_role(connection, app_user_id=target.id, product_key=product_key)

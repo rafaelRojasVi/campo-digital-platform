@@ -97,6 +97,19 @@ class Settings(BaseSettings):
         default=None, validation_alias="PLATFORM_BOOTSTRAP_ADMINS"
     )
 
+    # Google accounts outside the Workspace that may sign in, by invitation,
+    # as comma-separated ``product:role:email`` entries (e.g.
+    # ``forestry:viewer:ana@gmail.com``). Only ``operator`` and ``viewer``:
+    # an external account can never be configured as an administrator. Each
+    # entry admits that verified address at Google sign-in and grants that
+    # role on that product only, once (app.access_repository
+    # .maybe_grant_external_accounts). Removing an entry blocks the next
+    # sign-in; a session already open ends within its 8-hour lifetime.
+    # Validated at startup, like PLATFORM_BOOTSTRAP_ADMINS.
+    platform_external_accounts: str | None = Field(
+        default=None, validation_alias="PLATFORM_EXTERNAL_ACCOUNTS"
+    )
+
     platform_bootstrap_admin_tenant_id: str | None = Field(
         default=None, validation_alias="PLATFORM_BOOTSTRAP_ADMIN_TENANT_ID"
     )
@@ -126,6 +139,12 @@ class Settings(BaseSettings):
     @classmethod
     def _validate_platform_bootstrap_admins(cls, value: str | None) -> str | None:
         parse_bootstrap_admins(value)
+        return value
+
+    @field_validator("platform_external_accounts")
+    @classmethod
+    def _validate_platform_external_accounts(cls, value: str | None) -> str | None:
+        parse_external_accounts(value)
         return value
 
     @property
@@ -167,6 +186,58 @@ def parse_bootstrap_admins(value: str | None) -> tuple[tuple[str, str], ...]:
             )
         pairs.append((product_key, email.casefold()))
     return tuple(pairs)
+
+
+# Roles an external (non-Workspace) Google account may be given. ADMIN is
+# deliberately absent: administering a product stays with Workspace members.
+EXTERNAL_ACCOUNT_ROLES = frozenset({"operator", "viewer"})
+
+
+def parse_external_accounts(value: str | None) -> tuple[tuple[str, str, str], ...]:
+    """Parse ``PLATFORM_EXTERNAL_ACCOUNTS`` into ``(product_key, role, email)``.
+
+    Emails are casefolded. An unknown product, a role other than operator or
+    viewer, a malformed entry, or the same address listed twice for one
+    product raises ``ValueError``.
+    """
+
+    entries: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for raw_entry in (value or "").split(","):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        parts = [part.strip() for part in entry.split(":")]
+        if len(parts) != 3 or not all(parts) or "@" not in parts[2]:
+            raise ValueError(
+                f"PLATFORM_EXTERNAL_ACCOUNTS entry {entry!r} is not product:role:email."
+            )
+        product_key, role, email = parts[0], parts[1].casefold(), parts[2].casefold()
+        if product_key not in BOOTSTRAP_PRODUCT_KEYS:
+            raise ValueError(
+                f"PLATFORM_EXTERNAL_ACCOUNTS product {product_key!r} is not one of "
+                f"{sorted(BOOTSTRAP_PRODUCT_KEYS)}."
+            )
+        if role not in EXTERNAL_ACCOUNT_ROLES:
+            raise ValueError(
+                f"PLATFORM_EXTERNAL_ACCOUNTS role {role!r} is not one of "
+                f"{sorted(EXTERNAL_ACCOUNT_ROLES)}; an external account is never an admin."
+            )
+        if (product_key, email) in seen:
+            raise ValueError(
+                f"PLATFORM_EXTERNAL_ACCOUNTS lists {email!r} twice for {product_key!r}."
+            )
+        seen.add((product_key, email))
+        entries.append((product_key, role, email))
+    return tuple(entries)
+
+
+def external_account_emails(settings: Settings) -> frozenset[str]:
+    """Every address ``PLATFORM_EXTERNAL_ACCOUNTS`` admits, casefolded."""
+
+    return frozenset(
+        email for _, _, email in parse_external_accounts(settings.platform_external_accounts)
+    )
 
 
 @lru_cache

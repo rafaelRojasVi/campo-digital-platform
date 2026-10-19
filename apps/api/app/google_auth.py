@@ -43,7 +43,7 @@ from typing import Any, Protocol
 import jwt
 from jwt.exceptions import PyJWKClientError, PyJWTError
 
-from app.config import Settings
+from app.config import Settings, external_account_emails
 
 GOOGLE_JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs"
 GOOGLE_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -83,7 +83,9 @@ class GoogleSignIn:
 
     email: str
     display_name: str
-    hosted_domain: str
+    hosted_domain: str | None
+    workspace_member: bool = True
+    """False for an invited external account (``PLATFORM_EXTERNAL_ACCOUNTS``)."""
 
 
 class SigningKeyResolver(Protocol):
@@ -105,6 +107,7 @@ def verify_id_token(
     client_id: str,
     expected_nonce: str,
     workspace_domain: str,
+    external_emails: frozenset[str] = frozenset(),
 ) -> GoogleSignIn:
     """Verify a Google id_token end to end, or raise ``GoogleSignInError``.
 
@@ -140,17 +143,6 @@ def verify_id_token(
             "Google's identity token does not carry the nonce this sign-in issued."
         )
 
-    # Domains are case-insensitive, but membership is not a matter of
-    # suffix: this compares the whole asserted domain, never the email's.
-    hosted_domain = claims.get("hd")
-    if (
-        not isinstance(hosted_domain, str)
-        or hosted_domain.casefold() != workspace_domain.casefold()
-    ):
-        raise GoogleDomainNotAllowedError(
-            "This account does not belong to the Google Workspace domain allowed to sign in."
-        )
-
     if claims.get("email_verified") is not True:
         raise GoogleSignInError("Google has not verified this account's email address.")
 
@@ -158,13 +150,29 @@ def verify_id_token(
     if not isinstance(email, str) or not email:
         raise GoogleSignInError("Google's identity token carries no email address.")
 
+    # Domains are case-insensitive, but membership is not a matter of
+    # suffix: this compares the whole asserted domain, never the email's.
+    hosted_domain = claims.get("hd")
+    workspace_member = (
+        isinstance(hosted_domain, str) and hosted_domain.casefold() == workspace_domain.casefold()
+    )
+    # Outside the Workspace, only an address invited by configuration, whole
+    # and verified by Google (checked above). An invitation never makes the
+    # account a Workspace member: the caller grants it its configured role
+    # and nothing else.
+    if not workspace_member and email.strip().casefold() not in external_emails:
+        raise GoogleDomainNotAllowedError(
+            "This account does not belong to the Google Workspace domain allowed to sign in."
+        )
+
     subject = str(claims["sub"])
     name = claims.get("name")
     return GoogleSignIn(
         subject=subject,
         email=email,
         display_name=str(name) if isinstance(name, str) and name else email,
-        hosted_domain=hosted_domain,
+        hosted_domain=hosted_domain if isinstance(hosted_domain, str) else None,
+        workspace_member=workspace_member,
     )
 
 
@@ -264,6 +272,7 @@ class GoogleOidcSignInClient:
     ) -> None:
         self._client_id, self._client_secret = _require_credential_settings(settings)
         self._workspace_domain = settings.google_workspace_domain
+        self._external_emails = external_account_emails(settings)
         self._keys: SigningKeyResolver = keys or jwt.PyJWKClient(GOOGLE_JWKS_URI)
         self._exchange: TokenExchange = exchange or _post_to_google_token_endpoint
 
@@ -272,22 +281,23 @@ class GoogleOidcSignInClient:
         nonce = secrets.token_urlsafe(_NONCE_BYTES)
         code_verifier = secrets.token_urlsafe(_CODE_VERIFIER_BYTES)
 
-        query = urllib.parse.urlencode(
-            {
-                "client_id": self._client_id,
-                "redirect_uri": redirect_uri,
-                "response_type": "code",
-                "scope": _SCOPES,
-                "state": state,
-                "nonce": nonce,
-                "code_challenge": _pkce_challenge(code_verifier),
-                "code_challenge_method": "S256",
-                # A hint only: it pre-selects the Workspace account chooser.
-                # Google does not enforce it, which is why the `hd` claim is
-                # re-checked on the way back (see verify_id_token).
-                "hd": self._workspace_domain,
-            }
-        )
+        params = {
+            "client_id": self._client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": _SCOPES,
+            "state": state,
+            "nonce": nonce,
+            "code_challenge": _pkce_challenge(code_verifier),
+            "code_challenge_method": "S256",
+        }
+        # A hint only: it pre-selects the Workspace account chooser. Google
+        # does not enforce it, which is why the `hd` claim is re-checked on
+        # the way back (see verify_id_token). Left out when external accounts
+        # are invited, or the chooser would hide their personal accounts.
+        if not self._external_emails:
+            params["hd"] = self._workspace_domain
+        query = urllib.parse.urlencode(params)
         return AuthorizationRequest(
             auth_uri=f"{GOOGLE_AUTHORIZATION_ENDPOINT}?{query}",
             flow_state=json.dumps({"state": state, "nonce": nonce, "code_verifier": code_verifier}),
@@ -334,6 +344,7 @@ class GoogleOidcSignInClient:
             client_id=self._client_id,
             expected_nonce=flow["nonce"],
             workspace_domain=self._workspace_domain,
+            external_emails=self._external_emails,
         )
 
     @staticmethod

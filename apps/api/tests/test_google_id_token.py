@@ -14,7 +14,13 @@ from typing import Any
 
 import jwt
 import pytest
-from app.google_auth import GoogleSignIn, GoogleSignInError, SigningKeyResolver, verify_id_token
+from app.google_auth import (
+    GoogleDomainNotAllowedError,
+    GoogleSignIn,
+    GoogleSignInError,
+    SigningKeyResolver,
+    verify_id_token,
+)
 from google_tokens import (
     ABSENT,
     CLIENT_ID,
@@ -239,3 +245,53 @@ def test_rejects_a_token_with_no_email_verified_claim(key: SigningKey, jwks: Loc
 def test_rejects_a_token_with_no_email(key: SigningKey, jwks: LocalJwks) -> None:
     with pytest.raises(GoogleSignInError):
         _verify(key.sign(claims(email=ABSENT)), jwks)
+
+
+# ---------------------------------------------------------------------------
+# Invited external accounts (PLATFORM_EXTERNAL_ACCOUNTS)
+# ---------------------------------------------------------------------------
+
+INVITED = frozenset({"ana.externa@gmail.com"})
+
+
+def test_an_invited_personal_account_signs_in_as_a_non_member(
+    key: SigningKey, jwks: LocalJwks
+) -> None:
+    sign_in = _verify(
+        key.sign(claims(hd=ABSENT, email="Ana.Externa@gmail.com")), jwks, external_emails=INVITED
+    )
+
+    assert sign_in.workspace_member is False
+    assert sign_in.hosted_domain is None
+    assert sign_in.email == "Ana.Externa@gmail.com"
+
+
+def test_a_workspace_account_stays_a_member_when_others_are_invited(
+    key: SigningKey, jwks: LocalJwks
+) -> None:
+    assert _verify(key.sign(claims()), jwks, external_emails=INVITED).workspace_member is True
+
+
+def test_an_uninvited_personal_account_is_still_refused(key: SigningKey, jwks: LocalJwks) -> None:
+    with pytest.raises(GoogleDomainNotAllowedError):
+        _verify(key.sign(claims(hd=ABSENT, email="otra@gmail.com")), jwks, external_emails=INVITED)
+
+
+def test_an_invitation_never_admits_an_unverified_address(key: SigningKey, jwks: LocalJwks) -> None:
+    with pytest.raises(GoogleSignInError):
+        _verify(
+            key.sign(claims(hd=ABSENT, email="ana.externa@gmail.com", email_verified=False)),
+            jwks,
+            external_emails=INVITED,
+        )
+
+
+def test_an_invitation_is_matched_on_the_whole_address_not_a_suffix(
+    key: SigningKey, jwks: LocalJwks
+) -> None:
+    with pytest.raises(GoogleDomainNotAllowedError):
+        _verify(
+            key.sign(claims(hd=ABSENT, email="x.ana.externa@gmail.com")),
+            jwks,
+            external_emails=INVITED,
+        )
