@@ -14,13 +14,16 @@ import { Header } from '../components/Header.tsx'
 import { Notice } from '../components/PageShell.tsx'
 import { ReportMap, type ChoosePiece, type MapMode } from '../components/ReportMap.tsx'
 import { ConafCard } from '../components/ConafCard.tsx'
-import { PlanificacionPanel } from '../components/PlanificacionPanel.tsx'
+import { Hint } from '../components/Hint.tsx'
+import { EditorSteps } from '../components/report/EditorSteps.tsx'
+import { stepFromUrl, writeStepToUrl, type EditorStep } from '../lib/editorSteps.ts'
+import { PlanificacionTable } from '../components/report/PlanificacionTable.tsx'
+import { RodalRow } from '../components/report/RodalRow.tsx'
 import { ReportStatusChip } from '../components/ReportStatusChip.tsx'
 import { normalizeSolicitud } from '../lib/conafEstado.ts'
 import { createHistory, recordHistory, redoHistory, undoHistory, type History } from '../lib/history.ts'
 import { describeChanges } from '../lib/reportChanges.ts'
 import {
-  EDITABLE_ATTRIBUTES,
   applySplit,
   draftFromDetail,
   draftSummary,
@@ -31,7 +34,7 @@ import {
   setPlanningFields,
   toSaveFeatures,
   toggleInReport,
-  type DraftFeature,
+  type PasteSource,
   type ReportDraft,
 } from '../lib/reportDraft.ts'
 import { multiPolygonAreaSquareMeters } from '../lib/draftGeometry.ts'
@@ -52,7 +55,7 @@ import {
 } from '../reportsApi.ts'
 import { ROUTES, navigate, onLinkClick, printPath, reportPath, setLeaveGuard } from '../router.ts'
 import type { FeatureCollection, ForestryRole } from '../types.ts'
-import { PASTE_PARAM, readClipboard, writeClipboard } from '../lib/reportClipboard.ts'
+import { PASTE_PARAM, readClipboard } from '../lib/reportClipboard.ts'
 
 const ha = new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -82,7 +85,15 @@ function pasteClipboard(
   if (clipboard.base_snapshot_id !== baseSnapshotId) {
     return { draft: null, message: { tone: 'warn', text: 'Los polígonos copiados son de otra versión de la base.' } }
   }
-  const sources = clipboard.ordinals.flatMap((ordinal) => {
+  return addSources(draft, sourcesFor(clipboard.ordinals, baseByOrdinal))
+}
+
+/** Base polygons as rodales to add to a report. */
+function sourcesFor(
+  ordinals: Iterable<number>,
+  baseByOrdinal: Map<number, FeatureCollection['features'][number]>,
+): PasteSource[] {
+  return [...ordinals].flatMap((ordinal) => {
     const feature = baseByOrdinal.get(ordinal)
     if (feature === undefined) return []
     const p = feature.properties
@@ -96,15 +107,22 @@ function pasteClipboard(
       coordinates: feature.geometry.coordinates,
     }]
   })
+}
+
+/** Add rodales to the draft (null when nothing new) and what to tell. */
+function addSources(draft: ReportDraft, sources: PasteSource[]): { draft: ReportDraft | null; message: Message } {
   const result = pasteSources(draft, sources)
+  const added = plural(result.added, 'rodal agregado', 'rodales agregados')
   return {
     draft: result.added > 0 ? result.draft : null,
     message: {
-      tone: result.skipped > 0 ? 'warn' : 'info',
+      tone: result.skipped > 0 ? 'warn' : 'success',
       text:
-        result.skipped > 0
-          ? `${plural(result.added, 'polígono agregado', 'polígonos agregados')}; ${plural(result.skipped, 'ya estaba', 'ya estaban')} en el informe.`
-          : `${plural(result.added, 'polígono agregado', 'polígonos agregados')} al informe.`,
+        result.added === 0
+          ? `${result.skipped === 1 ? 'Ese rodal ya estaba' : 'Esos rodales ya estaban'} en el informe.`
+          : result.skipped > 0
+            ? `${added}; ${plural(result.skipped, 'ya estaba', 'ya estaban')} en el informe.`
+            : `${added} al área de manejo.`,
     },
   }
 }
@@ -241,6 +259,15 @@ function Editor({
   const [dialog, setDialog] = useState<'approve' | 'changes' | 'archive' | 'delete' | null>(null)
   const [note, setNote] = useState('')
   const [onlyMarked, setOnlyMarked] = useState(false)
+  const [step, setStepState] = useState<EditorStep>(stepFromUrl)
+  const [focus, setFocus] = useState<{ nonce: number; coordinates: Coordinates[] }>({ nonce: 0, coordinates: [] })
+  const [search, setSearch] = useState('')
+  const setStep = useCallback((next: EditorStep) => {
+    setStepState(next)
+    writeStepToUrl(next)
+    // A message belongs to the step it came from.
+    setMessage((current) => (current?.tone === 'error' ? current : null))
+  }, [])
   // ReportMap fits the view when it mounts (the editor remounts per revision).
   const fitNonce = 0
 
@@ -322,25 +349,57 @@ function Editor({
     })
   }, [])
 
-  const copy = useCallback(() => {
-    const ordinals = [...selectedOrdinals]
-    writeClipboard({ base_snapshot_id: report.base_snapshot_id, ordinals })
-    setMessage({ tone: 'info', text: `${plural(ordinals.length, 'polígono copiado', 'polígonos copiados')}. Use «Pegar al informe».` })
-  }, [selectedOrdinals, report.base_snapshot_id])
+  // «Agregar al informe»: the rodales selected on the map, straight into the
+  // management area (no copy/paste step inside the same report).
+  const addSelected = useCallback(() => {
+    const outcome = addSources(draft, sourcesFor(selectedOrdinals, baseByOrdinal))
+    if (outcome.draft !== null) change(outcome.draft)
+    setSelectedOrdinals(new Set())
+    setMessage(outcome.message)
+  }, [draft, change, selectedOrdinals, baseByOrdinal])
+
+  // Rodales copied on the main map («Agregar a un informe») and not added yet.
+  const clipboard = readClipboard()
+  const clipboardKey = clipboard === null ? '' : `${clipboard.base_snapshot_id}:${clipboard.ordinals.join(',')}`
+  const copiedCount = useMemo(() => {
+    if (clipboard === null || clipboard.base_snapshot_id !== report.base_snapshot_id) return 0
+    const present = new Set(draft.features.map((f) => f.source_feature_ordinal))
+    return clipboard.ordinals.filter((ordinal) => !present.has(ordinal)).length
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipboardKey, report.base_snapshot_id, draft.features])
 
   const paste = useCallback(() => {
     const outcome = pasteClipboard(draft, report.base_snapshot_id, baseByOrdinal)
     if (outcome.draft !== null) change(outcome.draft)
-    setSelectedOrdinals(new Set())
     setMessage(outcome.message)
   }, [draft, change, report.base_snapshot_id, baseByOrdinal])
 
-  const removeSelected = useCallback(() => {
-    const ordinals = draft.features.filter((f) => selectedKeys.has(f.key)).map((f) => f.source_feature_ordinal)
-    if (ordinals.length === 0) return
-    change(removeSources(draft, ordinals))
+  // «Buscar rodal»: select the base polygons with that number and fly there.
+  const findRodal = useCallback(() => {
+    const query = search.trim().toLocaleLowerCase('es')
+    if (query === '') return
+    const matches = base.features.filter((f) => (f.properties.n_rodal ?? '').toLocaleLowerCase('es') === query)
+    if (matches.length === 0) {
+      setMessage({ tone: 'warn', text: `No hay un rodal ${search.trim()} en la base.` })
+      return
+    }
+    setMessage(null)
+    setSelectedOrdinals(new Set(matches.map((f) => f.properties.feature_ordinal)))
+    setFocus((current) => ({ nonce: current.nonce + 1, coordinates: matches.map((f) => f.geometry.coordinates) }))
+  }, [search, base.features])
+
+  const focusFeature = useCallback((key: string, additive: boolean) => {
+    onFeatureClick(key, additive)
+    const feature = draft.features.find((f) => f.key === key)
+    if (feature !== undefined && !additive) {
+      setFocus((current) => ({ nonce: current.nonce + 1, coordinates: [feature.coordinates] }))
+    }
+  }, [onFeatureClick, draft.features])
+
+  const removeOne = useCallback((ordinal: number) => {
+    change(removeSources(draft, [ordinal]))
     setSelectedKeys(new Set())
-  }, [draft, selectedKeys, change])
+  }, [draft, change])
 
   // --- Split -------------------------------------------------------------------
 
@@ -596,31 +655,23 @@ function Editor({
     () => (showBase ? detail.sources.map((s) => ({ ordinal: s.source_feature_ordinal, coordinates: s.geometry.coordinates })) : []),
     [showBase, detail.sources],
   )
-  const hint =
-    mode === 'split'
-      ? 'Haga clic para cada quiebre; empiece y termine fuera del rodal. «Terminar línea», doble clic o Enter para cortar.'
-      : mode === 'choose'
-        ? 'Toque cada parte que se maneja (puede elegir varias) y luego «Listo».'
-        : editable
-          ? 'Seleccione rodales en el mapa y use «Copiar» y «Pegar al informe». Mayús + clic agrega a la selección.'
-          : null
+  const managed = draft.features.filter((feature) => feature.in_report)
+  const planned = managed.filter(
+    (f) => f.sector !== null || (f.reforest_species?.length ?? 0) > 0 || f.reforest_density !== null,
+  ).length
+  const selectedHa = [...selectedOrdinals].reduce(
+    (total, ordinal) => total + Number(baseByOrdinal.get(ordinal)?.properties.sup_ha ?? 0),
+    0,
+  )
+  const selectedLabel =
+    selectedOrdinals.size === 1
+      ? `Rodal ${baseByOrdinal.get([...selectedOrdinals][0] ?? -1)?.properties.n_rodal ?? 'sin número'}`
+      : plural(selectedOrdinals.size, 'rodal', 'rodales')
+  const showSelectionBar = editable && mode === 'select' && step === 'rodales' && selectedOrdinals.size > 0
 
   return (
     <div className="report-editor">
-      {editable ? (
-        <div className="report-toolbar" role="toolbar" aria-label="Herramientas del informe">
-          <button type="button" className={`report-tool${mode === 'select' ? ' report-tool--on' : ''}`} aria-pressed={mode === 'select'} onClick={cancelSplit}>Seleccionar</button>
-          <button type="button" className="report-tool" onClick={copy} disabled={selectedOrdinals.size === 0}>Copiar</button>
-          <button type="button" className="report-tool" onClick={paste}>Pegar al informe</button>
-          <button type="button" className={`report-tool${mode === 'split' || mode === 'choose' ? ' report-tool--on' : ''}`} aria-pressed={mode === 'split'} onClick={startSplit} disabled={draft.features.length === 0}>Dividir con línea</button>
-          <button type="button" className="report-tool" onClick={removeSelected} disabled={selectedKeys.size === 0}>Quitar del informe</button>
-          <span className="report-toolbar__sep" aria-hidden="true" />
-          <button type="button" className="report-tool" onClick={undo} disabled={history.past.length === 0}>Deshacer</button>
-          <button type="button" className="report-tool" onClick={redo} disabled={history.future.length === 0}>Rehacer</button>
-        </div>
-      ) : null}
-
-      <div className="report-editor__body">
+      <div className={`report-editor__body${step === 'planificacion' ? ' report-editor__body--wide' : ''}`}>
         <div className="report-editor__map">
           <ReportMap
             base={base}
@@ -632,15 +683,53 @@ function Editor({
             choosePieces={choosePieces}
             overlay={overlay}
             onBaseClick={onBaseClick}
-            onFeatureClick={onFeatureClick}
+            onFeatureClick={focusFeature}
             onLinePoint={(point) => setLinePoints((points) => [...points, point])}
             onFinishLine={finishLine}
             onPieceClick={onPieceClick}
             fitNonce={fitNonce}
+            focus={focus}
           />
+
+          {editable && step === 'rodales' ? (
+            <div className="map-tools" role="toolbar" aria-label="Herramientas del mapa">
+              <button
+                type="button"
+                className={`map-tools__button${mode === 'split' || mode === 'choose' ? ' map-tools__button--on' : ''}`}
+                aria-pressed={mode === 'split' || mode === 'choose'}
+                onClick={mode === 'select' ? startSplit : cancelSplit}
+                disabled={draft.features.length === 0}
+              >
+                {mode === 'select' ? 'Dividir con línea' : 'Cancelar división'}
+              </button>
+              <Hint text="Para manejar solo una parte de un rodal: haga clic en cada quiebre de la línea (empiece y termine fuera del rodal), «Terminar línea», y toque la parte que se maneja. La otra parte queda como «Resto»." />
+              <span className="map-tools__sep" aria-hidden="true" />
+              <button type="button" className="map-tools__button" onClick={undo} disabled={history.past.length === 0} title="Ctrl+Z">
+                Deshacer
+              </button>
+              <button type="button" className="map-tools__button" onClick={redo} disabled={history.future.length === 0} title="Ctrl+Mayús+Z">
+                Rehacer
+              </button>
+            </div>
+          ) : null}
+
+          {showSelectionBar ? (
+            <div className="report-sheet report-sheet--select" role="region" aria-label="Rodales seleccionados">
+              <span>
+                <strong>{selectedLabel}</strong>
+                {` · ${ha.format(selectedHa)} ha`}
+              </span>
+              <button type="button" className="button button--ghost" onClick={() => setSelectedOrdinals(new Set())}>
+                Cancelar
+              </button>
+              <button type="button" className="button" onClick={addSelected}>
+                Agregar al informe
+              </button>
+            </div>
+          ) : null}
           {mode === 'split' ? (
             <div className="report-sheet">
-              <span>{plural(linePoints.length, 'punto', 'puntos')}</span>
+              <span>{`Línea: ${plural(linePoints.length, 'punto', 'puntos')}`}</span>
               <button type="button" className="button button--ghost" onClick={() => setLinePoints((p) => p.slice(0, -1))} disabled={linePoints.length === 0}>Quitar último punto</button>
               <button type="button" className="button button--ghost" onClick={cancelSplit}>Cancelar</button>
               <button type="button" className="button" onClick={finishLine}>Terminar línea</button>
@@ -648,7 +737,7 @@ function Editor({
           ) : null}
           {mode === 'choose' ? (
             <div className="report-sheet">
-              <strong>Toca la parte que se cosecha.</strong>
+              <strong>Toque la parte que se maneja.</strong>
               <button type="button" className="button button--ghost" onClick={() => confirmPieces(true)}>Ninguna por ahora</button>
               <button type="button" className="button button--ghost" onClick={cancelSplit}>Cancelar</button>
               <button type="button" className="button" onClick={() => confirmPieces(false)}>Listo</button>
@@ -666,6 +755,11 @@ function Editor({
             </p>
           </div>
 
+          <EditorSteps
+            step={step}
+            onChange={setStep}
+          />
+
           {showNotes && latestChangeNote !== undefined && report.status === 'cambios_solicitados' ? (
             <Notice tone="warn" title={`${latestChangeNote.author_display_name} pidió cambios`}>
               <p>{latestChangeNote.body}</p>
@@ -673,181 +767,308 @@ function Editor({
           ) : null}
 
           {message !== null ? (
-            <Notice tone={message.tone}>
-              <p>{message.text}</p>
-              {message.stale ? (
-                <button type="button" className="button button--ghost" onClick={onReload}>Recargar</button>
-              ) : null}
-            </Notice>
+            <div className="report-message" key={message.text}>
+              <Notice tone={message.tone}>
+                <p>{message.text}</p>
+                {message.stale ? (
+                  <button type="button" className="button button--ghost" onClick={onReload}>Recargar</button>
+                ) : null}
+              </Notice>
+            </div>
           ) : null}
 
           {warnings.length > 0 ? (
-            <ul className="report-warnings">
-              {warnings.map((warning, index) => (
-                <li key={`${warning.code}-${index}`}>{warning.message}</li>
-              ))}
-            </ul>
-          ) : null}
-
-          {hint !== null ? <p className="report-hint">{hint}</p> : null}
-
-          {reviewing ? (
-            <section className="report-section" aria-label="Cambios del informe">
-              <h3 className="report-section__title">Cambios</h3>
-              <ul className="report-changes">
-                {changes.map((item) => (
-                  <li key={item.ordinal}>
-                    <strong>{item.title}</strong>
-                    <span>{item.detail}</span>
-                  </li>
-                ))}
+            <details className="report-warnings">
+              <summary>
+                {warnings.length === 1 ? '1 aviso al guardar' : `${warnings.length} avisos al guardar`}
+                {' (no impiden enviar)'}
+              </summary>
+              <ul>
+                {warnings.map((warning, index) => {
+                  // Name the rodal: the server's text says only «este polígono».
+                  const rodal = draft.features.find((f) => f.source_feature_ordinal === warning.source_feature_ordinal)
+                  const prefix = rodal === undefined ? '' : `Rodal ${featureCode(rodal) ?? 'sin número'}: `
+                  return <li key={`${warning.code}-${index}`}>{`${prefix}${warning.message}`}</li>
+                })}
               </ul>
-              <label className="report-check">
-                <input type="checkbox" checked={showBase} onChange={(event) => setShowBase(event.target.checked)} />
-                Mostrar base original
-              </label>
-            </section>
+            </details>
           ) : null}
 
-          {editable && draft.features.length === 0 ? (
-            <ol className="report-steps">
-              <li>Seleccione rodales en el mapa.</li>
-              <li>Use «Copiar» y luego «Pegar al informe».</li>
-              <li>Divida con una línea si solo se maneja una parte.</li>
-            </ol>
-          ) : null}
-
-          {/* Above the list: the attribute forms of the selected rodales are
-              long, and the planning fields are what the selection is for. */}
-          <PlanificacionPanel
-            draft={draft}
-            selectedKeys={selectedKeys}
-            editable={editable}
-            onChangePlanning={(keys, fields) => change(setPlanningFields(draft, keys, fields))}
-          />
-
-          <ul className="report-features">
-            {draft.features.map((feature) => (
-              <FeatureRow
-                key={feature.key}
-                feature={feature}
-                editable={editable}
-                selected={selectedKeys.has(feature.key)}
-                baseValues={sourceValues.get(feature.source_feature_ordinal) ?? {}}
-                onSelect={(additive) => onFeatureClick(feature.key, additive)}
-                onToggle={() => change(toggleInReport(draft, feature.key))}
-                onEdit={(name, value, baseValue) => change(setAttribute(draft, feature.key, name, value, baseValue))}
-              />
-            ))}
-          </ul>
-
-          <p className="report-total">
-            <span>{`${plural(summary.count, 'polígono', 'polígonos')} · ${summary.managedCount} en el área de manejo`}</span>
-            {summary.managedCount > 0 ? <span>{` · ${ha.format(summary.managedHa)} ha`}</span> : null}
-          </p>
-
-          <div className="report-actions">
-            {editable ? (
+          <div
+            id="editor-step-panel"
+            role="tabpanel"
+            aria-labelledby={`editor-step-${step}`}
+            className="editor-step"
+            key={step}
+          >
+            {step === 'rodales' ? (
               <>
-                <button type="button" className="button button--ghost" onClick={() => void save()} disabled={busy || conafBusy || !dirty}>Guardar</button>
-                <button type="button" className="button" onClick={() => void submit()} disabled={busy || conafBusy || summary.managedCount === 0}>Enviar a revisión</button>
+                {reviewing ? (
+                  <section className="report-section" aria-label="Cambios del informe">
+                    <h3 className="report-section__title">Cambios</h3>
+                    <ul className="report-changes">
+                      {changes.map((item) => (
+                        <li key={item.ordinal}>
+                          <strong>{item.title}</strong>
+                          <span>{item.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <label className="report-check">
+                      <input type="checkbox" checked={showBase} onChange={(event) => setShowBase(event.target.checked)} />
+                      Mostrar base original
+                    </label>
+                  </section>
+                ) : null}
+
+                {editable ? (
+                  <form
+                    className="rodal-search"
+                    role="search"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      findRodal()
+                    }}
+                  >
+                    <label htmlFor="rodal-search" className="sr-only">Buscar rodal por número</label>
+                    <input
+                      id="rodal-search"
+                      type="search"
+                      inputMode="numeric"
+                      placeholder="Buscar rodal (n.º)"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                    <button type="submit" className="button button--ghost" disabled={search.trim() === ''}>Buscar</button>
+                  </form>
+                ) : null}
+
+                {editable && copiedCount > 0 ? (
+                  <div className="rodal-copied">
+                    <span>{`${plural(copiedCount, 'rodal copiado', 'rodales copiados')} desde el mapa.`}</span>
+                    <button type="button" className="button button--ghost button--small" onClick={paste}>Agregar</button>
+                  </div>
+                ) : null}
+
+                {editable && draft.features.length === 0 ? (
+                  <div className="step-empty">
+                    <p><strong>Elija los rodales del informe.</strong></p>
+                    <ol>
+                      <li>Haga clic en un rodal del mapa, o búsquelo por su número.</li>
+                      <li>Presione <strong>«Agregar al informe»</strong>. Mayús + clic elige varios.</li>
+                      <li>Si solo se maneja una parte, use <strong>«Dividir con línea»</strong>.</li>
+                    </ol>
+                  </div>
+                ) : null}
+
+                {draft.features.length > 0 ? (
+                  <>
+                    <h3 className="report-section__title">
+                      {`Rodales del informe · ${ha.format(summary.managedHa)} ha `}
+                      <Hint text="En naranjo, los rodales del área de manejo: son los que salen en el Excel de cosecha. Toque uno para verlo en el mapa." />
+                    </h3>
+                    <ul className="rodal-list">
+                      {draft.features.map((feature) => (
+                        <RodalRow
+                          key={feature.key}
+                          feature={feature}
+                          editable={editable}
+                          selected={selectedKeys.has(feature.key)}
+                          baseValues={sourceValues.get(feature.source_feature_ordinal) ?? {}}
+                          onSelect={(additive) => focusFeature(feature.key, additive)}
+                          onToggle={() => change(toggleInReport(draft, feature.key))}
+                          onRemove={() => removeOne(feature.source_feature_ordinal)}
+                          onEdit={(name, value, baseValue) => change(setAttribute(draft, feature.key, name, value, baseValue))}
+                        />
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+
+                {managed.length > 0 ? (
+                  <div className="step-next">
+                    <button type="button" className="button" onClick={() => setStep('planificacion')}>
+                      Siguiente: Planificación →
+                    </button>
+                  </div>
+                ) : null}
               </>
             ) : null}
-            {reviewing ? (
+
+            {step === 'planificacion' ? (
               <>
-                <button type="button" className="button button--ghost" onClick={() => setDialog('changes')} disabled={busy}>Pedir cambios</button>
-                <button type="button" className="button" onClick={() => setDialog('approve')} disabled={busy}>Aprobar</button>
+                <p className="step-lead">
+                  {'Sector, especies a reforestar y densidad de cada rodal. Salen en el Excel de cosecha. '}
+                  <Hint text="Se escribe como en una planilla: haga clic en una celda, escriba y presione Enter. La fila «Todos los rodales» pone el mismo valor en todas." />
+                </p>
+                <PlanificacionTable
+                  features={draft.features}
+                  editable={editable}
+                  onChange={(keys, fields) => change(setPlanningFields(draft, keys, fields))}
+                />
+                <div className="step-next">
+                  <button type="button" className="button button--ghost" onClick={() => setStep('rodales')}>← Rodales</button>
+                  <button type="button" className="button" onClick={() => setStep('exportar')}>Siguiente: Exportar →</button>
+                </div>
               </>
             ) : null}
-            {canUpload(role) && report.status !== 'archivado' ? (
-              <button type="button" className="button button--ghost" onClick={() => void duplicate()} disabled={busy || dirty} title={dirty ? 'Guarde los cambios antes de duplicar.' : undefined}>Duplicar como borrador</button>
-            ) : null}
-            {role === 'admin' && report.status !== 'archivado' && report.status !== 'borrador' ? (
-              <button type="button" className="button button--ghost" onClick={() => setDialog('archive')} disabled={busy}>Archivar</button>
-            ) : null}
-            {editable && report.status === 'borrador' && report.submitted_at === null ? (
-              <button type="button" className="button button--ghost report-actions__danger" onClick={() => setDialog('delete')} disabled={busy}>Borrar borrador</button>
+
+            {step === 'exportar' ? (
+              <>
+                <div className="review-summary">
+                  <div>
+                    <span className="review-summary__value">{managed.length}</span>
+                    <span className="review-summary__label">{managed.length === 1 ? 'rodal en el área de manejo' : 'rodales en el área de manejo'}</span>
+                  </div>
+                  <div>
+                    <span className="review-summary__value">{ha.format(summary.managedHa)}</span>
+                    <span className="review-summary__label">hectáreas</span>
+                  </div>
+                  <div>
+                    <span className="review-summary__value">{`${planned}/${managed.length}`}</span>
+                    <span className="review-summary__label">con planificación</span>
+                  </div>
+                </div>
+                {managed.length > 0 && planned < managed.length && editable ? (
+                  <p className="step-note">
+                    {`${plural(managed.length - planned, 'rodal no tiene', 'rodales no tienen')} planificación. `}
+                    <button type="button" className="link-button" onClick={() => setStep('planificacion')}>Completar</button>
+                  </p>
+                ) : null}
+
+                {editable ? (
+                  <section className="report-section" aria-labelledby="send-title">
+                    <h3 id="send-title" className="report-section__title">
+                      {'Enviar a revisión '}
+                      <Hint text="Javier (administrador) revisa el informe y lo aprueba o pide cambios. Mientras está en revisión no se puede editar." />
+                    </h3>
+                    <div className="report-actions">
+                      <button type="button" className="button" onClick={() => void submit()} disabled={busy || conafBusy || summary.managedCount === 0}>
+                        {busy ? 'Enviando…' : 'Enviar a revisión'}
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
+                {reviewing ? (
+                  <section className="report-section" aria-label="Revisión">
+                    <h3 className="report-section__title">Revisión</h3>
+                    <div className="report-actions">
+                      <button type="button" className="button button--ghost" onClick={() => setDialog('changes')} disabled={busy}>Pedir cambios</button>
+                      <button type="button" className="button" onClick={() => setDialog('approve')} disabled={busy}>Aprobar</button>
+                    </div>
+                  </section>
+                ) : null}
+
+                <section className="report-section" aria-label="Exportar">
+                  <h3 className="report-section__title">Descargar</h3>
+                  {dirty ? <p className="step-note">Guarde los cambios antes de descargar.</p> : null}
+                  <a
+                    className={`button export-main${dirty ? ' is-disabled' : ''}`}
+                    aria-disabled={dirty}
+                    href={dirty ? undefined : exportUrl(report.report_id, 'xlsx', 'all')}
+                  >
+                    Excel de cosecha (formato Campo Digital)
+                  </a>
+                  <div className="report-export">
+                    {(['shp', 'gpkg', 'csv'] as const).map((format) => (
+                      <a
+                        key={format}
+                        className={`button button--ghost button--small${dirty ? ' is-disabled' : ''}`}
+                        aria-disabled={dirty}
+                        href={dirty ? undefined : exportUrl(report.report_id, format, onlyMarked ? 'marked' : 'all')}
+                      >
+                        {format === 'shp' ? 'Shapefile' : format === 'gpkg' ? 'GeoPackage' : 'CSV'}
+                      </a>
+                    ))}
+                    <a
+                      className={`button button--ghost button--small${dirty ? ' is-disabled' : ''}`}
+                      aria-disabled={dirty}
+                      href={dirty ? undefined : printPath(report.report_id)}
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      Imprimir / PDF
+                    </a>
+                  </div>
+                  <label className="report-check">
+                    <input type="checkbox" checked={onlyMarked} onChange={(event) => setOnlyMarked(event.target.checked)} />
+                    {'Shapefile, GeoPackage y CSV: solo el área de manejo '}
+                    <Hint text="Sin marcar, el archivo incluye también los «Resto» de los rodales divididos, con EN_INFORME = no." />
+                  </label>
+                </section>
+
+                <section className="report-section report-conaf" aria-labelledby="report-conaf-title">
+                  <h3 id="report-conaf-title" className="report-section__title">
+                    {'Estado en CONAF '}
+                    <Hint text="Cuando CONAF entregue el N.º de solicitud, escríbalo aquí: la plataforma consulta su estado cada noche." />
+                  </h3>
+                  {conafEditable ? (
+                    <form
+                      className="report-conaf__form"
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        void saveConaf()
+                      }}
+                    >
+                      <label className="report-form__field" htmlFor="report-conaf">
+                        <span>N.º solicitud CONAF</span>
+                        <input
+                          id="report-conaf"
+                          maxLength={30}
+                          value={conafInput}
+                          aria-invalid={conafError !== null}
+                          aria-describedby={conafError !== null ? 'report-conaf-error' : undefined}
+                          onChange={(event) => {
+                            setConafInput(event.target.value)
+                            setConafError(null)
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="submit"
+                        className="button button--ghost"
+                        disabled={conafBusy || busy || conafInput.trim() === (conafNumero ?? '')}
+                      >
+                        {conafBusy ? 'Guardando…' : 'Guardar N.º'}
+                      </button>
+                      {conafError !== null ? (
+                        <span id="report-conaf-error" className="report-form__error">{conafError}</span>
+                      ) : null}
+                    </form>
+                  ) : (
+                    <p className="muted">{conafNumero === null ? 'Sin N.º de solicitud CONAF.' : `N.º ${conafNumero}`}</p>
+                  )}
+                  {conafNumero !== null ? <ConafCard key={conafNumero} numero={conafNumero} /> : null}
+                </section>
+
+                {canUpload(role) && report.status !== 'archivado' ? (
+                  <details className="more-actions">
+                    <summary>Más acciones</summary>
+                    <div className="report-actions">
+                      <button type="button" className="button button--ghost" onClick={() => void duplicate()} disabled={busy || dirty} title={dirty ? 'Guarde los cambios antes de duplicar.' : undefined}>Duplicar como borrador</button>
+                      {role === 'admin' && report.status !== 'borrador' ? (
+                        <button type="button" className="button button--ghost" onClick={() => setDialog('archive')} disabled={busy}>Archivar</button>
+                      ) : null}
+                      {editable && report.status === 'borrador' && report.submitted_at === null ? (
+                        <button type="button" className="button button--ghost report-actions__danger" onClick={() => setDialog('delete')} disabled={busy}>Borrar borrador</button>
+                      ) : null}
+                    </div>
+                  </details>
+                ) : null}
+              </>
             ) : null}
           </div>
 
-          <section className="report-section report-conaf" aria-labelledby="report-conaf-title">
-            <h3 id="report-conaf-title" className="report-section__title">Estado en CONAF</h3>
-            {conafEditable ? (
-              <form
-                className="report-conaf__form"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  void saveConaf()
-                }}
-              >
-                <label className="report-form__field" htmlFor="report-conaf">
-                  <span>N.º solicitud CONAF</span>
-                  <input
-                    id="report-conaf"
-                    inputMode="numeric"
-                    maxLength={9}
-                    value={conafInput}
-                    aria-invalid={conafError !== null}
-                    aria-describedby={conafError !== null ? 'report-conaf-error' : undefined}
-                    onChange={(event) => {
-                      setConafInput(event.target.value)
-                      setConafError(null)
-                    }}
-                  />
-                </label>
-                <button
-                  type="submit"
-                  className="button button--ghost"
-                  disabled={conafBusy || busy || conafInput.trim() === (conafNumero ?? '')}
-                >
-                  {conafBusy ? 'Guardando…' : 'Guardar N.º'}
-                </button>
-                {conafError !== null ? (
-                  <span id="report-conaf-error" className="report-form__error">{conafError}</span>
-                ) : null}
-              </form>
-            ) : (
-              <p className="muted">{conafNumero === null ? 'Sin N.º de solicitud CONAF.' : `N.º ${conafNumero}`}</p>
-            )}
-            {conafNumero !== null ? <ConafCard key={conafNumero} numero={conafNumero} /> : null}
-          </section>
-
-          <section className="report-section" aria-label="Exportar">
-            <h3 className="report-section__title">Exportar</h3>
-            {dirty ? <p className="muted">Guarde los cambios antes de exportar.</p> : null}
-            <label className="report-check">
-              <input type="checkbox" checked={onlyMarked} onChange={(event) => setOnlyMarked(event.target.checked)} />
-              Solo áreas de manejo
-            </label>
-            <div className="report-export">
-              {(['shp', 'gpkg', 'csv'] as const).map((format) => (
-                <a
-                  key={format}
-                  className={`button button--ghost${dirty ? ' is-disabled' : ''}`}
-                  aria-disabled={dirty}
-                  href={dirty ? undefined : exportUrl(report.report_id, format, onlyMarked ? 'marked' : 'all')}
-                >
-                  {format === 'shp' ? 'Shapefile (.zip)' : format === 'gpkg' ? 'GeoPackage (.gpkg)' : 'CSV'}
-                </a>
-              ))}
-              <a
-                className={`button button--ghost${dirty ? ' is-disabled' : ''}`}
-                aria-disabled={dirty}
-                href={dirty ? undefined : exportUrl(report.report_id, 'xlsx', 'all')}
-              >
-                Excel de cosecha (formato Campo Digital)
-              </a>
-              <a
-                className={`button button--ghost${dirty ? ' is-disabled' : ''}`}
-                aria-disabled={dirty}
-                href={dirty ? undefined : printPath(report.report_id)}
-                target="_blank"
-                rel="noopener"
-              >
-                Imprimir / PDF
-              </a>
+          {editable ? (
+            <div className={`save-bar${dirty ? ' save-bar--dirty' : ''}`}>
+              <span className="save-bar__status" role="status">
+                {busy ? 'Guardando…' : dirty ? 'Cambios sin guardar' : 'Todo guardado'}
+              </span>
+              <button type="button" className="button" onClick={() => void save()} disabled={busy || conafBusy || !dirty}>
+                Guardar
+              </button>
             </div>
-          </section>
+          ) : null}
         </aside>
       </div>
 
@@ -884,70 +1105,5 @@ function Editor({
         </div>
       ) : null}
     </div>
-  )
-}
-
-function FeatureRow({
-  feature,
-  editable,
-  selected,
-  baseValues,
-  onSelect,
-  onToggle,
-  onEdit,
-}: {
-  feature: DraftFeature
-  editable: boolean
-  selected: boolean
-  baseValues: Record<string, string | null>
-  onSelect: (additive: boolean) => void
-  onToggle: () => void
-  onEdit: (name: string, value: string, baseValue: string | null) => void
-}) {
-  const [fieldError, setFieldError] = useState<string | null>(null)
-  const code = featureCode(feature) ?? 'Sin rodal'
-  const use = feature.attributes.cod_uso === null || feature.attributes.cod_uso === undefined ? '' : ` · ${String(feature.attributes.cod_uso)}`
-  return (
-    <li className={`report-feature${feature.in_report ? ' report-feature--managed' : ''}${selected ? ' report-feature--selected' : ''}`}>
-      <button type="button" className="report-feature__main" onClick={(event) => onSelect(event.shiftKey)} aria-expanded={selected}>
-        <span>{`${code}${use}`}</span>
-        <span className="report-feature__ha">{`${ha.format(Number(feature.attributes.sup_ha ?? 0))} ha`}</span>
-      </button>
-      <label className="report-check">
-        <input type="checkbox" checked={feature.in_report} disabled={!editable} onChange={onToggle} />
-        {`Área de manejo · ${code}`}
-      </label>
-      {selected && editable ? (
-        <div className="report-feature__fields">
-          {EDITABLE_ATTRIBUTES.map((attribute) => {
-            const raw = feature.attributes[attribute.key]
-            const value = raw === null || raw === undefined ? '' : String(raw)
-            return (
-              <label key={attribute.key} className="report-form__field">
-                <span>{attribute.label}</span>
-                <input
-                  // Keyed on the value: undo/redo replaces the shown text.
-                  key={`${attribute.key}:${value}`}
-                  defaultValue={value}
-                  aria-invalid={fieldError === attribute.key}
-                  onBlur={(event) => {
-                    const typed = event.target.value
-                    if (new TextEncoder().encode(typed.trim()).length > attribute.bytes) {
-                      setFieldError(attribute.key)
-                      return
-                    }
-                    setFieldError(null)
-                    if (typed.trim() !== value) onEdit(attribute.key, typed, baseValues[attribute.key] ?? null)
-                  }}
-                />
-                {fieldError === attribute.key ? (
-                  <span className="report-form__error">Texto demasiado largo para este campo.</span>
-                ) : null}
-              </label>
-            )
-          })}
-        </div>
-      ) : null}
-    </li>
   )
 }

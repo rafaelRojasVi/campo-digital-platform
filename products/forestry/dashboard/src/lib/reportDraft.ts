@@ -103,7 +103,10 @@ export function pasteSources(
     added.push({
       key: `f${nextKey}`,
       source_feature_ordinal: source.ordinal,
-      in_report: false,
+      // A rodal is added to be managed (2026-10-19 walkthrough: an unmarked
+      // addition read as «not in the report»). Only the rest of a split is
+      // left outside the management area.
+      in_report: true,
       geometry_changed: false,
       attributes: { ...source.attributes },
       edits: {},

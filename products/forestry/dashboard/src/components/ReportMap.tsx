@@ -41,6 +41,8 @@ interface ReportMapProps {
   onFinishLine: () => void
   onPieceClick: (featureKey: string, index: number) => void
   fitNonce: number
+  /** Fly to these polygons whenever `focus.nonce` changes (search, list click). */
+  focus?: { nonce: number; coordinates: Coordinates[] }
 }
 
 const SATELLITE_TILE_URL =
@@ -101,8 +103,24 @@ export function ReportMap(props: ReportMapProps) {
   useEffect(() => {
     const container = containerRef.current
     if (container === null || mapRef.current !== null) return
-    const map = L.map(container, { zoomControl: true, doubleClickZoom: false, preferCanvas: false })
-    L.tileLayer(SATELLITE_TILE_URL, { attribution: SATELLITE_ATTRIBUTION, maxZoom: 19 }).addTo(map)
+    // Half-level steps and a slower wheel: one notch no longer jumps past the
+    // rodal (2026-10-19 walkthrough).
+    const map = L.map(container, {
+      zoomControl: true,
+      doubleClickZoom: false,
+      preferCanvas: false,
+      zoomSnap: 0.5,
+      zoomDelta: 0.5,
+      wheelPxPerZoomLevel: 140,
+      maxZoom: 19,
+    })
+    // Imagery stops at level 18 in the south; beyond it the last tiles are
+    // enlarged instead of showing «Map data not yet available».
+    L.tileLayer(SATELLITE_TILE_URL, {
+      attribution: SATELLITE_ATTRIBUTION,
+      maxZoom: 19,
+      maxNativeZoom: 18,
+    }).addTo(map)
     // The ~1,600 base polygons draw on one canvas, in a pane under the report
     // (SVG), so report polygons stay clickable on top.
     map.createPane(BASE_PANE)
@@ -121,7 +139,12 @@ export function ReportMap(props: ReportMapProps) {
     })
     mapRef.current = map
     const uninstallKeyboardZoom = installKeyboardZoom(map)
+    // The panel widens in «Planificación»: redraw tiles for the new size
+    // instead of leaving a grey band.
+    const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => map.invalidateSize())
+    resize?.observe(container)
     return () => {
+      resize?.disconnect()
       uninstallKeyboardZoom()
       map.remove()
       mapRef.current = null
@@ -156,6 +179,31 @@ export function ReportMap(props: ReportMapProps) {
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.fitNonce])
+
+  // Fly to the focused polygons (search result or a rodal chosen in the list).
+  useEffect(() => {
+    const map = mapRef.current
+    const focus = props.focus
+    if (map === null || focus === undefined || focus.coordinates.length === 0) return
+    const boxes = focus.coordinates.map((coordinates) =>
+      multiPolygonUtmBbox({ type: 'MultiPolygon', coordinates }),
+    )
+    const bounds = utmBboxToLonLatBounds([
+      Math.min(...boxes.map((box) => box[0])),
+      Math.min(...boxes.map((box) => box[1])),
+      Math.max(...boxes.map((box) => box[2])),
+      Math.max(...boxes.map((box) => box[3])),
+    ])
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    map.flyToBounds(
+      [
+        [bounds.south, bounds.west],
+        [bounds.north, bounds.east],
+      ],
+      { padding: [60, 60], maxZoom: 17, duration: reduce ? 0 : 0.6, animate: !reduce },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.focus?.nonce])
 
   // Base polygons: built once per base snapshot, selectable in «Seleccionar».
   useEffect(() => {

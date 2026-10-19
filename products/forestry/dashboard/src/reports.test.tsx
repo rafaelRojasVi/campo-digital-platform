@@ -249,31 +249,64 @@ function reportDetail(overrides: Partial<import('./reportsApi.ts').Report> = {},
   }
 }
 
+const EDITOR_URL = '/rodales/informes/editar?informe=7'
+
+async function openStep(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
+  await user.click(await screen.findByRole('tab', { name }))
+}
+
+/** Any unsaved change that keeps rodal 17 in the management area. */
+async function touch(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Editar datos' }))
+  await user.click(screen.getByRole('button', { name: 'Dejar fuera del área de manejo' }))
+  await user.click(screen.getByRole('button', { name: 'Incluir' }))
+}
+
 describe('Informe editor', () => {
   beforeEach(() => {
     api.fetchFeatureCollection.mockResolvedValue(baseCollection())
     window.sessionStorage.clear()
+    window.history.replaceState(null, '', EDITOR_URL)
   })
 
-  it('copies a base polygon, pastes it and saves it without geometry', async () => {
+  it('adds a rodal from the map straight into the management area and saves it', async () => {
     const user = userEvent.setup()
     reportsApi.fetchReport.mockResolvedValue(reportDetail())
     reportsApi.saveReportFeatures.mockResolvedValue({ revision: 2, feature_count: 1, warnings: [] })
     render(<RealEditor role="operator" reportId={7} />)
 
-    await user.click(await screen.findByRole('button', { name: 'base-1' }))
-    await user.click(screen.getByRole('button', { name: 'Copiar' }))
-    await user.click(screen.getByRole('button', { name: 'Pegar al informe' }))
-    expect(screen.getByText('1 polígono · 0 en el área de manejo')).toBeInTheDocument()
+    expect(await screen.findByText('Elija los rodales del informe.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'base-1' }))
+    expect(screen.getByRole('region', { name: 'Rodales seleccionados' })).toHaveTextContent('Rodal 17 · 1,00 ha')
+    await user.click(screen.getByRole('button', { name: 'Agregar al informe' }))
+
+    expect(screen.getByText('1 rodal agregado al área de manejo.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Rodal 17/ })).toBeInTheDocument()
+    expect(screen.queryByText('Resto')).not.toBeInTheDocument()
+    expect(screen.getByText('Cambios sin guardar')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(reportsApi.saveReportFeatures).toHaveBeenCalledWith(7, 1, [
-      { source_feature_ordinal: 1, in_report: false, attributes: {}, geometry: null, sector: null, reforest_species: null, reforest_density: null },
+      { source_feature_ordinal: 1, in_report: true, attributes: {}, geometry: null, sector: null, reforest_species: null, reforest_density: null },
     ])
     expect(await screen.findByText('Informe guardado.')).toBeInTheDocument()
+    expect(screen.getByText('Todo guardado')).toBeInTheDocument()
   })
 
-  it('splits with a line, marks the harvested piece and names it 17-1', async () => {
+  it('finds a rodal by its number, and says when there is none', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail())
+    render(<RealEditor role="operator" reportId={7} />)
+
+    await user.type(await screen.findByLabelText('Buscar rodal por número'), '99{Enter}')
+    expect(screen.getByText('No hay un rodal 99 en la base.')).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText('Buscar rodal por número'))
+    await user.type(screen.getByLabelText('Buscar rodal por número'), '17{Enter}')
+    expect(screen.getByRole('region', { name: 'Rodales seleccionados' })).toHaveTextContent('Rodal 17')
+  })
+
+  it('splits with a line: the chosen piece is 17-1, the other is «Resto»', async () => {
     const user = userEvent.setup()
     reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
     render(<RealEditor role="operator" reportId={7} />)
@@ -282,12 +315,12 @@ describe('Informe editor', () => {
     await user.click(screen.getByRole('button', { name: 'punto-1' }))
     await user.click(screen.getByRole('button', { name: 'punto-2' }))
     await user.click(screen.getByRole('button', { name: 'Terminar línea' }))
-    expect(screen.getByText('Toca la parte que se cosecha.')).toBeInTheDocument()
+    expect(screen.getByText('Toque la parte que se maneja.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^pieza-A/ }))
     await user.click(screen.getByRole('button', { name: 'Listo' }))
 
-    expect(screen.getByText('2 polígonos · 1 en el área de manejo')).toBeInTheDocument()
-    expect(screen.getByText(/^17-1/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Rodal 17-1/ })).toBeInTheDocument()
+    expect(screen.getByText('Resto')).toBeInTheDocument()
   })
 
   it('explains a line that does not cross the rodal and keeps drawing', async () => {
@@ -311,7 +344,8 @@ describe('Informe editor', () => {
     await user.click(screen.getByRole('button', { name: /^pieza-A/ }))
     await user.click(screen.getByRole('button', { name: 'Listo' }))
     await user.click(screen.getByRole('button', { name: 'Deshacer' }))
-    expect(screen.getByText('1 polígono · 1 en el área de manejo')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Rodal 17,/ })).toBeInTheDocument()
+    expect(screen.queryByText('Resto')).not.toBeInTheDocument()
   })
 
   it('submits after saving unsaved changes', async () => {
@@ -323,9 +357,8 @@ describe('Informe editor', () => {
     reportsApi.transitionReport.mockResolvedValue({ report_id: 7, status: 'enviado', revision: 3 })
     render(<RealEditor role="operator" reportId={7} />)
 
-    // Unmark and mark again: an unsaved change that keeps a managed polygon.
-    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
-    await user.click(screen.getByRole('checkbox', { name: /Área de manejo/ }))
+    await touch(user)
+    await openStep(user, /Exportar/)
     await user.click(screen.getByRole('button', { name: 'Enviar a revisión' }))
 
     expect(reportsApi.saveReportFeatures).toHaveBeenCalledWith(7, 1, expect.any(Array))
@@ -339,10 +372,12 @@ describe('Informe editor', () => {
       new ApiError(422, 'x', 'Dos polígonos del informe se superponen.', 'overlap', 1),
     )
     render(<RealEditor role="operator" reportId={7} />)
-    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await user.click(await screen.findByRole('button', { name: 'Editar datos' }))
+    await user.click(screen.getByRole('button', { name: 'Dejar fuera del área de manejo' }))
     await user.click(screen.getByRole('button', { name: 'Guardar' }))
     expect(await screen.findByText('Rodal 17: Dos polígonos del informe se superponen.')).toBeInTheDocument()
-    expect(screen.getByText('1 polígono · 0 en el área de manejo')).toBeInTheDocument()
+    expect(screen.getByText('Resto')).toBeInTheDocument()
+    expect(screen.getByText('Cambios sin guardar')).toBeInTheDocument()
   })
 
   it('offers reload on stale_revision', async () => {
@@ -352,7 +387,7 @@ describe('Informe editor', () => {
       new ApiError(409, 'x', 'Otra persona guardó cambios en este informe; recárguelo.', 'stale_revision'),
     )
     render(<RealEditor role="operator" reportId={7} />)
-    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await touch(user)
     await user.click(screen.getByRole('button', { name: 'Guardar' }))
     expect(await screen.findByRole('button', { name: 'Recargar' })).toBeInTheDocument()
   })
@@ -368,6 +403,7 @@ describe('Informe editor', () => {
     render(<RealEditor role="admin" reportId={7} />)
 
     expect(await screen.findByText('Rodal 17 agregado completo')).toBeInTheDocument()
+    await openStep(user, /Exportar/)
     await user.click(screen.getByRole('button', { name: 'Pedir cambios' }))
     const send = screen.getByRole('button', { name: 'Enviar nota' })
     expect(send).toBeDisabled()
@@ -383,24 +419,57 @@ describe('Informe editor', () => {
   })
 
   it('is read-only for a viewer and hides review notes', async () => {
+    const user = userEvent.setup()
     reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'aprobado', revision: 5 }, true))
     render(<RealEditor role="viewer" reportId={7} />)
-    expect(await screen.findByRole('link', { name: 'Shapefile (.zip)' })).toHaveAttribute(
+    expect(await screen.findByRole('button', { name: /^Rodal 17/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Dividir con línea' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Editar datos' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Saca el rodal 18.')).not.toBeInTheDocument()
+    await openStep(user, /Exportar/)
+    expect(screen.getByRole('link', { name: 'Shapefile' })).toHaveAttribute(
       'href',
       '/api/forestry/reports/7/export?format=shp&scope=all',
     )
-    expect(screen.queryByRole('button', { name: 'Dividir con línea' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Saca el rodal 18.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument()
   })
 
-  it('shows the Excel de cosecha export link with scope=all', async () => {
+  it('makes the Excel de cosecha the main download, with scope=all', async () => {
+    const user = userEvent.setup()
     reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'aprobado', revision: 5 }, true))
     render(<RealEditor role="viewer" reportId={7} />)
-    const link = await screen.findByRole('link', { name: 'Excel de cosecha (formato Campo Digital)' })
-    expect(link).toHaveAttribute(
+    await openStep(user, /Exportar/)
+    expect(screen.getByRole('link', { name: 'Excel de cosecha (formato Campo Digital)' })).toHaveAttribute(
       'href',
       '/api/forestry/reports/7/export?format=xlsx&scope=all',
     )
+  })
+
+  it('keeps the step in the address, so a reload opens the same step', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    render(<RealEditor role="operator" reportId={7} />)
+    await openStep(user, /Planificación/)
+    expect(window.location.search).toBe('?informe=7&paso=planificacion')
+    expect(screen.getByRole('tab', { name: /Planificación/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Sector del rodal 17')).toBeInTheDocument()
+  })
+
+  it('writes the planning of a rodal from the table and saves it', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
+    reportsApi.saveReportFeatures.mockResolvedValue({ revision: 2, feature_count: 1, warnings: [] })
+    render(<RealEditor role="operator" reportId={7} />)
+    await openStep(user, /Planificación/)
+
+    await user.type(screen.getByLabelText('Sector del rodal 17'), 'La Reina{Enter}')
+    await user.type(screen.getByLabelText('Especies a reforestar del rodal 17'), 'pino oregón{Enter}')
+    await user.type(screen.getByLabelText('Densidad del rodal 17 en plantas por hectárea'), '1111{Enter}')
+    await user.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    expect(reportsApi.saveReportFeatures).toHaveBeenCalledWith(7, 1, [
+      expect.objectContaining({ sector: 'La Reina', reforest_species: ['pino oregón'], reforest_density: 1111 }),
+    ])
   })
 })
 
@@ -431,7 +500,7 @@ describe('Informe editor — review fixes', () => {
   beforeEach(() => {
     api.fetchFeatureCollection.mockResolvedValue(baseCollection())
     window.sessionStorage.clear()
-    window.history.replaceState(null, '', '/rodales/informes/editar?informe=7')
+    window.history.replaceState(null, '', EDITOR_URL)
   })
 
   afterEach(() => {
@@ -443,7 +512,7 @@ describe('Informe editor — review fixes', () => {
     reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     render(<RealEditor role="operator" reportId={7} />)
-    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await touch(user)
     await user.click(screen.getByRole('link', { name: '← Informes' }))
     expect(confirm).toHaveBeenCalled()
     expect(window.location.pathname).toBe('/rodales/informes/editar')
@@ -458,9 +527,10 @@ describe('Informe editor — review fixes', () => {
     let finish: (value: { revision: number; feature_count: number; warnings: never[] }) => void = () => {}
     reportsApi.saveReportFeatures.mockReturnValue(new Promise((resolve) => { finish = resolve }))
     render(<RealEditor role="operator" reportId={7} />)
-    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await user.click(await screen.findByRole('button', { name: 'Editar datos' }))
+    await user.click(screen.getByRole('button', { name: 'Dejar fuera del área de manejo' }))
     await user.click(screen.getByRole('button', { name: 'Guardar' }))
-    await user.click(screen.getByRole('checkbox', { name: /Área de manejo/ }))
+    await user.click(screen.getByRole('button', { name: 'Incluir' }))
     finish({ revision: 2, feature_count: 1, warnings: [] })
     expect(await screen.findByText('Informe guardado.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeEnabled()
@@ -470,7 +540,7 @@ describe('Informe editor — review fixes', () => {
     const user = userEvent.setup()
     reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
     render(<RealEditor role="operator" reportId={7} />)
-    await user.click(await screen.findByRole('button', { name: /^17/ }))
+    await user.click(await screen.findByRole('button', { name: 'Editar datos' }))
     await user.type(screen.getByLabelText('Uso 2026'), 'PLANTACION')
     await user.tab()
     await user.click(screen.getByRole('button', { name: 'Deshacer' }))
@@ -487,7 +557,9 @@ describe('Informe editor — review fixes', () => {
     await user.click(screen.getByRole('button', { name: 'Terminar línea' }))
     await user.click(screen.getByRole('button', { name: /^pieza-A/ }))
     await user.click(screen.getByRole('button', { name: 'Listo' }))
-    expect(screen.getByText('3 polígonos · 1 en el área de manejo')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Rodal 17-1/ })).toBeInTheDocument()
+    // 17's other piece and 18 (never managed) are both «Resto».
+    expect(screen.getAllByText('Resto')).toHaveLength(2)
   })
 
   it('asks for a part when «Listo» is pressed with none chosen', async () => {
@@ -500,7 +572,7 @@ describe('Informe editor — review fixes', () => {
     await user.click(screen.getByRole('button', { name: 'Terminar línea' }))
     await user.click(screen.getByRole('button', { name: 'Listo' }))
     expect(screen.getByText('Toque al menos una parte, o use «Ninguna por ahora».')).toBeInTheDocument()
-    expect(screen.getByText('1 polígono · 1 en el área de manejo')).toBeInTheDocument()
+    expect(screen.queryByText('Resto')).not.toBeInTheDocument()
   })
 
   it('names the rodal of a server error and selects it', async () => {
@@ -510,17 +582,17 @@ describe('Informe editor — review fixes', () => {
       new ApiError(422, 'x', 'Dos polígonos del informe se superponen.', 'overlap', 1),
     )
     render(<RealEditor role="operator" reportId={7} />)
-    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await touch(user)
     await user.click(screen.getByRole('button', { name: 'Guardar' }))
     expect(await screen.findByText('Rodal 17: Dos polígonos del informe se superponen.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^17/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /^Rodal 17/ })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('refuses a value longer than its field before saving', async () => {
     const user = userEvent.setup()
     reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
     render(<RealEditor role="operator" reportId={7} />)
-    await user.click(await screen.findByRole('button', { name: /^17/ }))
+    await user.click(await screen.findByRole('button', { name: 'Editar datos' }))
     await user.type(screen.getByLabelText('N_Rodal_te'), '12-A')
     await user.tab()
     expect(screen.getByText('Texto demasiado largo para este campo.')).toBeInTheDocument()
@@ -528,9 +600,12 @@ describe('Informe editor — review fixes', () => {
   })
 
   it('lets an admin archive a report sent back for changes', async () => {
+    const user = userEvent.setup()
     reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'cambios_solicitados', revision: 4 }, true))
     render(<RealEditor role="admin" reportId={7} />)
-    expect(await screen.findByRole('button', { name: 'Archivar' })).toBeInTheDocument()
+    await openStep(user, /Exportar/)
+    await user.click(screen.getByText('Más acciones'))
+    expect(screen.getByRole('button', { name: 'Archivar' })).toBeInTheDocument()
   })
 })
 
@@ -556,6 +631,7 @@ function conafFound(): import('./reportsApi.ts').ConafSolicitud {
 describe('Estado CONAF in Rodales', () => {
   beforeEach(() => {
     api.fetchFeatureCollection.mockResolvedValue(baseCollection())
+    window.history.replaceState(null, '', EDITOR_URL)
   })
 
   it('saves the number without touching the draft', async () => {
@@ -564,7 +640,8 @@ describe('Estado CONAF in Rodales', () => {
     reportsApi.updateReport.mockResolvedValue({ report_id: 7, status: 'borrador', revision: 2 })
     reportsApi.fetchConafSolicitud.mockResolvedValue(conafFound())
     render(<RealEditor role="operator" reportId={7} />)
-    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await touch(user)
+    await openStep(user, /Exportar/)
     await user.type(screen.getByLabelText('N.º solicitud CONAF'), '90663')
     await user.click(screen.getByRole('button', { name: 'Guardar N.º' }))
     expect(reportsApi.updateReport).toHaveBeenCalledWith(7, 1, { conaf_solicitud: '090663' })
@@ -580,7 +657,8 @@ describe('Estado CONAF in Rodales', () => {
     reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
     reportsApi.saveReportFeatures.mockReturnValue(new Promise(() => {}))
     render(<RealEditor role="operator" reportId={7} />)
-    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await touch(user)
+    await openStep(user, /Exportar/)
     await user.type(screen.getByLabelText('N.º solicitud CONAF'), '90663')
     await user.click(screen.getByRole('button', { name: 'Guardar' }))
     expect(screen.getByRole('button', { name: 'Guardar N.º' })).toBeDisabled()
@@ -591,7 +669,8 @@ describe('Estado CONAF in Rodales', () => {
     reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
     reportsApi.updateReport.mockReturnValue(new Promise(() => {}))
     render(<RealEditor role="operator" reportId={7} />)
-    await user.click(await screen.findByRole('checkbox', { name: /Área de manejo/ }))
+    await touch(user)
+    await openStep(user, /Exportar/)
     await user.type(screen.getByLabelText('N.º solicitud CONAF'), '90663')
     await user.click(screen.getByRole('button', { name: 'Guardar N.º' }))
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled()
@@ -605,11 +684,13 @@ describe('Estado CONAF in Rodales', () => {
       .mockRejectedValueOnce(new Error('busy'))
       .mockResolvedValueOnce(conafFound())
     render(<RealEditor role="operator" reportId={7} />)
+    await openStep(user, /Exportar/)
     await user.click(await screen.findByRole('button', { name: 'Reintentar' }))
     expect(await screen.findByText('En evaluación')).toBeInTheDocument()
   })
 
   it('lets the number be added to an approved report, not an archived one', async () => {
+    window.history.replaceState(null, '', `${EDITOR_URL}&paso=exportar`)
     reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'aprobado', revision: 6 }, true))
     const { unmount } = render(<RealEditor role="operator" reportId={7} />)
     expect(await screen.findByLabelText('N.º solicitud CONAF')).toBeInTheDocument()
@@ -624,6 +705,7 @@ describe('Estado CONAF in Rodales', () => {
     const user = userEvent.setup()
     reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
     render(<RealEditor role="operator" reportId={7} />)
+    await openStep(user, /Exportar/)
     await user.type(await screen.findByLabelText('N.º solicitud CONAF'), '12/34')
     await user.click(screen.getByRole('button', { name: 'Guardar N.º' }))
     expect(
@@ -663,9 +745,10 @@ describe('Estado CONAF in Rodales', () => {
   })
 
   it('keeps the CONAF section below the report work', async () => {
+    window.history.replaceState(null, '', `${EDITOR_URL}&paso=exportar`)
     reportsApi.fetchReport.mockResolvedValue(reportDetail({}, true))
     render(<RealEditor role="operator" reportId={7} />)
-    const heading = await screen.findByRole('heading', { name: 'Estado en CONAF' })
+    const heading = await screen.findByRole('heading', { name: /^Estado en CONAF/ })
     const submit = screen.getByRole('button', { name: 'Enviar a revisión' })
     expect(submit.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
@@ -725,8 +808,8 @@ describe('Agregar a un informe (from the map)', () => {
     window.history.replaceState(null, '', '/rodales/informes/editar?informe=7&pegar=1')
     render(<RealEditor role="operator" reportId={7} />)
 
-    expect(await screen.findByText('1 polígono · 0 en el área de manejo')).toBeInTheDocument()
-    expect(screen.getByText('1 polígono agregado al informe.')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /^Rodal 17/ })).toBeInTheDocument()
+    expect(screen.getByText('1 rodal agregado al área de manejo.')).toBeInTheDocument()
     expect(window.location.search).toBe('?informe=7')
   })
 })
@@ -753,6 +836,7 @@ describe('Imprimir / PDF', () => {
   })
 
   it('links the editor to the printable page once saved', async () => {
+    window.history.replaceState(null, '', `${EDITOR_URL}&paso=exportar`)
     reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'aprobado' }, true))
     api.fetchFeatureCollection.mockResolvedValue(baseCollection())
     render(<RealEditor role="viewer" reportId={7} />)

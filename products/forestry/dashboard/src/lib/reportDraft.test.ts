@@ -159,10 +159,12 @@ describe('report draft', () => {
       { ordinal: 2, attributes: attributes('18'), coordinates: OTHER },
     ]).draft
     const key = draft.features[0]?.key ?? ''
+    // An added rodal is in the management area until it is left out.
+    expect(draft.features[0]?.in_report).toBe(true)
     draft = toggleInReport(draft, key)
     draft = setAttribute(draft, key, 'cod_uso', 'Eg03', 'Pi06')
     draft = setAttribute(draft, key, 'cod_uso', 'Pi06', 'Pi06')
-    expect(draft.features[0]?.in_report).toBe(true)
+    expect(draft.features[0]?.in_report).toBe(false)
     expect(draft.features[0]?.edits).toEqual({})
     draft = removeSources(draft, [2])
     expect(draft.features).toHaveLength(1)
