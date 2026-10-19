@@ -46,6 +46,11 @@ Users must not connect directly to PostgreSQL. Private objects must not use perm
 
 Do not build a custom password system unless a real requirement forces it. Prefer a managed identity provider. Microsoft Entra ID is worth evaluating because the company already uses Microsoft/OneDrive collaboration, but it is not yet an accepted decision.
 
+Invited external Google accounts (outside the Workspace) are admitted
+only by exact, verified address, listed in `PLATFORM_EXTERNAL_ACCOUNTS`, and
+can hold only operator or viewer on their invited product; see
+[ADR-011](../adr/ADR-011-invited-external-google-accounts.md).
+
 ## Authorization
 
 Authentication answers who the user is; authorization answers what they may do. Product authorization must be explicit and enforced server-side. Final roles must come from actual company workflows, not infrastructure assumptions.
