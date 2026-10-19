@@ -7,7 +7,7 @@
  * Edits stay in an immutable draft with undo/redo until «Guardar»;
  * «Enviar a revisión» saves first.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ApiError, canUpload, fetchFeatureCollection, mutationMessage } from '../api.ts'
 import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
 import { Header } from '../components/Header.tsx'
@@ -19,6 +19,7 @@ import { Icon } from '../components/report/Icon.tsx'
 import { PlanificacionTable } from '../components/report/PlanificacionTable.tsx'
 import { RodalCard } from '../components/report/RodalCard.tsx'
 import { ReportProgress } from '../components/report/ReportProgress.tsx'
+import { PanelResizer } from '../components/report/PanelResizer.tsx'
 import { ReportStatusChip } from '../components/ReportStatusChip.tsx'
 import { normalizeSolicitud } from '../lib/conafEstado.ts'
 import { createHistory, recordHistory, redoHistory, undoHistory, type History } from '../lib/history.ts'
@@ -305,6 +306,11 @@ function Editor({
   // Map display: a per-viewer convenience kept in this browser, if allowed.
   const [fillOpacity, setFillOpacity] = useState(() => readMapPref('opacity', 0.6))
   const [showLabels, setShowLabels] = useState(() => readMapPref('labels', 1) === 1)
+  // The report panel: resizable by its edge, and collapsible to a thin rail.
+  const [panelWidth, setPanelWidth] = useState(() => readMapPref('panel', 600))
+  const [panelOpen, setPanelOpen] = useState(() => readMapPref('panelOpen', 1) === 1)
+  useEffect(() => writeMapPref('panel', panelWidth), [panelWidth])
+  useEffect(() => writeMapPref('panelOpen', panelOpen ? 1 : 0), [panelOpen])
   useEffect(() => writeMapPref('opacity', fillOpacity), [fillOpacity])
   useEffect(() => writeMapPref('labels', showLabels ? 1 : 0), [showLabels])
 
@@ -741,8 +747,26 @@ function Editor({
 
   return (
     <div className="report-editor">
-      <div className="report-editor__body report-editor__body--table">
-        <aside className="report-panel" aria-label="Informe">
+      <div
+        className={`report-editor__body report-editor__body--table${panelOpen ? '' : ' report-editor__body--collapsed'}`}
+        style={{ '--panel-w': `${panelWidth}px` } as CSSProperties}
+      >
+        {panelOpen ? null : (
+          <div className="panel-rail">
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setPanelOpen(true)}
+              aria-label="Mostrar el panel del informe"
+              title="Mostrar el panel"
+            >
+              <Icon name="panelOpen" />
+            </button>
+            <span className="panel-rail__count" aria-hidden="true">{managed.length}</span>
+            <span className="panel-rail__label">{`${plural(managed.length, 'rodal', 'rodales')}`}</span>
+          </div>
+        )}
+        <aside className="report-panel" aria-label="Informe" hidden={!panelOpen}>
           <div className="report-panel__head report-panel__head--row">
             <div>
               <a className="report-panel__back" href={ROUTES.informes} onClick={(event) => onLinkClick(event, ROUTES.informes)}>← Informes</a>
@@ -1000,6 +1024,14 @@ function Editor({
             </div>
           ) : null}
         </aside>
+
+        {panelOpen ? (
+          <PanelResizer
+            width={panelWidth}
+            onWidth={setPanelWidth}
+            onCollapse={() => setPanelOpen(false)}
+          />
+        ) : null}
 
         <div className="report-editor__map">
           <ReportMap

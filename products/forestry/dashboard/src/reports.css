@@ -1282,7 +1282,107 @@ details.report-warnings ul {
    ------------------------------------------------------------------------ */
 
 .report-editor__body--table {
-  grid-template-columns: min(640px, 50vw) minmax(0, 1fr);
+  grid-template-columns: min(var(--panel-w, 600px), calc(100vw - 360px)) 10px minmax(0, 1fr);
+}
+
+.report-editor__body--collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+/* The edge between panel and map: drag to resize, button to collapse. */
+.panel-resizer {
+  position: relative;
+  /* Above Leaflet's panes (≤ 1000), so the collapse button is not hidden. */
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.panel-resizer:hover,
+.panel-resizer:focus-visible {
+  background: var(--green-tint);
+  outline: none;
+}
+
+.panel-resizer:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+
+.panel-resizer__grip {
+  width: 4px;
+  height: 36px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.panel-resizer__collapse {
+  position: absolute;
+  top: 132px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--ink-2);
+  box-shadow: var(--shadow-raised);
+  cursor: pointer;
+}
+
+.panel-resizer__collapse:hover,
+.panel-resizer__collapse:focus-visible {
+  color: var(--ink);
+  border-color: var(--border-strong);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.panel-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  animation: step-in 160ms var(--ease);
+}
+
+.panel-rail__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #fdf0db;
+  color: #6b4300;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.panel-rail__label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.report-panel[hidden] {
+  display: none;
 }
 
 .report-editor__body--table .report-panel {
@@ -1557,9 +1657,19 @@ details.report-warnings ul {
 }
 
 @media (max-width: 900px) {
-  .report-editor__body--table {
+  .report-editor__body--table,
+  .report-editor__body--collapsed {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(260px, 38vh) minmax(0, 1fr);
+  }
+
+  .panel-resizer,
+  .panel-rail {
+    display: none;
+  }
+
+  .report-panel[hidden] {
+    display: flex;
   }
 
   .report-editor__body--table .report-editor__map {

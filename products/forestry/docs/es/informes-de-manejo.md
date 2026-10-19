@@ -53,12 +53,16 @@ más simple posible; los «?» explican cada parte.
    aparecen al acercarse), **Opacidad** aclara el relleno para ver la imagen
    satelital, y **Ver todo el informe** (⛶, junto a la búsqueda) encuadra el
    informe. La opacidad y los números se recuerdan en este navegador.
-8. **Guardar** y **Enviar a revisión** están siempre abajo del panel, que
+8. El borde entre el panel y el mapa se **arrastra** para hacer el panel
+   más ancho o angosto (doble clic: ancho normal); el botón ◧ del borde lo
+   **oculta** y deja el mapa completo, con una barra delgada para volver a
+   mostrarlo. Se recuerda en este navegador.
+9. **Guardar** y **Enviar a revisión** están siempre abajo del panel, que
    indica si hay cambios sin guardar. **Deshacer** y **Rehacer** están arriba
    del mapa.
-9. Si Javier pide cambios, la nota aparece arriba del informe. Se corrige y
+10. Si Javier pide cambios, la nota aparece arriba del informe. Se corrige y
    se vuelve a enviar.
-10. Un informe aprobado queda fijo. Para cambiarlo, use **Duplicar como
+11. Un informe aprobado queda fijo. Para cambiarlo, use **Duplicar como
     borrador**.
 
 ## Desde el mapa
