@@ -3,7 +3,18 @@
 Nota para Campo Digital, Javier y Marianne. El detalle técnico, en inglés,
 está en [Estado CONAF](../../../../docs/platform/conaf-estado.md).
 
-## Activo desde el 18 de octubre
+## En pausa desde el 19 de octubre
+
+Al revisar todos los números de la planilla contra CONAF vimos PMF que la
+planilla marca «Aprobado» y CONAF muestra «Denegada»; entre ellos, todos los
+que tienen un recurso de reposición registrado. Creemos que la consulta de
+CONAF sigue mostrando la denegación original aunque el recurso se aprobó,
+pero no está confirmado. Mientras Campo Digital lo aclara, la columna
+«Estado CONAF» y la tarjeta del PMF quedan ocultas, para no mostrar como
+denegados planes aprobados. El enlace «Abrir Oficina Virtual CONAF» sigue
+activo y abre la solicitud correcta.
+
+## 18 de octubre: el número de la planilla sí sirve
 
 Del 17 al 18 de octubre estuvo oculto por un error nuestro: la plataforma
 solo consultaba números de puros dígitos, y los «N Ingreso» de la planilla

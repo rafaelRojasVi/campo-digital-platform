@@ -215,18 +215,14 @@ describe('EstadoPage', () => {
 })
 
 describe('EstadoPage — Estado CONAF column', () => {
-  // On since 2026-10-18: CONAF answers the planilla's slashed «N Ingreso».
-  it('reads the stored results for the most recent number of each PMF', async () => {
-    const lifecycle = makeLifecycle()
-    lifecycle.rows[0] = { ...lifecycle.rows[0], numero_ingreso: '39/345-6/24 11/345-6/26' }
-    lifecycle.rows[1] = { ...lifecycle.rows[1], numero_ingreso: '12/345-6/24' }
-    vi.mocked(getLifecycle).mockResolvedValue({ ok: true, data: lifecycle })
+  // Paused since 2026-10-19: approved plans showed «DENEGADA» in CONAF's
+  // consulta (see lib/conafFlag.ts). The Oficina Virtual column stays.
+  it('is hidden and never reads CONAF results', async () => {
+    vi.mocked(getLifecycle).mockResolvedValue({ ok: true, data: makeLifecycle() })
     vi.mocked(getPlazos).mockResolvedValue({ ok: true, data: makePlazos() })
-    vi.mocked(getConafSolicitudes).mockResolvedValue({ ok: true, data: [] })
     renderPage()
-    expect(await screen.findByRole('columnheader', { name: 'Estado CONAF' })).toBeInTheDocument()
-    await waitFor(() =>
-      expect(getConafSolicitudes).toHaveBeenCalledWith(['11/345-6/26', '12/345-6/24']),
-    )
+    expect(await screen.findByRole('columnheader', { name: 'Oficina Virtual' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Estado CONAF' })).not.toBeInTheDocument()
+    expect(getConafSolicitudes).not.toHaveBeenCalled()
   })
 })

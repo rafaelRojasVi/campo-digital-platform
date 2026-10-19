@@ -31,7 +31,9 @@ calculation, reading rule or workbook contract changed. Not deployed
   «Correction»)** — The «Abrir» link follows `CONAF_ESTADO_ENABLED`
   (`src/lib/conafFlag.ts`): while it is off only «Copiar N.º» shows, and the
   Estado column is headed «N.º para copiar». Turning the switch on restores
-  the link, the column and the drawer card together.
+  the link, the column and the drawer card together. Since 2026-10-19 the
+  link no longer follows the switch: it is always shown, while the switch
+  (off again) governs only the column and the drawer card.
 - **DECISION** — Estado: each legend entry of «PMF por grupo» and «En
   trámite, por paso» is a button that narrows the table to that group or
   step (choosing it again shows all); a search by PMF or N.º de ingreso;

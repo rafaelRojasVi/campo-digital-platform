@@ -15,7 +15,6 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { CONAF_ESTADO_ENABLED } from '../lib/conafFlag'
 import { solicitudesInCell } from '../lib/conafEstado'
 
 export const OFICINA_VIRTUAL_CONAF_URL = 'https://oficinavirtual.conaf.cl/consultas/index.php'
@@ -35,10 +34,10 @@ export function OficinaVirtualLink({
   numero,
   compact = false,
   testId = 'oficina-virtual',
-  withLink = CONAF_ESTADO_ENABLED,
+  withLink = true,
 }: {
   numero: string | null
-  /** Show «Abrir Oficina Virtual CONAF»; off with the Estado CONAF switch. */
+  /** Show «Abrir Oficina Virtual CONAF» beside «Copiar N.º». */
   withLink?: boolean
   /** «Abrir» instead of the full label, for a table cell. */
   compact?: boolean

@@ -123,10 +123,45 @@ notes (Spanish):
   - The `/api/conaf/solicitudes/{numero:path}` routes accept the slashes.
   - `CONAF_ESTADO_ENABLED` is on again (`src/lib/conafFlag.ts`), and the
     «Abrir Oficina Virtual» link opens the result with the number entered.
+    (Switched off again on 2026-10-19; see below.)
 - **RESULT (2026-10-18, live, three lookups one second apart):**
   `12/345-6/24` found (APROBADA, resolution 2024-08-26); a two-number cell's
   most recent number found APROBADA with a resolution three days old, while
   the planilla still shows the PMF «En evaluación»; `10099991` not found.
+
+## Planilla-wide check: Transelec status paused again (2026-10-19)
+
+- **RESULT (2026-10-19):** every distinct number of the development copy of
+  the planilla (the 09-Sept workbook) was queried once, 1.5 s apart, together
+  with its resolution page (`consultas/ver.php?id=<n>`, public, no login).
+  Raw pages stayed outside the repository and were deleted afterwards.
+  - Every APROBADA solicitud has a resolution in one format: «Apruébase»,
+    «Superficie aprobada» and a six-column «Solicitado / Aprobado (ficha
+    predial)» table (rodal, superficie, actividad; rodal, superficie, año)
+    whose numbers all parse. One had no table (0.00 ha, observaciones only).
+    The activities seen are CORTA OOCC and REFORESTACION.
+  - Every DENEGADA solicitud says «Rechácese», with no superficie or table;
+    the reasons are free text under «Observaciones».
+  - «En evaluación» rows have no resolution link. The 8-digit numbers answer
+    «no existe»; two slashed numbers answered «Intente más tarde» twice.
+- **FACT:** a substantial share of PMF that the planilla marks «Aprobado»
+  are DENEGADA in the consulta, including **every** PMF with a «Reingreso
+  rec. reposición» recorded. Others, with no recurso recorded, are not
+  explained by the data. Some PMF «En trámite» in the planilla are APROBADA
+  in CONAF (possibly only because the 09-Sept copy is old).
+- **INFERENCE:** after a denial is overturned by a recurso de reposición, the
+  consulta keeps showing the original denial.
+- **DECISION (2026-10-19):** `CONAF_ESTADO_ENABLED` is off again: the column
+  would tell Transelec that approved plans were denied. The «Abrir Oficina
+  Virtual CONAF» links no longer depend on it and open the most recent
+  number, so a person sees CONAF's own page. Slashed-number support, the
+  nightly refresh and Rodales are unchanged.
+- **OPEN QUESTION (for Campo Digital):** what happens to the consulta after
+  a recurso de reposición, and why the remaining approved PMF show DENEGADA.
+  The answer decides the rule for turning the column back on.
+- **HYPOTHESIS:** reading the approval resolutions (one fixed format) could
+  check the planilla's superficie per área and reforestation commitments;
+  not designed, waiting on what Marianne copies from them by hand.
 
 ## Open questions
 

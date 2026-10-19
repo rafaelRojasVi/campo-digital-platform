@@ -10,7 +10,6 @@
 import type { ReactNode } from 'react'
 import type { EditableFieldName, LifecycleRow } from '../api'
 import { OficinaVirtualLink } from '../components/OficinaVirtualLink'
-import { CONAF_ESTADO_ENABLED } from './conafFlag'
 import { cell } from '../format'
 import {
   LIFECYCLE_FLAG_LABELS,
@@ -85,7 +84,7 @@ export const ESTADO_COLUMNS: readonly EstadoColumn[] = [
   },
   {
     key: 'oficina',
-    header: CONAF_ESTADO_ENABLED ? 'Oficina Virtual' : 'N.º para copiar',
+    header: 'Oficina Virtual',
     // The most recent ingreso, as the 90-day clock counts from it.
     render: (row) => (
       <OficinaVirtualLink
