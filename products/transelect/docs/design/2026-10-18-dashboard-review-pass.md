@@ -27,7 +27,8 @@ calculation, reading rule or workbook contract changed. Not deployed
 
 ## Decisions
 
-- **DECISION** — The «Abrir» link follows `CONAF_ESTADO_ENABLED`
+- **DECISION (superseded the same day, see docs/platform/conaf-estado.md
+  «Correction»)** — The «Abrir» link follows `CONAF_ESTADO_ENABLED`
   (`src/lib/conafFlag.ts`): while it is off only «Copiar N.º» shows, and the
   Estado column is headed «N.º para copiar». Turning the switch on restores
   the link, the column and the drawer card together.

@@ -60,18 +60,17 @@ describe('EstadoTable', () => {
     expect(onOpen).toHaveBeenLastCalledWith(rows[2])
   })
 
-  it('leaves a click or Enter on «Copiar N.º» to it, not to the row', async () => {
+  it('leaves a click or Enter on the Oficina Virtual controls to them, not to the row', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
     const onOpen = vi.fn()
     try {
       render(<EstadoTable rows={rows} selectedRow={null} onOpen={onOpen} />)
       const row = screen.getByTestId('estado-row-3')
-      const copy = within(row).getByRole('button', { name: 'Copiar N.º ING-900' })
-      await userEvent.click(copy)
-      fireEvent.keyDown(copy, { key: 'Enter' })
-      // No «Abrir» while the CONAF number is unconfirmed (CONAF_ESTADO_ENABLED).
-      expect(within(row).queryByRole('link', { name: /Oficina Virtual CONAF/ })).toBeNull()
+      await userEvent.click(within(row).getByRole('button', { name: 'Copiar N.º ING-900' }))
+      fireEvent.keyDown(within(row).getByRole('link', { name: /^Abrir Oficina Virtual CONAF/ }), {
+        key: 'Enter',
+      })
       expect(writeText).toHaveBeenCalledWith('ING-900')
       expect(onOpen).not.toHaveBeenCalled()
     } finally {

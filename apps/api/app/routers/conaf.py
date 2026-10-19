@@ -35,7 +35,7 @@ from app.security_events import SecurityEventNote, SecurityHTTPException
 
 MAX_BULK = 500
 MANUAL_REFRESH_EVERY = timedelta(seconds=60)
-_BAD_NUMBER = "Ese número no se puede consultar en CONAF (solo dígitos)."
+_BAD_NUMBER = "Ese número no se puede consultar en CONAF (dígitos, o el formato 12/345-6/24)."
 _TOO_MANY = f"Se pueden consultar hasta {MAX_BULK} números a la vez."
 _BUSY = "CONAF está ocupado; intente de nuevo en un momento."
 
@@ -152,7 +152,9 @@ def get_solicitudes(
     return ConafBulkResponse(solicitudes=[_model(records[n], now) for n in sorted(records)])
 
 
-@router.get("/solicitudes/{numero}", response_model=ConafSolicitudModel)
+# `:path`: a slashed CONAF number (12/345-6/24) arrives with its slashes
+# decoded, so the parameter must be allowed to span them.
+@router.get("/solicitudes/{numero:path}", response_model=ConafSolicitudModel)
 def get_solicitud(numero: str, engine: DatabaseEngine, client: Client) -> ConafSolicitudModel:
     """One solicitud; refreshed from CONAF when the stored result is old."""
 
@@ -167,7 +169,7 @@ def get_solicitud(numero: str, engine: DatabaseEngine, client: Client) -> ConafS
 
 
 @router.post(
-    "/solicitudes/{numero}/refresh",
+    "/solicitudes/{numero:path}/refresh",
     response_model=ConafSolicitudModel,
     dependencies=[Depends(require_csrf)],
 )

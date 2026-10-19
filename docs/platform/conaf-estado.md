@@ -87,7 +87,7 @@ notes (Spanish):
   normalization skips; 101 are 8 digits, all starting with `10`, holding 10
   distinct values; none parse as dates. Those 10 are the `not_found` numbers.
   `N Ingreso2` is empty in 705 rows and slash-shaped in the rest.
-- **INFERENCE:** the planilla's `N Ingreso` is not the solicitud number that
+- **INFERENCE (withdrawn 2026-10-18, see Correction):** the planilla's `N Ingreso` is not the solicitud number that
   CONAF's public consulta takes (six digits, such as `090663`). The
   slash shape resembles a regional office ingreso number; this is unconfirmed.
 - **DECISION (2026-10-17, Rafael):** the Transelec column and drawer card
@@ -99,10 +99,40 @@ notes (Spanish):
   Transelec numbers (10 lookups a night), so the data is ready if the flag
   is turned back on.
 
+## Correction: the slashed `N Ingreso` is CONAF's number (2026-10-18)
+
+- **FACT (2026-10-18, reported by Rafael from CONAF's page, then reproduced
+  by GET and POST):** CONAF's public consulta answers the planilla's slashed
+  `N Ingreso` as written. `12/345-6/24` returns its row (Ley 20.283 obras
+  civiles, the PMF's total area, APROBADA). Sent as a link the
+  slashes are URL-encoded (`nsolicitud=12%2F345-6%2F24`).
+- **FACT:** the 2026-10-17 INFERENCE above was wrong. It came from querying
+  only the numbers the normalization let through (the 8-digit `10…` ones,
+  which do answer «no existe»); the slashed numbers were never sent. The
+  2026-10-05 note in `OficinaVirtualLink.tsx` that slashed numbers failed was
+  also wrong.
+- **DECISION (2026-10-18):**
+  - `normalize_solicitud` accepts 1–9 digits (padded to six, as before) and
+    `correlativo/oficina-código/año` numbers kept as written; a typo such as
+    `16/345-10-25` is not corrected and stays unqueryable.
+  - `solicitudes_in_cell` returns every number of a planilla cell: some
+    cells hold the ingreso and the reingreso together; the nightly run
+    collects both, and the Transelec column reads the most recent (last of
+    `N Ingreso2`, else of `N Ingreso`).
+  - Migration 0016 widens both CHECK constraints to that shape.
+  - The `/api/conaf/solicitudes/{numero:path}` routes accept the slashes.
+  - `CONAF_ESTADO_ENABLED` is on again (`src/lib/conafFlag.ts`), and the
+    «Abrir Oficina Virtual» link opens the result with the number entered.
+- **RESULT (2026-10-18, live, three lookups one second apart):**
+  `12/345-6/24` found (APROBADA, resolution 2024-08-26); a two-number cell's
+  most recent number found APROBADA with a resolution three days old, while
+  the planilla still shows the PMF «En evaluación»; `10099991` not found.
+
 ## Open questions
 
-- **OPEN QUESTION:** where each Transelec PMF's CONAF solicitud number
-  lives, given that no `N Ingreso` shape matched (see above).
+- **OPEN QUESTION:** what the 8-digit `N Ingreso` values starting with `10`
+  are (10 distinct, in 101 rows): CONAF's consulta does not know them.
+  They may be numbers from another CONAF system; Campo Digital can say.
 
 ## Related documentation
 

@@ -476,7 +476,7 @@ function Editor({
     const trimmed = conafInput.trim()
     const normalized = trimmed === '' ? null : normalizeSolicitud(trimmed)
     if (trimmed !== '' && normalized === null) {
-      setConafError('Solo dígitos, hasta 9.')
+      setConafError('Use el N.º de CONAF: dígitos (hasta 9) o el formato 12/345-6/24.')
       return
     }
     setConafBusy(true)

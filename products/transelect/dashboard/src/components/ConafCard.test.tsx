@@ -59,8 +59,8 @@ describe('ConafCard', () => {
     expect(screen.getByText('PLAN DE MANEJO')).toBeInTheDocument()
   })
 
-  it('never asks CONAF for a planilla-style number', () => {
-    render(<ConafCard numero="12/34-5/26" />)
+  it('never asks CONAF for a mistyped planilla number', () => {
+    render(<ConafCard numero="16/345-10-25" />)
     expect(screen.getByText(/no se puede consultar en CONAF/)).toBeInTheDocument()
     expect(api.getConafSolicitud).not.toHaveBeenCalled()
   })

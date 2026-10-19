@@ -36,7 +36,9 @@ describe('conafEstado', () => {
   it('normalizes like the server', () => {
     expect(normalizeSolicitud(' 90663 ')).toBe('090663')
     expect(normalizeSolicitud('123456789')).toBe('123456789')
-    expect(normalizeSolicitud('12/34-5/26')).toBeNull()
+    // CONAF's own slashed numbers, kept as written; a typo is not corrected.
+    expect(normalizeSolicitud(' 12/345-6/24 ')).toBe('12/345-6/24')
+    expect(normalizeSolicitud('16/345-10-25')).toBeNull()
     expect(normalizeSolicitud('1234567890')).toBeNull()
     expect(normalizeSolicitud(null)).toBeNull()
   })

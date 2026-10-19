@@ -2,19 +2,11 @@
  * «Abrir Oficina Virtual CONAF» and «Copiar N.º», beside an N.º de ingreso.
  *
  * CONAF's consulta page is a form that POSTs `nsolicitud` to `action.php`,
- * and `action.php` answers the same number sent by GET (checked 2026-10-05:
- * the same result page for both; without the parameter it says «No se
- * recibio el parametro»). CONAF's solicitud numbers are plain digits: for a
- * planilla-style «n/n-n/n» it answers «No fue posible realizar su consulta en
- * este momento», by form or by link alike, which reads as CONAF being down.
- * So a plain number opens its result in a new tab, already entered; anything
- * else opens the empty consulta page, and «Copiar N.º» is there for both.
- * Whether CONAF's «N.º de solicitud» is the planilla's `N Ingreso` is still
- * an open question, so the copy says «N.º».
- *
- * While CONAF_ESTADO_ENABLED is off (2026-10-18) only «Copiar N.º» shows: the
- * planilla's `N Ingreso` is not the 6-digit SAFF number the public consulta
- * takes, so «Abrir» led to «no existe» or an empty form.
+ * and `action.php` answers the same number sent by GET. FACT (2026-10-18):
+ * that includes the planilla's slashed numbers (12/345-6/24, slashes
+ * URL-encoded); the 2026-10-05 note that they failed was wrong. So a
+ * queryable number (the most recent in a two-number cell) opens its result
+ * already entered; anything else opens the empty consulta page.
  *
  * Used inside clickable table rows: a click here belongs to the link or the
  * button, never to the row behind it. Enter and Space are stopped for the same
@@ -24,13 +16,15 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { CONAF_ESTADO_ENABLED } from '../lib/conafFlag'
+import { solicitudesInCell } from '../lib/conafEstado'
 
 export const OFICINA_VIRTUAL_CONAF_URL = 'https://oficinavirtual.conaf.cl/consultas/index.php'
 const OFICINA_VIRTUAL_RESULT_URL = 'https://oficinavirtual.conaf.cl/consultas/action.php'
 
 function oficinaVirtualHref(value: string): string {
-  if (!/^[0-9]+$/.test(value)) return OFICINA_VIRTUAL_CONAF_URL
-  return `${OFICINA_VIRTUAL_RESULT_URL}?${new URLSearchParams({ nsolicitud: value })}`
+  const found = solicitudesInCell(value)
+  if (found.length === 0) return OFICINA_VIRTUAL_CONAF_URL
+  return `${OFICINA_VIRTUAL_RESULT_URL}?${new URLSearchParams({ nsolicitud: found[found.length - 1] })}`
 }
 
 function keepActivationKeys(event: KeyboardEvent) {

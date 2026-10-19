@@ -3,16 +3,16 @@
 Nota para Campo Digital, Javier y Marianne. El detalle técnico, en inglés,
 está en [Estado CONAF](../../../../docs/platform/conaf-estado.md).
 
-## En pausa desde el 17 de octubre
+## Activo desde el 18 de octubre
 
-La primera consulta en producción no encontró ninguna solicitud. La
-mayoría de los «N Ingreso» de la planilla tienen la forma `123/456-7/25`
-(con barras) y otros son números de 8 dígitos que empiezan con 10; ninguno
-corresponde al N.º de solicitud de 6 dígitos que usa la consulta pública
-de CONAF. Para no mostrar avisos «No existe en CONAF» que no corresponden,
-la columna y la sección del detalle están **ocultas** hasta saber dónde
-está el N.º de solicitud de cada PMF. Lo que sigue describe cómo se verá
-cuando se active.
+Del 17 al 18 de octubre estuvo oculto por un error nuestro: la plataforma
+solo consultaba números de puros dígitos, y los «N Ingreso» de la planilla
+llevan barras (`12/345-6/24`). La consulta pública de CONAF sí los acepta:
+`12/345-6/24` responde APROBADA, con la superficie del PMF. Ahora se
+consultan tal como vienen en la planilla; si una celda trae el ingreso y el
+reingreso juntos, se usa el más reciente. Los números de 8 dígitos que
+empiezan con 10 (unos pocos PMF) no existen en esa consulta: queda por
+saber qué son.
 
 ## Qué cambia
 

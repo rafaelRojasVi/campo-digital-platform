@@ -25,11 +25,33 @@ export const TONE_PILL: Record<ConafTone, string> = {
   neutral: 'pill-otro',
 }
 
-/** 1–9 ASCII digits, padded to six (the server's rule); otherwise null. */
+const SLASHED = /^[0-9]{1,6}\/[0-9]{1,4}-[0-9]{1,4}\/[0-9]{2}$/
+
+/**
+ * The server's rule (app.conaf.normalize_solicitud): 1–9 ASCII digits padded
+ * to six, or CONAF's slashed «correlativo/oficina-código/año» number kept as
+ * written (12/345-6/24, what the Transelec planilla's «N Ingreso» holds).
+ * A typo is not corrected; anything else is null.
+ */
 export function normalizeSolicitud(raw: string | null | undefined): string | null {
   const value = (raw ?? '').trim()
-  if (!/^[0-9]{1,9}$/.test(value)) return null
-  return value.padStart(6, '0')
+  if (/^[0-9]{1,9}$/.test(value)) return value.padStart(6, '0')
+  if (SLASHED.test(value)) return value
+  return null
+}
+
+/**
+ * Every CONAF number in one planilla cell, in order (app.conaf.solicitudes_in_cell):
+ * some «N Ingreso» cells hold the ingreso and the reingreso together.
+ */
+export function solicitudesInCell(raw: string | null | undefined): string[] {
+  const value = raw ?? ''
+  if (value.includes('/')) {
+    const found = value.match(/[0-9]{1,6}\/[0-9]{1,4}-[0-9]{1,4}\/[0-9]{2}/g) ?? []
+    return [...new Set(found)]
+  }
+  const numero = normalizeSolicitud(value)
+  return numero === null ? [] : [numero]
 }
 
 export function conafTone(record: ConafSolicitud): ConafTone {

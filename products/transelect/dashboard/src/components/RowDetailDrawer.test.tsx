@@ -363,10 +363,14 @@ describe("RowDetailDrawer — Proceso CONAF (lifecycle_pmf_v1)", () => {
     });
   });
 
-  it("does not show the CONAF status card while the ingreso number is unconfirmed", () => {
-    const lifecycle = makeLifecycleRow({ source_row_number: 3, pmf: "MP002" });
+  it("shows the CONAF status card for the PMF's number", () => {
+    const lifecycle = makeLifecycleRow({
+      source_row_number: 3,
+      pmf: "MP002",
+      numero_ingreso: "12/345-6/24",
+    });
     render(<RowDetailDrawer row={lifecycle} lifecycle={lifecycle} onClose={() => {}} />);
-    expect(screen.queryByRole("heading", { name: "Estado en CONAF" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Estado en CONAF" })).toBeInTheDocument();
   });
 
   it("shows where the PMF stands when the Estado section opens it", () => {
@@ -421,7 +425,7 @@ describe("RowDetailDrawer — Proceso CONAF (lifecycle_pmf_v1)", () => {
     expect(within(block).queryByText("Para revisar en la planilla")).toBeNull();
   });
 
-  it("has no Proceso CONAF block from elsewhere, and only «Copiar N.º» while CONAF is off", () => {
+  it("has no Proceso CONAF block from elsewhere, but links the Oficina Virtual", () => {
     render(
       <RowDetailDrawer
         row={makeRow({ source_row_number: 3, pmf: "MP002", numero_ingreso: "4417" })}
@@ -430,8 +434,13 @@ describe("RowDetailDrawer — Proceso CONAF (lifecycle_pmf_v1)", () => {
     );
 
     expect(screen.queryByTestId("drawer-lifecycle")).toBeNull();
-    // The planilla's N Ingreso is not CONAF's consulta number yet (CONAF_ESTADO_ENABLED).
-    expect(screen.queryByTestId("drawer-ov-1-link")).toBeNull();
+    const link = screen.getByTestId("drawer-ov-1-link");
+    expect(link).toHaveAttribute(
+      "href",
+      "https://oficinavirtual.conaf.cl/consultas/action.php?nsolicitud=004417",
+    );
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByTestId("drawer-ov-1-copy")).toHaveAccessibleName("Copiar N.º 4417");
   });
 

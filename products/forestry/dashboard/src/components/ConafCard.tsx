@@ -62,7 +62,7 @@ export function ConafCard({ numero }: { numero: string | null }) {
   }, [normalized, attempt])
 
   if (normalized === null) {
-    return <p className="muted">Este N.º no se puede consultar en CONAF (solo dígitos).</p>
+    return <p className="muted">Este N.º no se puede consultar en CONAF (dígitos, o el formato 12/345-6/24).</p>
   }
 
   const refresh = async () => {

@@ -31,7 +31,7 @@ describe('ConafEstadoCell', () => {
   })
 
   it('skips numbers CONAF cannot answer', () => {
-    render(<ConafEstadoCell numero="12/34-5/26" record={undefined} />)
+    render(<ConafEstadoCell numero="16/345-10-25" record={undefined} />)
     expect(screen.getByText('Sin N.º consultable')).toBeInTheDocument()
   })
 
