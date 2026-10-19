@@ -49,7 +49,7 @@ test('one filter change moves every section, and every endpoint sees the same st
   await expect(page.getByTestId('kpi-predios')).toHaveText('20')
   await expect(page.getByTestId('kpi-pmf-total')).toHaveText('12')
   await expect(page.getByTestId('status-aprobado')).toHaveText('6')
-  await expect(page.getByTestId('composition-predios-total')).toHaveText(
+  await expect(page.getByTestId('status-hero-total')).toHaveText(
     '10 de 20 predios aprobados',
   )
   await expect(page.getByTestId('status-hero-aprobado')).toHaveText('10')
@@ -64,7 +64,7 @@ test('one filter change moves every section, and every endpoint sees the same st
   await expect(page.getByTestId('kpi-superficie')).toHaveText('12,25 ha')
   await expect(page.getByTestId('kpi-pmf-total')).toHaveText('4')
   await expect(page.getByTestId('status-aprobado')).toHaveText('3')
-  await expect(page.getByTestId('composition-predios-total')).toHaveText('3 de 5 predios aprobados')
+  await expect(page.getByTestId('status-hero-total')).toHaveText('3 de 5 predios aprobados')
   await expect(page.getByTestId('status-hero-aprobado')).toHaveText('3')
   await expect(page.getByTestId('status-hero-en-tramite')).toHaveText('1')
 
