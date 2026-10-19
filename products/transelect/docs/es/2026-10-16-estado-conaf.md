@@ -3,7 +3,14 @@
 Nota para Campo Digital, Javier y Marianne. El detalle técnico, en inglés,
 está en [Estado CONAF](../../../../docs/platform/conaf-estado.md).
 
-## En pausa desde el 19 de octubre
+## Activo con «Revisar» desde el 19 de octubre
+
+Javier confirmó que, cuando un recurso de reposición se aprueba, la
+consulta de CONAF sigue mostrando la denegación original, y pidió revisar
+caso a caso. Por eso, si la planilla dice «Aprobado» y CONAF «Denegada», el
+panel muestra **«Revisar»** con esa explicación, nunca «Rechazada».
+
+## En pausa unas horas el 19 de octubre
 
 Al revisar todos los números de la planilla contra CONAF vimos PMF que la
 planilla marca «Aprobado» y CONAF muestra «Denegada»; entre ellos, todos los

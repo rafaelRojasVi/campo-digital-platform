@@ -151,14 +151,23 @@ notes (Spanish):
   in CONAF (possibly only because the 09-Sept copy is old).
 - **INFERENCE:** after a denial is overturned by a recurso de reposición, the
   consulta keeps showing the original denial.
-- **DECISION (2026-10-19):** `CONAF_ESTADO_ENABLED` is off again: the column
+- **DECISION (2026-10-19, superseded the same day, below):** `CONAF_ESTADO_ENABLED` was switched off again: the column
   would tell Transelec that approved plans were denied. The «Abrir Oficina
   Virtual CONAF» links no longer depend on it and open the most recent
   number, so a person sees CONAF's own page. Slashed-number support, the
   nightly refresh and Rodales are unchanged.
-- **OPEN QUESTION (for Campo Digital):** what happens to the consulta after
-  a recurso de reposición, and why the remaining approved PMF show DENEGADA.
-  The answer decides the rule for turning the column back on.
+- **FACT (2026-10-19, Javier's written answer):** after an approved recurso
+  de reposición the consulta keeps showing the original denial; the other
+  cases are to be reviewed case by case.
+- **DECISION (2026-10-19, same day):** `CONAF_ESTADO_ENABLED` is on again.
+  When the planilla's «Estado resumido» is «Aprobado» and CONAF's tone is a
+  denial, the column and the drawer card show «Revisar» with that
+  explanation, never «Rechazada» (`contradictsPlanilla` in
+  `src/lib/conafEstado.ts`). The drawer card reads the same most recent
+  number as the column (`conafNumero`); before, a two-number cell showed as
+  unqueryable there.
+- **OPEN QUESTION:** the 8-digit numbers. Javier: «CONAF tiene diferentes
+  formatos según provincia»; which consulta answers them is still unknown.
 - **HYPOTHESIS:** reading the approval resolutions (one fixed format) could
   check the planilla's superficie per área and reforestation commitments;
   not designed, waiting on what Marianne copies from them by hand.

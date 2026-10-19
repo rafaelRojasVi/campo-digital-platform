@@ -8,11 +8,14 @@ import { getConafSolicitud, refreshConafSolicitud, type ConafSolicitud } from '.
 import {
   conafMessage,
   conafTone,
+  contradictsPlanilla,
   freshness,
   hasData,
   normalizeSolicitud,
   rawEstado,
   refreshNotice,
+  REVISAR_HINT,
+  REVISAR_LABEL,
   TONE_LABELS,
   TONE_PILL,
 } from '../lib/conafEstado'
@@ -27,7 +30,14 @@ function date(value: string | null): string {
 
 type State = { status: 'loading' } | { status: 'error'; error: string } | { status: 'ready'; record: ConafSolicitud }
 
-export function ConafCard({ numero }: { numero: string | null }) {
+export function ConafCard({
+  numero,
+  estadoResumido,
+}: {
+  numero: string | null
+  /** The planilla's «Estado resumido», to flag an approved plan CONAF shows denied. */
+  estadoResumido?: string | null
+}) {
   const normalized = normalizeSolicitud(numero)
   const [state, setState] = useState<State>({ status: 'loading' })
   const [busy, setBusy] = useState(false)
@@ -92,15 +102,21 @@ export function ConafCard({ numero }: { numero: string | null }) {
   const message = conafMessage(record)
   const tone = conafTone(record)
   const raw = rawEstado(record)
+  const revisar = contradictsPlanilla(record, estadoResumido)
   return (
     <div className="conaf-card" data-testid="conaf-card">
       {hasData(record) && (
         <div className="conaf-card__head">
-          <span className={`pill ${TONE_PILL[tone]}`}>{TONE_LABELS[tone]}</span>
+          {revisar ? (
+            <span className="pill pill-otro">{REVISAR_LABEL}</span>
+          ) : (
+            <span className={`pill ${TONE_PILL[tone]}`}>{TONE_LABELS[tone]}</span>
+          )}
           {record.recently_changed && <span className="chip conaf-changed">Cambió</span>}
           {raw !== null && <span className="conaf-card__raw">{raw}</span>}
         </div>
       )}
+      {revisar && <p className="hint conaf-warn">{REVISAR_HINT}</p>}
       {message && <p className={record.lookup_status === 'found' ? 'hint' : 'hint conaf-warn'}>{message}</p>}
       {hasData(record) && (
         <dl className="conaf-card__facts">

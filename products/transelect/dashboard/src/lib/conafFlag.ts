@@ -5,11 +5,9 @@
  * FACT (2026-10-18): CONAF's public consulta answers the planilla's
  * «N Ingreso» as written (e.g. 12/345-6/24, slashes URL-encoded).
  *
- * Off again since 2026-10-19. Checking every planilla number against CONAF
- * showed PMF that are «Aprobado» in the planilla but «DENEGADA» in the
- * consulta, including every PMF with a recurso de reposición recorded.
- * INFERENCE: the consulta keeps showing the original denial after an
- * approval on appeal. Until Campo Digital confirms it, the column would tell
- * Transelec that approved plans were denied (docs/platform/conaf-estado.md).
+ * Paused on 2026-10-19 after approved plans showed «DENEGADA» in the
+ * consulta; back on the same day once Campo Digital confirmed why (an
+ * approved recurso de reposición is not reflected there). Those cases show
+ * «Revisar», not «Rechazada» (lib/conafEstado.ts, contradictsPlanilla).
  */
-export const CONAF_ESTADO_ENABLED = false
+export const CONAF_ESTADO_ENABLED = true

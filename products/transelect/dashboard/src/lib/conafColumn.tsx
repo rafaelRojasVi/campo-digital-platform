@@ -31,7 +31,13 @@ export function conafColumn(byNumero: ReadonlyMap<string, ConafSolicitud>): Esta
     render: (row) => {
       const numero = conafNumero(row)
       const normalized = normalizeSolicitud(numero)
-      return <ConafEstadoCell numero={numero} record={normalized ? byNumero.get(normalized) : undefined} />
+      return (
+        <ConafEstadoCell
+          numero={numero}
+          record={normalized ? byNumero.get(normalized) : undefined}
+          estadoResumido={row.estado_resumido}
+        />
+      )
     },
   }
 }

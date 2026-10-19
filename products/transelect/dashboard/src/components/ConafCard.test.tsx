@@ -32,6 +32,14 @@ describe('ConafCard', () => {
     expect(api.getConafSolicitud).toHaveBeenCalledWith('090663')
   })
 
+  it('explains an approved plan that CONAF shows denied instead of calling it rejected', async () => {
+    api.getConafSolicitud.mockResolvedValue({ ok: true, data: { ...found, estado: 'DENEGADA:' } })
+    render(<ConafCard numero="90663" estadoResumido="Aprobado" />)
+    expect(await screen.findByText('Revisar')).toBeInTheDocument()
+    expect(screen.queryByText('Rechazada')).not.toBeInTheDocument()
+    expect(screen.getByText(/recurso de reposición/)).toBeInTheDocument()
+  })
+
   it('disables refresh while busy and announces the result', async () => {
     const user = userEvent.setup()
     api.getConafSolicitud.mockResolvedValue({ ok: true, data: found })

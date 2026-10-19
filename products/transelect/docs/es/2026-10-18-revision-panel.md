@@ -10,9 +10,9 @@ qué tan rápido carga.
 
 - **«Abrir Oficina Virtual CONAF» abre la solicitud correcta.** El «N Ingreso»
   de la planilla sí es el número que acepta la consulta pública de CONAF
-  (por ejemplo `12/345-6/24`). La columna «Estado CONAF» sigue en pausa:
-  hay PMF aprobados en la planilla que CONAF muestra como denegados
-  (ver [Estado CONAF](2026-10-16-estado-conaf.md)).
+  (por ejemplo `12/345-6/24`). La columna «Estado CONAF» está activa; los
+  PMF aprobados en la planilla que CONAF muestra denegados aparecen como
+  «Revisar» (ver [Estado CONAF](2026-10-16-estado-conaf.md)).
 - **Estado se puede filtrar.** Un clic en un grupo o un paso de las barras
   (por ejemplo «En evaluación») deja en la tabla solo esos PMF; además hay
   un buscador por PMF o N.º de ingreso. La tabla se desplaza por dentro con

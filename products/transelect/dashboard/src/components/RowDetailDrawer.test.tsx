@@ -363,15 +363,15 @@ describe("RowDetailDrawer — Proceso CONAF (lifecycle_pmf_v1)", () => {
     });
   });
 
-  it("links the Oficina Virtual but shows no CONAF status card while it is paused", () => {
+  it("shows the CONAF status card for the PMF's most recent number", () => {
     const lifecycle = makeLifecycleRow({
       source_row_number: 3,
       pmf: "MP002",
-      numero_ingreso: "12/345-6/24",
+      numero_ingreso: "39/345-6/24 11/345-6/26",
     });
     render(<RowDetailDrawer row={lifecycle} lifecycle={lifecycle} onClose={() => {}} />);
-    expect(screen.queryByRole("heading", { name: "Estado en CONAF" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /Abrir Oficina Virtual CONAF/ }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Estado en CONAF" })).toBeInTheDocument();
+    expect(screen.queryByText(/no se puede consultar/)).not.toBeInTheDocument();
   });
 
   it("shows where the PMF stands when the Estado section opens it", () => {

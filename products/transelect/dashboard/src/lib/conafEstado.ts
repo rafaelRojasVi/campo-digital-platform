@@ -63,6 +63,21 @@ export function conafTone(record: ConafSolicitud): ConafTone {
   return 'neutral'
 }
 
+/**
+ * The planilla says «Aprobado» but CONAF's consulta shows a denial. Campo
+ * Digital confirmed (2026-10-19) that after an approved recurso de
+ * reposición the consulta keeps showing the original denial, and asked to
+ * review these case by case: shown as «Revisar», never as «Rechazada».
+ */
+export function contradictsPlanilla(record: ConafSolicitud, estadoResumido: string | null | undefined): boolean {
+  return hasData(record) && conafTone(record) === 'danger' && /^aprobad/i.test((estadoResumido ?? '').trim())
+}
+
+export const REVISAR_LABEL = 'Revisar'
+
+export const REVISAR_HINT =
+  'CONAF muestra la solicitud denegada y la planilla dice «Aprobado». Suele ser un recurso de reposición aprobado, que la consulta de CONAF no refleja: revise el caso.'
+
 export function freshness(record: ConafSolicitud, now: Date = new Date()): string {
   const seconds = Math.max(0, (now.getTime() - new Date(record.checked_at).getTime()) / 1000)
   if (seconds < 60) return 'Consultado hace un momento'
