@@ -71,7 +71,7 @@ describe('PlanificacionTable', () => {
     const onChange = setup([feature('f1', '10', { reforest_species: ['pino oregón'] })])
     const field = screen.getByLabelText('Especies a reforestar del rodal 10')
     await user.click(field)
-    const list = screen.getByRole('listbox', { name: 'Especies a reforestar del rodal 10' })
+    const list = screen.getByRole('listbox', { name: 'Opciones: Especies a reforestar del rodal 10' })
     expect(within(list).getByRole('group', { name: 'Plantaciones' })).toBeInTheDocument()
     expect(within(list).getByRole('group', { name: 'Nativas' })).toBeInTheDocument()
     expect(within(list).getByRole('option', { name: /pino oregón/ })).toHaveAttribute('aria-selected', 'true')

@@ -173,7 +173,7 @@ export function SpeciesPicker({
             <div
               id={listId}
               role="listbox"
-              aria-label={label}
+              aria-label={`Opciones: ${label}`}
               aria-multiselectable="true"
               className="species-list"
               style={{ left: position.left, top: position.top, maxHeight: position.maxHeight, width: LIST_WIDTH }}
