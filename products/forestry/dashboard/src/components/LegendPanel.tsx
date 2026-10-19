@@ -33,6 +33,8 @@ export function LegendPanel({
         return filters.uso2026 === entry.filterValue
       case 'uso2024':
         return filters.uso2024 === entry.filterValue
+      case 'especie':
+        return filters.especie === entry.filterValue
       case 'predio':
         return filters.nomPredio === entry.filterValue
       case 'cambio':
@@ -56,6 +58,9 @@ export function LegendPanel({
       case 'uso2024':
         onFiltersChange({ ...filters, uso2024: active ? null : entry.filterValue })
         break
+      case 'especie':
+        onFiltersChange({ ...filters, especie: active ? null : entry.filterValue })
+        break
       case 'predio':
         onFiltersChange({ ...filters, nomPredio: active ? null : entry.filterValue })
         break
@@ -77,7 +82,10 @@ export function LegendPanel({
   }
 
   return (
-    <section className="legend" aria-label="Leyenda del mapa">
+    <section
+      className={`legend${encoding.dimension === 'especie' ? ' legend--wrap' : ''}`}
+      aria-label="Leyenda del mapa"
+    >
       <div className="field">
         <label className="field__label" htmlFor={dimensionId}>
           Colorear por
@@ -144,6 +152,13 @@ export function LegendPanel({
         })}
       </ul>
 
+      {encoding.dimension === 'especie' ? (
+        <p className="legend__note">
+          Hectáreas de los polígonos filtrados. La especie se lee del código 2026 (Pi06 = pino
+          radiata plantado en 2006); las plantaciones mixtas se muestran juntas, sin repartir la
+          superficie.
+        </p>
+      ) : null}
       {encoding.dimension === 'cambio' ? (
         <p className="legend__note">
           Diferencias literales de campos dentro de la instantánea; no representan avance ni

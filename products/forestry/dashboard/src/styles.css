@@ -369,8 +369,13 @@ button {
   transform: translateY(1px);
 }
 
-.button:disabled {
-  opacity: 0.45;
+.button:disabled,
+.button:disabled:hover {
+  /* Solid colors instead of a faded button: the label stays readable (≈5:1). */
+  color: var(--ink-3);
+  background: var(--panel-2);
+  border-color: var(--border);
+  box-shadow: none;
   cursor: default;
   transform: none;
 }
@@ -509,6 +514,12 @@ button {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Species mixtures are told apart by their full name, so they wrap. */
+.legend--wrap .legend__label {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .legend__ha {
@@ -1456,4 +1467,297 @@ a.button {
 
 .hint__tooltip--above {
   transform: translateY(-100%);
+}
+
+/* ---------- Map: predio names over the overview ---------- */
+
+.map-predio-label {
+  background: none;
+  border: 0;
+}
+
+.map-predio-label span {
+  display: inline-block;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  background: rgb(251 251 250 / 0.88);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 2px 8px;
+  box-shadow: var(--shadow-raised);
+  cursor: pointer;
+  transition:
+    background-color 120ms var(--ease),
+    border-color 120ms var(--ease);
+}
+
+/* A predio name fits the map to that predio. */
+.map-predio-label:hover span,
+.map-predio-label:focus-visible span {
+  color: #fff;
+  background: var(--green-700);
+  border-color: var(--green-900);
+}
+
+.map-predio-label:focus-visible {
+  outline: none;
+}
+
+/* ---------- Inspector: everyday facts first ---------- */
+
+.inspector__primary {
+  padding: 10px 16px 0;
+}
+
+.inspector__primary .button {
+  width: 100%;
+}
+
+.inspector__section--review h3 {
+  color: var(--flag-ink);
+}
+
+.inspector__technical {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.inspector__technical > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.inspector__technical > dl {
+  margin-top: 8px;
+}
+
+/* ---------- Filters: send the filtered polygons to a report ---------- */
+
+.filters__add {
+  width: 100%;
+  white-space: normal;
+}
+
+.filters__add-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* ---------- Data panel: «Revisión de la base» ---------- */
+
+.base-review {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.base-review .kpis {
+  padding: 0;
+  border-bottom: 0;
+  background: none;
+}
+
+.base-review__provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.base-review__provenance dt {
+  color: var(--ink-3);
+  font-weight: 600;
+}
+
+.base-review__provenance dd {
+  margin: 0;
+}
+
+/* ---------- «Agregar a un informe» dialog ---------- */
+
+.add-to-report {
+  display: grid;
+  gap: 10px;
+}
+
+.add-to-report__list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.add-to-report__list legend {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-bottom: 4px;
+}
+
+.add-to-report__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.add-to-report__option:has(input:checked) {
+  border-color: var(--green-700);
+  background: var(--green-tint);
+}
+
+.add-to-report__option span {
+  display: grid;
+}
+
+.add-to-report__option small {
+  color: var(--ink-3);
+}
+
+.add-to-report__empty {
+  color: var(--ink-3);
+}
+
+/* ---------- Map: rodal number and code over each polygon ---------- */
+
+.map-rodal-label {
+  background: none;
+  border: 0;
+}
+
+.map-rodal-label span {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translate(-50%, -50%);
+  line-height: 1.05;
+  color: #fff;
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 0.95),
+    0 0 4px rgb(0 0 0 / 0.7);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.map-rodal-label b {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.map-rodal-label small {
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+/* ---------- Selection panel (two or more polygons) ---------- */
+
+.selection__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.selection__list button {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 5px 6px;
+  cursor: pointer;
+}
+
+.selection__list button:hover {
+  background: var(--panel-2);
+}
+
+.selection__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* ---------- Map: Medir, Mi ubicación, coordinates ---------- */
+
+.map--measuring .map__canvas,
+.map--measuring .leaflet-interactive {
+  cursor: crosshair;
+}
+
+.map__measure,
+.map__status {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-float);
+  padding: 6px 8px 6px 12px;
+}
+
+.map__measure {
+  bottom: 32px;
+}
+
+.map__status {
+  bottom: 84px;
+}
+
+.map__status button {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--ink-3);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.map__coords {
+  position: absolute;
+  left: 8px;
+  bottom: 30px;
+  z-index: 1000;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: rgb(251 251 250 / 0.88);
+  border-radius: 4px;
+  padding: 2px 6px;
+  pointer-events: none;
+}
+
+@media (max-width: 720px), (hover: none) {
+  .map__coords {
+    display: none;
+  }
 }

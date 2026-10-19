@@ -1,4 +1,5 @@
 import type { FilterState, QualityFilter } from '../lib/filters.ts'
+import { speciesLabel } from '../lib/species.ts'
 
 interface ActiveFilterBarProps {
   filters: FilterState
@@ -65,6 +66,13 @@ export function ActiveFilterBar({ filters, onFiltersChange }: ActiveFilterBarPro
       key: 'descUso',
       label: `Descripción: ${filters.descUso}`,
       clear: () => update({ descUso: null }),
+    })
+  }
+  if (filters.especie !== null) {
+    chips.push({
+      key: 'especie',
+      label: `Especie: ${speciesLabel(filters.especie)}`,
+      clear: () => update({ especie: null }),
     })
   }
   if (filters.codUso2026 !== null) {
@@ -150,6 +158,7 @@ export function ActiveFilterBar({ filters, onFiltersChange }: ActiveFilterBarPro
             uso2024: null,
             descUso: null,
             codUso2026: null,
+            especie: null,
             codUso: null,
             nRodal: null,
             quality: null,

@@ -69,10 +69,23 @@ async function getUrl<T>(url: string): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 401) announceSessionExpired()
     throw new ApiError(response.status, `request failed (${response.status})`)
   }
 
   return (await response.json()) as T
+}
+
+/**
+ * A read answered 401: the session ended while a page was open. `Root`
+ * listens and shows the sign-in instead of each page's «Reintentar», which
+ * could never succeed. Mutations keep their own message so an editor sees
+ * why a save failed before leaving the page.
+ */
+export const SESSION_EXPIRED_EVENT = 'forestry:session-expired'
+
+function announceSessionExpired(): void {
+  window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
 }
 
 export async function fetchPublishedSnapshot(): Promise<ForestrySnapshot> {
@@ -90,8 +103,34 @@ export function fetchSnapshotSummary(snapshotId: number): Promise<SnapshotSummar
   return getJson<SnapshotSummary>(`/snapshots/${snapshotId}`)
 }
 
+// A version's geometry never changes, and the map, the editor and the
+// review all load it (about 9.4 MB for Degenfeld). It is kept in memory for
+// the page session only: never in browser storage, gone on reload or sign-out
+// (the API keeps `Cache-Control: no-store`). Two versions at most.
+const COLLECTION_CACHE_SIZE = 2
+const collectionCache = new Map<number, Promise<FeatureCollection>>()
+
 export function fetchFeatureCollection(snapshotId: number): Promise<FeatureCollection> {
-  return getJson<FeatureCollection>(`/snapshots/${snapshotId}/feature-collection`)
+  const cached = collectionCache.get(snapshotId)
+  if (cached !== undefined) {
+    // Most recently used goes last.
+    collectionCache.delete(snapshotId)
+    collectionCache.set(snapshotId, cached)
+    return cached
+  }
+  const request = getJson<FeatureCollection>(`/snapshots/${snapshotId}/feature-collection`)
+  request.catch(() => collectionCache.delete(snapshotId))
+  collectionCache.set(snapshotId, request)
+  while (collectionCache.size > COLLECTION_CACHE_SIZE) {
+    const oldest = collectionCache.keys().next().value
+    if (oldest === undefined) break
+    collectionCache.delete(oldest)
+  }
+  return request
+}
+
+export function resetCollectionCacheForTests(): void {
+  collectionCache.clear()
 }
 
 export function fetchComparison(snapshotId: number): Promise<SourceFieldComparison> {

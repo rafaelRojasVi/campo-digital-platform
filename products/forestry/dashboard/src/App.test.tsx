@@ -19,9 +19,11 @@ vi.mock('./components/MapView.tsx', () => ({
   MapView: ({
     filteredFeatures,
     onSelect,
+    onSelectMany,
   }: {
     filteredFeatures: GeoFeature[]
-    onSelect: (ordinal: number | null) => void
+    onSelect: (ordinal: number | null, additive: boolean) => void
+    onSelectMany: (ordinals: number[]) => void
   }) => (
     <div data-testid="map-stub">
       <p>Mapa: {filteredFeatures.length} visibles</p>
@@ -29,11 +31,14 @@ vi.mock('./components/MapView.tsx', () => ({
         <button
           key={feature.properties.feature_ordinal}
           type="button"
-          onClick={() => onSelect(feature.properties.feature_ordinal)}
+          onClick={(event) => onSelect(feature.properties.feature_ordinal, event.shiftKey)}
         >
           mapa-seleccionar-{feature.properties.feature_ordinal}
         </button>
       ))}
+      <button type="button" onClick={() => onSelectMany([1, 2])}>
+        mapa-recuadro-1-2
+      </button>
     </div>
   ),
 }))
@@ -52,6 +57,18 @@ vi.mock('./api.ts', async (importOriginal) => {
 })
 
 const api = vi.mocked(await import('./api.ts'))
+
+vi.mock('./reportsApi.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./reportsApi.ts')>()
+  return { ...original, fetchReports: vi.fn() }
+})
+
+const reportsApi = vi.mocked(await import('./reportsApi.ts'))
+
+/** The data panel starts closed so the map gets the screen. */
+async function openTable(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('tab', { name: /Tabla/ }))
+}
 
 function mockHappyApi() {
   api.fetchPublishedSnapshot.mockResolvedValue(testSnapshot())
@@ -163,13 +180,19 @@ describe('ready application', () => {
     mockHappyApi()
   })
 
-  it('renders provenance and factual KPIs', async () => {
+  it('keeps provenance and factual KPIs in «Revisión de la base», off the main view', async () => {
+    const user = userEvent.setup()
     render(<App />)
 
     expect(await screen.findByText('Patrimonio Degenfeld')).toBeInTheDocument()
 
-    // The map shows the published version, labeled as such.
+    // The map shows the published version, labeled as such; the technical
+    // provenance is not in the header.
     expect(screen.getByText('Versión publicada')).toBeInTheDocument()
+    expect(screen.queryByText('EPSG:32718')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Resumen factual de la instantánea')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Revisión de la base' }))
     expect(screen.getByText('Gdb_Test_mv')).toBeInTheDocument()
     expect(screen.getByText('EPSG:32718')).toBeInTheDocument()
 
@@ -185,6 +208,7 @@ describe('ready application', () => {
     await screen.findByText('Patrimonio Degenfeld')
 
     await user.selectOptions(screen.getByLabelText('Uso 2026'), 'BOSQUE NATIVO')
+    await openTable(user)
 
     expect(screen.getByText('Mapa: 1 visibles')).toBeInTheDocument()
     expect(screen.getByText(/1 polígono ·/)).toBeInTheDocument()
@@ -200,6 +224,7 @@ describe('ready application', () => {
     await screen.findByText('Patrimonio Degenfeld')
 
     await user.type(screen.getByLabelText('Buscar'), 'vegetacion')
+    await openTable(user)
 
     expect(screen.getByText('Mapa: 1 visibles')).toBeInTheDocument()
     expect(within(screen.getByRole('table')).getByText('Lumaco')).toBeInTheDocument()
@@ -211,6 +236,7 @@ describe('ready application', () => {
     await screen.findByText('Patrimonio Degenfeld')
 
     await user.type(screen.getByLabelText('Buscar'), 'noexiste')
+    await openTable(user)
 
     expect(screen.getByText('Sin resultados para los filtros actuales.')).toBeInTheDocument()
     expect(screen.getByText('Mapa: 0 visibles')).toBeInTheDocument()
@@ -227,7 +253,8 @@ describe('ready application', () => {
     await user.click(screen.getByRole('button', { name: 'mapa-seleccionar-5' }))
 
     const inspector = await screen.findByLabelText('Detalle del polígono seleccionado')
-    expect(within(inspector).getByText('OBJECTID (evidencia de fuente)')).toBeInTheDocument()
+    expect(within(inspector).getByText('Detalle técnico')).toBeInTheDocument()
+    expect(within(inspector).getByText('OBJECTID')).toBeInTheDocument()
     expect(within(inspector).getByText('105')).toBeInTheDocument()
     expect(within(inspector).getByText('Inválida')).toBeInTheDocument()
     expect(
@@ -252,6 +279,7 @@ describe('ready application', () => {
     render(<App />)
     await screen.findByText('Patrimonio Degenfeld')
 
+    await openTable(user)
     await user.click(within(screen.getByRole('table')).getByText('Purretrun'))
 
     const inspector = await screen.findByLabelText('Detalle del polígono seleccionado')
@@ -263,11 +291,9 @@ describe('ready application', () => {
     render(<App />)
     await screen.findByText('Patrimonio Degenfeld')
 
-    await user.click(screen.getByRole('tab', { name: /2024 → 2026/ }))
+    await user.click(screen.getByRole('tab', { name: /Cambios 2024 → 2026/ }))
 
-    expect(
-      screen.getByText(/Diferencias literales entre los campos 2024 y 2026/),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/uso o código es distinto en los campos 2024 y 2026/)).toBeInTheDocument()
     expect(screen.getByText('ENSAYO')).toBeInTheDocument()
 
     const pairs = screen.getByLabelText('Pares de valores más frecuentes')
@@ -284,9 +310,9 @@ describe('ready application', () => {
     render(<App />)
     await screen.findByText('Patrimonio Degenfeld')
 
-    await user.click(screen.getByRole('tab', { name: 'Calidad de datos' }))
+    await user.click(screen.getByRole('tab', { name: 'Revisión de la base' }))
 
-    expect(screen.getByText(/Evidencia de calidad de datos observada/)).toBeInTheDocument()
+    expect(screen.getByText(/conviene revisar en el original/)).toBeInTheDocument()
     expect(screen.getByText('Rodal en blanco')).toBeInTheDocument()
 
     const blankRodalCard = screen
@@ -310,6 +336,87 @@ describe('ready application', () => {
     // Clicking again clears the filter.
     await user.click(within(legend).getByRole('button', { name: /BOSQUE NATIVO/ }))
     expect(screen.getByText('Mapa: 6 visibles')).toBeInTheDocument()
+  })
+
+  it('names the species in the inspector and offers no «Agregar» to a viewer', async () => {
+    const user = userEvent.setup()
+    render(<App role="viewer" />)
+    await screen.findByText('Patrimonio Degenfeld')
+
+    await user.click(screen.getByRole('button', { name: 'mapa-seleccionar-1' }))
+
+    const inspector = await screen.findByLabelText('Detalle del polígono seleccionado')
+    expect(within(inspector).getByText('Pino radiata')).toBeInTheDocument()
+    expect(
+      within(inspector).queryByRole('button', { name: 'Agregar a un informe' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('sends a selected polygon to a report from the inspector', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReports.mockResolvedValue({ reports: [], pending_review_count: 0 })
+    render(<App role="operator" />)
+    await screen.findByText('Patrimonio Degenfeld')
+
+    await user.click(screen.getByRole('button', { name: 'mapa-seleccionar-1' }))
+    const inspector = await screen.findByLabelText('Detalle del polígono seleccionado')
+    await user.click(within(inspector).getByRole('button', { name: 'Agregar a un informe' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Agregar a un informe' })
+    expect(within(dialog).getByText(/1 polígono se agregan/)).toBeInTheDocument()
+    expect(await within(dialog).findByText('No hay informes en borrador.')).toBeInTheDocument()
+  })
+
+  it('offers the filtered polygons to a report only once a filter is set', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReports.mockResolvedValue({ reports: [], pending_review_count: 0 })
+    render(<App role="operator" />)
+    await screen.findByText('Patrimonio Degenfeld')
+
+    expect(screen.queryByRole('button', { name: /a un informe/ })).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Uso 2026'), 'BOSQUE NATIVO')
+    await user.click(screen.getByRole('button', { name: 'Agregar este polígono a un informe' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Agregar a un informe' })).toBeInTheDocument()
+  })
+
+  it('adds polygons with Mayús + clic and sums them in the selection panel', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReports.mockResolvedValue({ reports: [], pending_review_count: 0 })
+    render(<App role="operator" />)
+    await screen.findByText('Patrimonio Degenfeld')
+
+    await user.click(screen.getByRole('button', { name: 'mapa-seleccionar-1' }))
+    await user.keyboard('{Shift>}')
+    await user.click(screen.getByRole('button', { name: 'mapa-seleccionar-2' }))
+    await user.keyboard('{/Shift}')
+
+    const panel = screen.getByLabelText('Polígonos seleccionados')
+    expect(within(panel).getByText('2 polígonos seleccionados')).toBeInTheDocument()
+    expect(within(panel).getByText('Pino radiata')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Detalle del polígono seleccionado')).not.toBeInTheDocument()
+
+    await user.click(within(panel).getByRole('button', { name: 'Agregar a un informe' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Agregar a un informe' })
+    expect(within(dialog).getByText(/2 polígonos se agregan/)).toBeInTheDocument()
+  })
+
+  it('removes a polygon with a second Mayús + clic and clears with Esc', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await screen.findByText('Patrimonio Degenfeld')
+
+    await user.click(screen.getByRole('button', { name: 'mapa-recuadro-1-2' }))
+    expect(screen.getByText('2 polígonos seleccionados')).toBeInTheDocument()
+
+    await user.keyboard('{Shift>}')
+    await user.click(screen.getByRole('button', { name: 'mapa-seleccionar-2' }))
+    await user.keyboard('{/Shift}')
+    expect(await screen.findByLabelText('Detalle del polígono seleccionado')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'mapa-recuadro-1-2' }))
+    await user.keyboard('{Escape}')
+    expect(screen.queryByLabelText('Polígonos seleccionados')).not.toBeInTheDocument()
   })
 
   it('switches the color dimension and updates the legend', async () => {

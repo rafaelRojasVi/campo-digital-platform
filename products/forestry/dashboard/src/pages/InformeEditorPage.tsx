@@ -47,43 +47,75 @@ import {
   type ReportDetail,
   type ReportWarning,
 } from '../reportsApi.ts'
-import { ROUTES, navigate, onLinkClick, reportPath, setLeaveGuard } from '../router.ts'
+import { ROUTES, navigate, onLinkClick, printPath, reportPath, setLeaveGuard } from '../router.ts'
 import type { FeatureCollection, ForestryRole } from '../types.ts'
+import { PASTE_PARAM, readClipboard, writeClipboard } from '../lib/reportClipboard.ts'
 
 const ha = new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const CLIPBOARD_KEY = 'rodales.informes.portapapeles'
 
 type Load =
   | { status: 'loading' }
   | { status: 'missing' }
   | { status: 'error' }
-  | { status: 'ready'; detail: ReportDetail; base: FeatureCollection }
-
-interface Clipboard {
-  base_snapshot_id: number
-  ordinals: number[]
-}
+  | { status: 'ready'; detail: ReportDetail; base: FeatureCollection; pasteOnArrival: boolean }
 
 interface Pending {
   pieces: { featureKey: string; coordinates: Coordinates[] }[]
   managed: Set<string>
 }
 
-function readClipboard(): Clipboard | null {
-  try {
-    const raw = window.sessionStorage.getItem(CLIPBOARD_KEY)
-    return raw === null ? null : (JSON.parse(raw) as Clipboard)
-  } catch {
-    return null
+type Message = { tone: 'info' | 'success' | 'warn' | 'error'; text: string; stale?: boolean }
+
+/** Paste the clipboard into a draft: the new draft (null when nothing was added) and what to tell. */
+function pasteClipboard(
+  draft: ReportDraft,
+  baseSnapshotId: number,
+  baseByOrdinal: Map<number, FeatureCollection['features'][number]>,
+): { draft: ReportDraft | null; message: Message } {
+  const clipboard = readClipboard()
+  if (clipboard === null || clipboard.ordinals.length === 0) {
+    return { draft: null, message: { tone: 'warn', text: 'No hay polígonos copiados. Seleccione rodales en el mapa y use «Copiar».' } }
+  }
+  if (clipboard.base_snapshot_id !== baseSnapshotId) {
+    return { draft: null, message: { tone: 'warn', text: 'Los polígonos copiados son de otra versión de la base.' } }
+  }
+  const sources = clipboard.ordinals.flatMap((ordinal) => {
+    const feature = baseByOrdinal.get(ordinal)
+    if (feature === undefined) return []
+    const p = feature.properties
+    return [{
+      ordinal,
+      attributes: {
+        objectid: p.source_objectid, nom_predio: p.nom_predio, n_rodal: p.n_rodal, cod_uso: p.cod_uso,
+        uso_2024: p.uso_2024, desc_uso: p.desc_uso, uso_2026: p.uso_2026, cod_uso_2026: p.cod_uso_2026,
+        sup_ha: p.sup_ha, cod_predial: p.cod_predial,
+      },
+      coordinates: feature.geometry.coordinates,
+    }]
+  })
+  const result = pasteSources(draft, sources)
+  return {
+    draft: result.added > 0 ? result.draft : null,
+    message: {
+      tone: result.skipped > 0 ? 'warn' : 'info',
+      text:
+        result.skipped > 0
+          ? `${plural(result.added, 'polígono agregado', 'polígonos agregados')}; ${plural(result.skipped, 'ya estaba', 'ya estaban')} en el informe.`
+          : `${plural(result.added, 'polígono agregado', 'polígonos agregados')} al informe.`,
+    },
   }
 }
 
-function writeClipboard(clipboard: Clipboard): void {
-  try {
-    window.sessionStorage.setItem(CLIPBOARD_KEY, JSON.stringify(clipboard))
-  } catch {
-    // Storage blocked: copy/paste still works inside this page.
-  }
+/**
+ * «Agregar a un informe» on the map opens the editor with ?pegar=1. Read it
+ * once and drop it from the URL, so a reload does not paste again.
+ */
+function takePasteRequest(): boolean {
+  const url = new URL(window.location.href)
+  if (url.searchParams.get(PASTE_PARAM) !== '1') return false
+  url.searchParams.delete(PASTE_PARAM)
+  window.history.replaceState(null, '', `${url.pathname}${url.search}`)
+  return true
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -103,7 +135,7 @@ export function InformeEditorPage({ role, reportId }: { role: ForestryRole; repo
     fetchReport(reportId)
       .then(async (detail) => {
         const base = await fetchFeatureCollection(detail.report.base_snapshot_id)
-        if (!cancelled) setLoad({ status: 'ready', detail, base })
+        if (!cancelled) setLoad({ status: 'ready', detail, base, pasteOnArrival: takePasteRequest() })
       })
       .catch((error: unknown) => {
         if (cancelled) return
@@ -142,7 +174,7 @@ export function InformeEditorPage({ role, reportId }: { role: ForestryRole; repo
         </div>
       ) : null}
       {load.status === 'ready' ? (
-        <Editor key={`${load.detail.report.report_id}-${load.detail.report.revision}-${nonce}`} role={role} detail={load.detail} base={load.base} onReload={reload} />
+        <Editor key={`${load.detail.report.report_id}-${load.detail.report.revision}-${nonce}`} role={role} detail={load.detail} base={load.base} pasteOnArrival={load.pasteOnArrival} onReload={reload} />
       ) : null}
     </div>
   )
@@ -152,11 +184,13 @@ function Editor({
   role,
   detail,
   base,
+  pasteOnArrival,
   onReload,
 }: {
   role: ForestryRole
   detail: ReportDetail
   base: FeatureCollection
+  pasteOnArrival: boolean
   onReload: () => void
 }) {
   const report = detail.report
@@ -164,7 +198,17 @@ function Editor({
   const reviewing = role === 'admin' && report.status === 'enviado'
 
   const [initialDraft] = useState<ReportDraft>(() => draftFromDetail(detail))
-  const [draft, setDraft] = useState<ReportDraft>(initialDraft)
+  // Polygons sent from the map arrive pasted, unsaved.
+  const [arrival] = useState(() =>
+    pasteOnArrival && editable
+      ? pasteClipboard(
+          initialDraft,
+          report.base_snapshot_id,
+          new Map(base.features.map((feature) => [feature.properties.feature_ordinal, feature])),
+        )
+      : null,
+  )
+  const [draft, setDraft] = useState<ReportDraft>(arrival?.draft ?? initialDraft)
   // The last draft the server accepted; anything else is unsaved, including
   // edits made while a save was in flight.
   const [savedDraft, setSavedDraft] = useState<ReportDraft>(initialDraft)
@@ -187,7 +231,7 @@ function Editor({
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   const [linePoints, setLinePoints] = useState<Position[]>([])
   const [pending, setPending] = useState<Pending | null>(null)
-  const [message, setMessage] = useState<{ tone: 'info' | 'success' | 'warn' | 'error'; text: string; stale?: boolean } | null>(null)
+  const [message, setMessage] = useState<Message | null>(arrival?.message ?? null)
   const [warnings, setWarnings] = useState<ReportWarning[]>([])
   const [busy, setBusy] = useState(false)
   const [showBase, setShowBase] = useState(false)
@@ -282,39 +326,10 @@ function Editor({
   }, [selectedOrdinals, report.base_snapshot_id])
 
   const paste = useCallback(() => {
-    const clipboard = readClipboard()
-    if (clipboard === null || clipboard.ordinals.length === 0) {
-      setMessage({ tone: 'warn', text: 'No hay polígonos copiados. Seleccione rodales en el mapa y use «Copiar».' })
-      return
-    }
-    if (clipboard.base_snapshot_id !== report.base_snapshot_id) {
-      setMessage({ tone: 'warn', text: 'Los polígonos copiados son de otra versión de la base.' })
-      return
-    }
-    const sources = clipboard.ordinals.flatMap((ordinal) => {
-      const feature = baseByOrdinal.get(ordinal)
-      if (feature === undefined) return []
-      const p = feature.properties
-      return [{
-        ordinal,
-        attributes: {
-          objectid: p.source_objectid, nom_predio: p.nom_predio, n_rodal: p.n_rodal, cod_uso: p.cod_uso,
-          uso_2024: p.uso_2024, desc_uso: p.desc_uso, uso_2026: p.uso_2026, cod_uso_2026: p.cod_uso_2026,
-          sup_ha: p.sup_ha, cod_predial: p.cod_predial,
-        },
-        coordinates: feature.geometry.coordinates,
-      }]
-    })
-    const result = pasteSources(draft, sources)
-    if (result.added > 0) change(result.draft)
+    const outcome = pasteClipboard(draft, report.base_snapshot_id, baseByOrdinal)
+    if (outcome.draft !== null) change(outcome.draft)
     setSelectedOrdinals(new Set())
-    setMessage({
-      tone: result.skipped > 0 ? 'warn' : 'info',
-      text:
-        result.skipped > 0
-          ? `${plural(result.added, 'polígono agregado', 'polígonos agregados')}; ${plural(result.skipped, 'ya estaba', 'ya estaban')} en el informe.`
-          : `${plural(result.added, 'polígono agregado', 'polígonos agregados')} al informe.`,
-    })
+    setMessage(outcome.message)
   }, [draft, change, report.base_snapshot_id, baseByOrdinal])
 
   const removeSelected = useCallback(() => {
@@ -803,6 +818,15 @@ function Editor({
                   {format === 'shp' ? 'Shapefile (.zip)' : format === 'gpkg' ? 'GeoPackage (.gpkg)' : 'CSV'}
                 </a>
               ))}
+              <a
+                className={`button button--ghost${dirty ? ' is-disabled' : ''}`}
+                aria-disabled={dirty}
+                href={dirty ? undefined : printPath(report.report_id)}
+                target="_blank"
+                rel="noopener"
+              >
+                Imprimir / PDF
+              </a>
             </div>
           </section>
         </aside>

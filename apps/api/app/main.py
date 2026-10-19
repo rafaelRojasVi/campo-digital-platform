@@ -14,6 +14,7 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
+from app.compression import COMPRESSED_PATHS, SelectiveGZipMiddleware
 from app.conaf_refresh import refresh_enabled, run_conaf_refresh
 from app.config import get_settings
 from app.dashboard_static import (
@@ -183,6 +184,8 @@ UPLOAD_BODY_LIMITS: dict[str, int] = {
 # Every other route takes, at most, a small JSON body.
 DEFAULT_MAX_BODY_BYTES = 1024 * 1024
 
+# Innermost: compresses the large geometry reads only (app.compression).
+app.add_middleware(SelectiveGZipMiddleware, paths=COMPRESSED_PATHS)
 # Added before SecurityHeadersMiddleware so it sits inside it: the 401/413
 # answers it produces carry the security headers too.
 app.add_middleware(
@@ -379,6 +382,7 @@ RODALES_SPA_PAGE_PATHS = frozenset(
         "rodales/revision",
         "rodales/informes",
         "rodales/informes/editar",
+        "rodales/informes/imprimir",
     }
 )
 

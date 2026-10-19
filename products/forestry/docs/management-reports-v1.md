@@ -185,6 +185,22 @@ OBJECTID). File name: the report name in ASCII, for example
 Exports are not stored; each one writes the audit event
 `forestry.report.exported`.
 
+### «Imprimir / PDF» (2026-10-18)
+
+**DECISION** — The editor's export section links to
+`/rodales/informes/imprimir?informe=<id>`: one page with the report name,
+type, month, status and CONAF number; a still satellite map framed on the
+managed areas (orange) with the rest of the report (green), rodal numbers,
+scale and north; a legend with hectares; and the table of polygons (rodal,
+código, predio, uso 2026, especie, Sup_ha, área de manejo) with totals. The
+browser prints it or saves it as PDF (A4 landscape). It shows the last saved
+version, so the link is disabled while the draft has unsaved changes. Campo
+Digital builds each Plan de Manejo «junto con las imágenes de los rodales a
+manejar» (Javier, 2026-10-15).
+
+**RESULT** (2026-10-18, local dev) — «Prueba cosecha» (766-1 managed,
+132.21 ha; 766, 295.35 ha) printed on one A4 landscape page.
+
 ## Audit
 
 `forestry.report.created`, `.saved`, `.submitted`, `.approved`,

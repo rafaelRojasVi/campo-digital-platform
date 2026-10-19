@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { ApiError } from './api.ts'
 import Root from './Root.tsx'
 import { reportParam, reportPath } from './router.ts'
+import { readClipboard, writeClipboard } from './lib/reportClipboard.ts'
+import { AddToReportDialog } from './components/AddToReportDialog.tsx'
 
 vi.mock('./api.ts', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api.ts')>()
@@ -127,6 +129,11 @@ describe('Informes list', () => {
   })
 })
 
+vi.mock('./components/PrintMap.tsx', () => ({
+  PRINT_MANAGED: '#e8a33d',
+  PRINT_OTHER: '#2f9e6a',
+  PrintMap: ({ features }: { features: unknown[] }) => <p>mapa-impresion {features.length}</p>,
+}))
 vi.mock('./components/ReportMap.tsx', () => ({
   ReportMap: (props: {
     base: { features: { properties: { feature_ordinal: number } }[] }
@@ -644,5 +651,97 @@ describe('Estado CONAF in Rodales', () => {
     const heading = await screen.findByRole('heading', { name: 'Estado en CONAF' })
     const submit = screen.getByRole('button', { name: 'Enviar a revisión' })
     expect(submit.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+describe('Agregar a un informe (from the map)', () => {
+  beforeEach(() => {
+    api.fetchFeatureCollection.mockResolvedValue(baseCollection())
+    window.sessionStorage.clear()
+  })
+
+  it('offers only editable reports of the same base and sends the polygons to the chosen one', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReports.mockResolvedValue({
+      reports: [
+        listedReport({ report_id: 4, name: 'Raleo Lumaco', status: 'borrador' }),
+        listedReport({ report_id: 5, name: 'Cosecha enviada', status: 'enviado' }),
+        listedReport({ report_id: 6, name: 'Base antigua', status: 'borrador', base_snapshot_id: 2 }),
+      ],
+      pending_review_count: 0,
+    })
+    const onClose = vi.fn()
+    render(<AddToReportDialog snapshotId={3} ordinals={[1, 2]} onClose={onClose} />)
+
+    expect(await screen.findByRole('radio', { name: /Raleo Lumaco/ })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Cosecha enviada/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Base antigua/ })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /Raleo Lumaco/ }))
+    await user.click(screen.getByRole('button', { name: 'Agregar 2 polígonos' }))
+
+    expect(readClipboard()).toEqual({ base_snapshot_id: 3, ordinals: [1, 2] })
+    expect(window.location.pathname + window.location.search).toBe(
+      '/rodales/informes/editar?informe=4&pegar=1',
+    )
+  })
+
+  it('creates a new report and opens it ready to paste', async () => {
+    const user = userEvent.setup()
+    reportsApi.fetchReports.mockResolvedValue({ reports: [], pending_review_count: 0 })
+    reportsApi.createReport.mockResolvedValue(9)
+    render(<AddToReportDialog snapshotId={3} ordinals={[1]} onClose={vi.fn()} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Crear un informe nuevo' }))
+    await user.type(screen.getByLabelText('Nombre'), 'Cosecha pino 2027')
+    await user.click(screen.getByRole('button', { name: 'Crear informe' }))
+
+    expect(readClipboard()).toEqual({ base_snapshot_id: 3, ordinals: [1] })
+    expect(window.location.pathname + window.location.search).toBe(
+      '/rodales/informes/editar?informe=9&pegar=1',
+    )
+  })
+
+  it('the editor pastes the copied polygons on arrival and clears the request', async () => {
+    reportsApi.fetchReport.mockResolvedValue(reportDetail())
+    writeClipboard({ base_snapshot_id: 3, ordinals: [1] })
+    window.history.replaceState(null, '', '/rodales/informes/editar?informe=7&pegar=1')
+    render(<RealEditor role="operator" reportId={7} />)
+
+    expect(await screen.findByText('1 polígono · 0 en el área de manejo')).toBeInTheDocument()
+    expect(screen.getByText('1 polígono agregado al informe.')).toBeInTheDocument()
+    expect(window.location.search).toBe('?informe=7')
+  })
+})
+
+describe('Imprimir / PDF', () => {
+  it('prints the report: header, map, legend and the table with totals', async () => {
+    const user = userEvent.setup()
+    const print = vi.spyOn(window, 'print').mockImplementation(() => undefined)
+    reportsApi.fetchReport.mockResolvedValue({
+      ...reportDetail({ status: 'aprobado', conaf_solicitud: '090663' }, true),
+    })
+    const { InformePrintPage } = await import('./pages/InformePrintPage.tsx')
+    render(<InformePrintPage reportId={7} />)
+
+    expect(await screen.findByRole('heading', { name: 'Cosecha pino enero 2027' })).toBeInTheDocument()
+    expect(screen.getByText(/Aprobado · Solicitud CONAF N.º 090663/)).toBeInTheDocument()
+    expect(screen.getByText('mapa-impresion 1')).toBeInTheDocument()
+    expect(screen.getByText(/Área de manejo · 1,00 ha/)).toBeInTheDocument()
+    expect(screen.getByText('Total (1 polígonos)')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Imprimir o guardar como PDF' }))
+    expect(print).toHaveBeenCalled()
+    print.mockRestore()
+  })
+
+  it('links the editor to the printable page once saved', async () => {
+    reportsApi.fetchReport.mockResolvedValue(reportDetail({ status: 'aprobado' }, true))
+    api.fetchFeatureCollection.mockResolvedValue(baseCollection())
+    render(<RealEditor role="viewer" reportId={7} />)
+    expect(await screen.findByRole('link', { name: 'Imprimir / PDF' })).toHaveAttribute(
+      'href',
+      '/rodales/informes/imprimir?informe=7',
+    )
   })
 })

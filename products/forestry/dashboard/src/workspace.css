@@ -158,12 +158,18 @@
     flex-basis: auto;
   }
 
+  /* Below the «Buscar y filtrar» button; zoom moves to the bottom left. */
   .map__controls {
-    top: 8px;
-    left: 50px;
+    top: 50px;
+    left: 8px;
     right: 8px;
     max-width: none;
     gap: 4px;
+  }
+
+  .app__map .leaflet-top.leaflet-left {
+    top: auto;
+    bottom: 24px;
   }
 
   .map__control-button,
@@ -184,7 +190,7 @@
   }
 
   .active-filters {
-    top: 78px;
+    top: 128px;
     left: 8px;
     right: 8px;
     width: auto;
