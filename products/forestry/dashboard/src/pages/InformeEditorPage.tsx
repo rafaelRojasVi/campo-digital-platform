@@ -139,6 +139,25 @@ function takePasteRequest(): boolean {
   return true
 }
 
+const MAP_PREF_PREFIX = 'rodales.informe.mapa.'
+
+function readMapPref(name: string, fallback: number): number {
+  try {
+    const value = Number(window.localStorage.getItem(MAP_PREF_PREFIX + name))
+    return window.localStorage.getItem(MAP_PREF_PREFIX + name) === null || Number.isNaN(value) ? fallback : value
+  } catch {
+    return fallback
+  }
+}
+
+function writeMapPref(name: string, value: number): void {
+  try {
+    window.localStorage.setItem(MAP_PREF_PREFIX + name, String(value))
+  } catch {
+    // Storage blocked (private window): the setting lasts for this visit.
+  }
+}
+
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`
 }
@@ -267,8 +286,14 @@ function Editor({
   const [hoverKey, setHoverKey] = useState<string | null>(null)
   // «Rodal 1208 agregado · Deshacer» over the map; the nonce restarts its timer.
   const [toast, setToast] = useState<{ text: string; nonce: number } | null>(null)
-  // ReportMap fits the view when it mounts (the editor remounts per revision).
-  const fitNonce = 0
+  // ReportMap fits the view on mount (the editor remounts per revision) and on
+  // «Ver todo el informe».
+  const [fitNonce, setFitNonce] = useState(0)
+  // Map display: a per-viewer convenience kept in this browser, if allowed.
+  const [fillOpacity, setFillOpacity] = useState(() => readMapPref('opacity', 0.6))
+  const [showLabels, setShowLabels] = useState(() => readMapPref('labels', 1) === 1)
+  useEffect(() => writeMapPref('opacity', fillOpacity), [fillOpacity])
+  useEffect(() => writeMapPref('labels', showLabels ? 1 : 0), [showLabels])
 
   const baseByOrdinal = useMemo(
     () => new Map(base.features.map((feature) => [feature.properties.feature_ordinal, feature])),
@@ -979,6 +1004,8 @@ function Editor({
             }}
             fitNonce={fitNonce}
             focus={focus}
+            fillOpacity={fillOpacity}
+            showLabels={showLabels}
           />
 
           <div className="map-tools" role="toolbar" aria-label="Herramientas del mapa">
@@ -1001,9 +1028,18 @@ function Editor({
                 onChange={(event) => setSearch(event.target.value)}
               />
             </form>
+            <span className="map-tools__sep" aria-hidden="true" />
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setFitNonce((n) => n + 1)}
+              aria-label="Ver todo el informe"
+              title="Ver todo el informe"
+            >
+              <Icon name="fit" />
+            </button>
             {editable ? (
               <>
-                <span className="map-tools__sep" aria-hidden="true" />
                 <button type="button" className="icon-button" onClick={undo} disabled={history.past.length === 0} aria-label="Deshacer" title="Deshacer (Ctrl+Z)">
                   <Icon name="undo" />
                 </button>
@@ -1012,6 +1048,32 @@ function Editor({
                 </button>
               </>
             ) : null}
+          </div>
+
+          <div className="map-layers" role="group" aria-label="Vista del mapa">
+            <button
+              type="button"
+              className={`map-layers__toggle${showLabels ? ' map-layers__toggle--on' : ''}`}
+              aria-pressed={showLabels}
+              onClick={() => setShowLabels((on) => !on)}
+            >
+              <Icon name="hash" size={16} />
+              Números
+            </button>
+            <label className="map-layers__opacity">
+              <Icon name="layers" size={16} />
+              <span className="sr-only">Opacidad de los rodales del informe</span>
+              <input
+                type="range"
+                min={10}
+                max={100}
+                step={5}
+                value={Math.round(fillOpacity * 100)}
+                onChange={(event) => setFillOpacity(Number(event.target.value) / 100)}
+              />
+              <span className="map-layers__value" aria-hidden="true">{`${Math.round(fillOpacity * 100)}%`}</span>
+            </label>
+            <Hint text="«Números» muestra el N.º de cada rodal (los de la base aparecen al acercarse). «Opacidad» aclara el relleno para ver la imagen satelital; bajo 35 % el borde toma el color del rodal." />
           </div>
 
           {editable && mode === 'select' && card === null && toast === null ? (

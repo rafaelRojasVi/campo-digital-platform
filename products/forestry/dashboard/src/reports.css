@@ -1364,7 +1364,7 @@ details.report-warnings ul {
 .map-hint {
   position: absolute;
   left: 50%;
-  bottom: 30px;
+  bottom: 84px;
   z-index: 500;
   transform: translateX(-50%);
   margin: 0;
@@ -1473,7 +1473,7 @@ details.report-warnings ul {
 .map-toast {
   position: absolute;
   left: 50%;
-  bottom: 30px;
+  bottom: 84px;
   z-index: 650;
   transform: translateX(-50%);
   display: flex;
@@ -1750,5 +1750,111 @@ details.report-warnings ul {
 @media (prefers-reduced-motion: reduce) {
   .species-list {
     animation: none;
+  }
+}
+
+/* Map view controls: rodal numbers and fill opacity (bottom left). */
+.map-layers {
+  position: absolute;
+  left: 12px;
+  bottom: 30px;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow-float);
+  font-size: 13px;
+}
+
+.map-layers__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color 160ms var(--ease), color 160ms var(--ease), border-color 160ms var(--ease);
+}
+
+.map-layers__toggle--on {
+  border-color: var(--green-700);
+  background: var(--green-tint);
+  color: var(--green-900);
+}
+
+.map-layers__toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.map-layers__opacity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+}
+
+.map-layers__opacity input {
+  width: 96px;
+  accent-color: var(--green-700);
+}
+
+.map-layers__value {
+  min-width: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.report-map__label {
+  background: none;
+  border: 0;
+}
+
+.report-map__label span {
+  display: inline-block;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 0.95),
+    0 0 4px rgb(0 0 0 / 0.7);
+  pointer-events: none;
+}
+
+.report-map__label b {
+  font-weight: 800;
+}
+
+.report-map__label--base span {
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+@media (max-width: 900px) {
+  .map-layers {
+    bottom: 26px;
+  }
+
+  .map-layers__opacity input {
+    width: 70px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-layers__toggle {
+    transition: none;
   }
 }

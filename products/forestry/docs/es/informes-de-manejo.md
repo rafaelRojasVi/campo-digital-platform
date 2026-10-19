@@ -49,13 +49,17 @@ más simple posible; los «?» explican cada parte.
    mapa.
 6. **Excel de cosecha** está arriba del panel; los otros formatos, el N.º de
    CONAF, duplicar y borrar están en **«Otros formatos, CONAF y más»**.
-7. **Guardar** y **Enviar a revisión** están siempre abajo del panel, que
+7. En el mapa: **Números** muestra el N.º de cada rodal (los de la base
+   aparecen al acercarse), **Opacidad** aclara el relleno para ver la imagen
+   satelital, y **Ver todo el informe** (⛶, junto a la búsqueda) encuadra el
+   informe. La opacidad y los números se recuerdan en este navegador.
+8. **Guardar** y **Enviar a revisión** están siempre abajo del panel, que
    indica si hay cambios sin guardar. **Deshacer** y **Rehacer** están arriba
    del mapa.
-8. Si Javier pide cambios, la nota aparece arriba del informe. Se corrige y
+9. Si Javier pide cambios, la nota aparece arriba del informe. Se corrige y
    se vuelve a enviar.
-9. Un informe aprobado queda fijo. Para cambiarlo, use **Duplicar como
-   borrador**.
+10. Un informe aprobado queda fijo. Para cambiarlo, use **Duplicar como
+    borrador**.
 
 ## Desde el mapa
 

@@ -7,7 +7,8 @@
  */
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
-import { multiPolygonToLatLngs } from '../lib/mapData.ts'
+import { metersPerPixel, multiPolygonToLatLngs, nonOverlapping, type LabelBox } from '../lib/mapData.ts'
+import { labelPoint } from '../lib/labelPoint.ts'
 import { installKeyboardZoom } from '../lib/keyboardZoom.ts'
 import { lonLatToUtm, multiPolygonUtmBbox, utmBboxToLonLatBounds, utmToLonLat } from '../lib/proj.ts'
 import type { DraftFeature } from '../lib/reportDraft.ts'
@@ -43,6 +44,10 @@ interface ReportMapProps {
   fitNonce: number
   /** A click on the map outside every polygon (closes the rodal card). */
   onBackgroundClick?: () => void
+  /** Fill opacity of the report's polygons (0–1), from the «Opacidad» slider. */
+  fillOpacity?: number
+  /** Rodal numbers over the map: the report's always, the base's when zoomed in. */
+  showLabels?: boolean
   /** Fly to these polygons whenever `focus.nonce` changes (search, list click). */
   focus?: { nonce: number; coordinates: Coordinates[] }
 }
@@ -58,6 +63,13 @@ const REPORT = '#2f9e6a'
 const SELECTED = '#3b8fd6'
 const CUT = '#ffd84d'
 
+/** Below this fill opacity the outline takes the fill color, so edges stay readable. */
+const COLORED_OUTLINE_BELOW = 0.35
+/** Base rodal numbers appear from this zoom, on polygons at least this big on screen. */
+const BASE_LABELS_FROM_ZOOM = 15
+const BASE_LABEL_MIN_PX = 44
+const BASE_LABEL_MAX = 200
+
 function latLngs(coordinates: Coordinates): [number, number][][][] {
   return multiPolygonToLatLngs({ type: 'MultiPolygon', coordinates })
 }
@@ -72,14 +84,27 @@ function baseStyle(selected: boolean): L.PathOptions {
   }
 }
 
-function featureStyle(feature: DraftFeature, selected: boolean): L.PathOptions {
+function featureStyle(feature: DraftFeature, selected: boolean, opacity: number): L.PathOptions {
   const color = feature.in_report ? HARVEST : REPORT
+  const fill = feature.in_report ? opacity : opacity * 0.65
   return {
-    color: selected ? SELECTED : '#ffffff',
-    weight: selected ? 4 : 2.5,
+    color: selected ? SELECTED : opacity < COLORED_OUTLINE_BELOW ? color : '#ffffff',
+    weight: selected ? 4 : opacity < COLORED_OUTLINE_BELOW ? 3 : 2.5,
     fillColor: color,
-    fillOpacity: feature.in_report ? 0.6 : 0.4,
+    fillOpacity: fill,
   }
+}
+
+function labelMarker(lat: number, lon: number, html: string, className: string): L.Marker {
+  return L.marker([lat, lon], {
+    interactive: false,
+    keyboard: false,
+    icon: L.divIcon({ className, html: `<span>${html}</span>`, iconSize: undefined }),
+  })
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 }
 
 /** A click in «Dividir con línea»: one line vertex, in UTM, from wherever it lands. */
@@ -98,6 +123,9 @@ export function ReportMap(props: ReportMapProps) {
   const shownSelectionRef = useRef<Set<number>>(new Set())
   const reportLayerRef = useRef<L.LayerGroup | null>(null)
   const drawLayerRef = useRef<L.LayerGroup | null>(null)
+  const labelLayerRef = useRef<L.LayerGroup | null>(null)
+  // Interior label points and UTM boxes, computed once per base polygon.
+  const baseGeomRef = useRef<Map<number, { point: [number, number]; box: [number, number, number, number] }>>(new Map())
   const propsRef = useRef(props)
   propsRef.current = props
 
@@ -132,6 +160,7 @@ export function ReportMap(props: ReportMapProps) {
     baseLayerRef.current = L.layerGroup().addTo(map)
     reportLayerRef.current = L.layerGroup().addTo(map)
     drawLayerRef.current = L.layerGroup().addTo(map)
+    labelLayerRef.current = L.layerGroup().addTo(map)
 
     map.on('click', (event: L.LeafletMouseEvent) => {
       if (propsRef.current.mode === 'split') addLinePoint(event, propsRef.current.onLinePoint)
@@ -154,7 +183,8 @@ export function ReportMap(props: ReportMapProps) {
     }
   }, [])
 
-  // Fit to the report (or the base when the report is empty).
+  // Fit to the report (or the base when the report is empty), on mount and
+  // whenever `fitNonce` changes («Ver todo el informe»).
   useEffect(() => {
     const map = mapRef.current
     if (map === null) return
@@ -276,7 +306,7 @@ export function ReportMap(props: ReportMapProps) {
 
     if (props.mode !== 'choose') {
       for (const feature of props.features) {
-        const polygon = L.polygon(latLngs(feature.coordinates), featureStyle(feature, props.selectedKeys.has(feature.key)))
+        const polygon = L.polygon(latLngs(feature.coordinates), featureStyle(feature, props.selectedKeys.has(feature.key), props.fillOpacity ?? 0.6))
         const code = feature.attributes.n_rodal
         polygon.bindTooltip(code === null || code === undefined ? 'Sin rodal' : String(code), {
           sticky: true,
@@ -323,7 +353,69 @@ export function ReportMap(props: ReportMapProps) {
         L.circleMarker(point, { radius: 4, color: CUT, fillColor: CUT, fillOpacity: 1, interactive: false }).addTo(draw)
       }
     }
-  }, [props.features, props.selectedKeys, props.mode, props.linePoints, props.choosePieces, props.overlay])
+  }, [props.features, props.selectedKeys, props.mode, props.linePoints, props.choosePieces, props.overlay, props.fillOpacity])
+
+  // Rodal numbers: every report polygon, plus base polygons big enough on
+  // screen once zoomed in. Report labels win; overlapping ones are dropped.
+  useEffect(() => {
+    const map = mapRef.current
+    const layer = labelLayerRef.current
+    if (map === null || layer === null) return
+    const sync = () => {
+      layer.clearLayers()
+      if (!(propsRef.current.showLabels ?? true) || propsRef.current.mode === 'choose') return
+      const view = map.getBounds()
+      const entries: { lat: number; lon: number; html: string; className: string; box: LabelBox }[] = []
+      const push = (point: [number, number], html: string, className: string, width: number) => {
+        const [lon, lat] = utmToLonLat(point[0], point[1])
+        if (!view.contains([lat, lon])) return
+        const at = map.latLngToContainerPoint([lat, lon])
+        entries.push({ lat, lon, html, className, box: { left: at.x - width / 2, right: at.x + width / 2, top: at.y - 10, bottom: at.y + 10 } })
+      }
+      const inReport = new Set<number>()
+      for (const feature of propsRef.current.features) {
+        inReport.add(feature.source_feature_ordinal)
+        const code = feature.attributes.n_rodal
+        if (code === null || code === undefined || String(code).trim() === '') continue
+        const text = String(code)
+        push(labelPoint(feature.coordinates), `<b>${escapeHtml(text)}</b>`, 'report-map__label', text.length * 8 + 12)
+      }
+      if (map.getZoom() >= BASE_LABELS_FROM_ZOOM) {
+        const resolution = metersPerPixel(map.getCenter().lat, map.getZoom())
+        const [vx1, vy1] = lonLatToUtm(view.getWest(), view.getSouth())
+        const [vx2, vy2] = lonLatToUtm(view.getEast(), view.getNorth())
+        let count = 0
+        for (const feature of propsRef.current.base.features) {
+          const ordinal = feature.properties.feature_ordinal
+          const rodal = feature.properties.n_rodal
+          if (inReport.has(ordinal) || rodal === null || rodal.trim() === '') continue
+          let geom = baseGeomRef.current.get(ordinal)
+          if (geom === undefined) {
+            geom = {
+              point: labelPoint(feature.geometry.coordinates),
+              box: multiPolygonUtmBbox({ type: 'MultiPolygon', coordinates: feature.geometry.coordinates }),
+            }
+            baseGeomRef.current.set(ordinal, geom)
+          }
+          const [minx, miny, maxx, maxy] = geom.box
+          if (maxx < vx1 || minx > vx2 || maxy < vy1 || miny > vy2) continue
+          if (Math.max(maxx - minx, maxy - miny) / resolution < BASE_LABEL_MIN_PX) continue
+          push(geom.point, escapeHtml(rodal.trim()), 'report-map__label report-map__label--base', rodal.trim().length * 7 + 10)
+          count += 1
+          if (count >= BASE_LABEL_MAX) break
+        }
+      }
+      const keep = nonOverlapping(entries.map((entry) => entry.box), 2)
+      entries.forEach((entry, index) => {
+        if (keep[index]) labelMarker(entry.lat, entry.lon, entry.html, entry.className).addTo(layer)
+      })
+    }
+    sync()
+    map.on('zoomend moveend', sync)
+    return () => {
+      map.off('zoomend moveend', sync)
+    }
+  }, [props.features, props.base, props.showLabels, props.mode])
 
   // Cursor follows the mode.
   useEffect(() => {

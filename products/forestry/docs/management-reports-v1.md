@@ -146,7 +146,15 @@ A feature sent without `geometry` is an untouched copy of its source polygon
   - **Motion:** the card and toast ease in, a row's highlight fades, and all
     of it stops under prefers-reduced-motion.
   - **Map:** half-level wheel zoom, imagery capped at native zoom 18, and a
-    redraw on resize.
+    redraw on resize. View controls borrowed from the main Map page:
+    - «Números» labels every report rodal and, from zoom 15, base rodals at
+      least 44 px across, up to 200, with overlaps dropped and report labels
+      first;
+    - «Opacidad» sets the report fill (10–100 %), and below 35 % the outline
+      takes the fill color;
+    - «Ver todo el informe» refits the view.
+    Opacity and numbers are a per-viewer convenience kept in localStorage,
+    guarded by try/catch.
   - **Phones:** the map sits above and the table below, and the panel scrolls
     as a whole.
 
