@@ -239,10 +239,21 @@ _HSTS_VALUE = "max-age=31536000; includeSubDomains"
 _HSTS_APP_ENVS = frozenset({"staging", "production"})
 
 
+_PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=()"
+# «¿Dónde estoy?» on the Rodales map shows the device's position over the
+# rodales. Same origin only (no frame may ask); the position stays in the
+# browser and is never sent to the API.
+_RODALES_PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=(self)"
+
+
+def _is_rodales(path: str) -> bool:
+    return path == _RODALES_PATH or path.startswith(_RODALES_PATH + "/")
+
+
 def _policy_for(path: str) -> str:
     if path in _DOCS_PATHS:
         return _DOCS_CONTENT_SECURITY_POLICY
-    if path == _RODALES_PATH or path.startswith(_RODALES_PATH + "/"):
+    if _is_rodales(path):
         return RODALES_CONTENT_SECURITY_POLICY
     return DASHBOARD_CONTENT_SECURITY_POLICY
 
@@ -282,7 +293,9 @@ class SecurityHeadersMiddleware:
                     "X-Content-Type-Options": "nosniff",
                     "X-Frame-Options": "DENY",
                     "Referrer-Policy": "same-origin",
-                    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+                    "Permissions-Policy": (
+                        _RODALES_PERMISSIONS_POLICY if _is_rodales(path) else _PERMISSIONS_POLICY
+                    ),
                     "Content-Security-Policy": _policy_for(path),
                 }
                 if not path.startswith(_CACHEABLE_PATH_PREFIXES):

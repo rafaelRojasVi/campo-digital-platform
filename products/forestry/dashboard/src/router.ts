@@ -15,6 +15,7 @@ export const ROUTES = {
   revision: '/rodales/revision',
   informes: '/rodales/informes',
   informe: '/rodales/informes/editar',
+  imprimir: '/rodales/informes/imprimir',
 } as const
 
 export type Route = (typeof ROUTES)[keyof typeof ROUTES]
@@ -103,6 +104,11 @@ export function reportParam(search: URLSearchParams): number | null {
 
 export function reportPath(reportId: number): string {
   return `${ROUTES.informe}?informe=${reportId}`
+}
+
+/** The printable report (map, legend, table) for «Imprimir / PDF». */
+export function printPath(reportId: number): string {
+  return `${ROUTES.imprimir}?informe=${reportId}`
 }
 
 export function reviewPath(snapshotId: number): string {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ApiError } from './api.ts'
+import { ApiError, SESSION_EXPIRED_EVENT, getJson } from './api.ts'
 import { ImportarPage } from './pages/ImportarPage.tsx'
 import { RevisionPage } from './pages/RevisionPage.tsx'
 import { VersionesPage } from './pages/VersionesPage.tsx'
@@ -246,7 +246,38 @@ describe('Root', () => {
     expect(await screen.findByText('Sin acceso a Rodales')).toBeInTheDocument()
   })
 
-  it('navigates in-app between sections from the header', async () => {
+  it('shows the sign-in when a page read finds the session expired', async () => {
+    api.fetchForestryRole.mockResolvedValue('admin')
+    render(<Root />)
+    await screen.findByText('mapa-stub')
+
+    act(() => {
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
+    })
+
+    expect(await screen.findByText('Inicie sesión')).toBeInTheDocument()
+    expect(screen.queryByText('mapa-stub')).not.toBeInTheDocument()
+  })
+
+  it('announces an expired session on a 401 read, not on other failures', async () => {
+    const heard = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, heard)
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{}', { status: 500 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 401 }))
+    try {
+      await expect(getJson('/reports')).rejects.toBeInstanceOf(ApiError)
+      expect(heard).not.toHaveBeenCalled()
+      await expect(getJson('/reports')).rejects.toBeInstanceOf(ApiError)
+      expect(heard).toHaveBeenCalledTimes(1)
+    } finally {
+      fetchSpy.mockRestore()
+      window.removeEventListener(SESSION_EXPIRED_EVENT, heard)
+    }
+  })
+
+  it('reaches «Cargar versión» from the versions page, not the header', async () => {
     api.fetchForestryRole.mockResolvedValue('operator')
     api.fetchVersions.mockResolvedValue(testVersions())
     window.history.replaceState(null, '', '/rodales/versiones')
@@ -255,7 +286,8 @@ describe('Root', () => {
 
     await screen.findByText('Versiones de la capa de rodales')
     const nav = screen.getByRole('navigation', { name: 'Secciones de Rodales' })
-    await user.click(within(nav).getByRole('link', { name: 'Cargar versión' }))
+    expect(within(nav).queryByRole('link', { name: 'Cargar versión' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('link', { name: 'Cargar versión' }))
 
     expect(window.location.pathname).toBe('/rodales/importar')
     expect(await screen.findByText('Cargar una nueva versión')).toBeInTheDocument()

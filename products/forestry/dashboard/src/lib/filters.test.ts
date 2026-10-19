@@ -5,6 +5,7 @@ import {
   countActiveFilters,
   filterOptions,
   normalizeForSearch,
+  speciesFilterOptions,
 } from './filters.ts'
 import { testFeatures } from '../test/fixtures.ts'
 
@@ -25,6 +26,11 @@ describe('applyFilters', () => {
   it('filters by predio name', () => {
     const result = applyFilters(features, { ...EMPTY_FILTERS, nomPredio: 'San Sebastian' })
     expect(result.map((f) => f.properties.feature_ordinal)).toEqual([3])
+  })
+
+  it('filters by species read from the 2026 code', () => {
+    const result = applyFilters(features, { ...EMPTY_FILTERS, especie: 'Pi' })
+    expect(result.map((f) => f.properties.cod_uso_2026)).toEqual(['Pi06', 'Pi26'])
   })
 
   it('filters by uso 2026', () => {
@@ -102,5 +108,14 @@ describe('filterOptions', () => {
     const options = filterOptions(testFeatures(), 'uso_2026')
     expect(options[0]).toEqual({ value: 'PLANTACION', count: 3 })
     expect(options.map((option) => option.value)).not.toContain('')
+  })
+})
+
+describe('speciesFilterOptions', () => {
+  it('offers each species group with its label, most polygons first', () => {
+    const options = speciesFilterOptions(testFeatures())
+    expect(options[0]).toEqual({ value: 'Pi', label: 'Pino radiata', count: 2 })
+    expect(options.map((option) => option.label)).toContain('Mixta: roble + coigüe + raulí')
+    expect(options.map((option) => option.value)).toContain('__sin_especie__')
   })
 })

@@ -110,8 +110,8 @@ export function ComparisonPanel({
     <div className="comparison">
       <div className="comparison__header">
         <p className="comparison__semantics">
-          Diferencias literales entre los campos 2024 y 2026 de la misma instantánea. No
-          representan transiciones de flujo de trabajo ni gestión realizada.
+          Polígonos cuyo uso o código es distinto en los campos 2024 y 2026 de la base. Es
+          lo que dice la base; no significa que el manejo ya se haya hecho.
         </p>
         <button
           type="button"

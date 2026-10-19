@@ -19,22 +19,91 @@ Code: `products/forestry/dashboard/` (Vite + React 19 + TypeScript, Leaflet
 ## Information architecture
 
 ```text
-Header      brand · "Patrimonio Degenfeld" · provenance (última ingesta,
-            layer name, EPSG, family fingerprint) — labeled as ingestion
-            order, never "vigente"
-KPI strip   server-computed snapshot facts (feature count, Sup_ha total +
-            geometry-derived total, predio code/name pairs, use classes,
-            2024/2026 field differences, invalid geometries)
-Sidebar     search · filters (predio, uso 2026, rodal; progressive
+Header      brand · "Patrimonio Degenfeld" · Mapa · Informes · Versiones ·
+            the version on the map (N.º, upload date)
+Sidebar     search · filters (predio, uso 2026, especie, rodal; progressive
             disclosure: uso 2024, descripción, códigos, comparaciones,
-            validez, evidencia de calidad) · color dimension + legend
-Map         dominant surface (Leaflet, canvas renderer)
-Bottom      tabs synchronized with the filtered set:
-            Tabla (paginated) · 2024 → 2026 (literal comparison) ·
-            Calidad de datos (evidence classes)
+            validez, evidencia de calidad) · «Agregar … a un informe» once
+            a filter is set · color dimension + legend
+Map         dominant surface (Leaflet, canvas renderer), satellite by
+            default, predio names over the overview
+Bottom      closed on arrival; tabs synchronized with the filtered set:
+            Tabla (paginated) · Cambios 2024 → 2026 (literal comparison) ·
+            Revisión de la base (provenance: layer, EPSG, fingerprint;
+            KPI strip; quality evidence classes)
 Inspector   right panel (desktop) / bottom sheet (mobile) per selected
-            polygon; raw source attribute row behind a disclosure
+            polygon: «Agregar a un informe», especie, uso, código,
+            descripción, superficie; source evidence behind «Detalle técnico»
 ```
+
+**DECISION** (2026-10-18) — The map is for looking and choosing; splitting
+and reporting happen in a named report (Informes). A design review of all
+Rodales screens found the V1 review-first layout in the way of everyday
+use: six technical KPIs and the layer/EPSG/fingerprint provenance above
+the map, the bottom panel and inspector leaving the map under half the
+screen, a second editing tool on the map («Simular ajuste») that saved
+nothing, and «Cargar versión» twice. Changes: the provenance and KPI strip
+moved into «Revisión de la base»; the bottom panel starts closed; the
+inspector leads with plain facts; «Cargar versión» is only the button on
+Versiones; the simulation was removed (see below); the map links to the
+report editor through «Agregar a un informe».
+
+**DECISION** (2026-10-18) — «Agregar a un informe» (inspector: the selected
+polygon; sidebar: the filtered set, up to 300 polygons) lists the editable
+reports (borrador, cambios solicitados) built on the same base version, or
+creates one. It writes the editor's clipboard (`lib/reportClipboard.ts`)
+and opens the editor with `?pegar=1`; the editor pastes once on load,
+drops the parameter, and the draft starts unsaved. Viewers and a preview of
+a non-published version get no «Agregar».
+
+**DECISION** (2026-10-18) — Satellite imagery (Esri) is the default
+background on the map, as in the report editor: Campo Digital asked for the
+imagery («Google Earth o Esri»). The estate spans about 45 × 70 km, so the
+fit-to-estate view shows the smaller predios as specks; below zoom 13 each
+predio's name sits on its largest polygon, biggest predios first, dropping
+names that would overlap another name or the map controls. Each name is a button
+(click or Enter): it fits the map to that predio's visible polygons.
+
+**DECISION** (2026-10-18) — Ctrl/Cmd + «+» and Ctrl/Cmd + «−» zoom the map
+(the Mapa and the report editor) while the pointer is over it or focus is
+inside it (`src/lib/keyboardZoom.ts`). Elsewhere on the page the browser's
+own page zoom is untouched.
+
+## Map tools (2026-10-18)
+
+Taken from what QGIS, ArcMap and Google Earth users expect, sized for people
+without GIS training:
+
+- **DECISION** — Rodal labels: from zoom 14, every visible polygon at least
+  44 px across shows its rodal number in bold and its 2026 code under it,
+  biggest polygons first, up to 300, dropping labels that would overlap
+  another or the map controls. The anchor is an interior point
+  (`src/lib/labelPoint.ts`: a 12×12 grid over the largest part, the point
+  farthest from every edge), because a C-shaped or holed rodal's bbox
+  centre can fall outside it.
+- **DECISION** — Multi-selection: Mayús/Ctrl + clic adds or removes a
+  polygon; Mayús + drag selects every visible polygon whose interior point
+  lies in the box (Leaflet's own box zoom is off). Two or more selected open
+  «N polígonos seleccionados»: total Sup_ha, hectares per species, the list,
+  «Agregar a un informe». Esc clears.
+- **DECISION** — «Medir»: one click per point; length along the points and,
+  from three points, the enclosed area, both planar in EPSG:32718 (as
+  Sup_ha), shown in m/km and ha (`src/lib/measure.ts`). Clicks while
+  measuring never select. Esc ends.
+- **DECISION** — «Mi ubicación»: the browser's geolocation (asks first),
+  drawn with its accuracy circle; the rodal under it opens in the inspector
+  and a status line names it. Needs `geolocation=(self)` on `/rodales`
+  (hosted-release-v1.md). The position is never sent or stored.
+- **DECISION** — Cursor coordinates in UTM 18S at the bottom left (desktop
+  only).
+- **RESULT** (2026-10-18, local dev, snapshot 1) — Mayús + drag over
+  Hacienda Trinidad selected 31 polygons, 53.78 ha, 20.56 ha of P. radiata;
+  a simulated position inside rodal 766 named it and opened it; a 4-point
+  measurement gave 546 m and 3.31 ha.
+
+**FACT** — The thin rectangular lines visible over the satellite view are
+seams of Esri's imagery mosaic, not source geometry: no polygon in snapshot
+1 spans more than 8 km.
 
 **DECISION** — The full feature collection (~9.15 MB, 1,568 features) is
 loaded once from `/api/forestry/.../feature-collection`; all filtering,
@@ -76,7 +145,7 @@ source geometry object is never mutated (guarded by test).
 ## Visual encoding
 
 Color dimensions (selector + legend): `Uso 2026` (default), `Uso 2024`,
-`Predio`, `Comparación 2024 → 2026`, `Evidencia de calidad`.
+`Especie`, `Predio`, `Comparación 2024 → 2026`, `Evidencia de calidad`.
 
 **DECISION** — Categorical dimensions assign the 8 validated hues of the
 dataviz reference palette in descending `Sup_ha` order; vocabularies beyond
@@ -95,6 +164,52 @@ colors must not imply business semantics. The comparison dimension uses one
 neutral blue for "campos distintos" vs light gray; quality evidence uses one
 orange for "con evidencia" — explicitly labeled as literal field differences
 and *evidencia de calidad de datos* respectively.
+
+## Species (2026-10-18)
+
+Campo Digital's first daily question is "¿cuál es la superficie de rodales
+por especie?" (Javier's answers, 2026-10-15). The `Especie` color dimension
+and the `Especie` filter answer it from `CodUso_2026`
+(`products/forestry/dashboard/src/lib/species.ts`).
+
+- **FACT** — Javier confirmed on 2026-10-15 that codes such as `Pi06`,
+  `En11`, `Eg03`, `Po99` are species + plantation year, that `Rn` is
+  renoval, `Rzg` rezagado, `??` an unknown year, and that compound codes
+  (`Po99Eg97`) are mixed plantations.
+- **FACT** — In `Gdb_Degenfeld2026_mv`, `DescUso` names the species for the
+  prefixes `Pi` (Plantacion de P. radiata), `Po` (P. oregon), `En`
+  (E. nitens), `Eg` (E. globulus), `Ar` («Regeneracion de Aromo» on `Ar Rn`,
+  «AROMO» on `Ar`) and `Ro` («AROMO ROBLE» on `Ar Ro`; «Renovales de
+  Nothofagus» on `Ro`).
+- **FACT (2026-10-19, Javier's written answers)** — `Co` coigüe, `Ra`
+  raulí, `Ul` ulmo and `Te` tepa (their rows only say «Plantacion de
+  nativas»), and `Al` aliso, `Ci` ciprés, `Se` secuoya, `Ss` *Sequoia
+  sempervirens* (3.66 ha of 10,422.61 ha together). Every prefix is now
+  named; none is shown «por confirmar».
+
+**DECISION** — Reading rule: only the code's first word is read (later words
+such as `Pi Rn` or `Rzg` describe regeneration around the stand); an all-caps
+prefix before the species is skipped (`CPLCo06` → coigüe); codes starting
+with `ES` are species trials («Ensayo (varias especies)»); codes without a
+known prefix (`BN`, `VN`, `Ve`, `Prot`, `Mx`, `Ali`, `CCV En`…) fall into
+«Sin especie en el código». The year is not used.
+
+**DECISION** — A mixed plantation is its own group, with its species in a
+fixed order so `CoRa03` and `RaCo07` count together. Its area is not split
+between species: the proportions are unknown.
+
+**DECISION** — Unlike the other dimensions, the species legend sums the
+**filtered** polygons (filter by predio → that predio's species) and never
+folds into «Otros»: the hectares per species are the point of this view.
+Colors are still ranked over the whole base, so they stay stable while
+filters change; species beyond the 8 hues share the neutral gray and keep
+their own legend row. Long mixture names wrap instead of being cut.
+
+**RESULT** — On the local stack with `Gdb_Degenfeld2026_mv` (2026-10-18):
+pino radiata 1,292.57 ha (436 polygons), E. nitens 346.12 ha (145),
+pino oregón 235.45 ha (110), E. globulus 142.99 ha (77), roble 47.32 ha (21),
+coigüe 30.38 ha (40); «Sin especie en el código» 8,230.97 ha (646). Filtered
+to San Sebastian, the legend sums 300.24 ha, the filter total.
 
 ## 2024 → 2026 treatment
 
@@ -188,6 +303,42 @@ launcher (1,568 features, fingerprint `19beaed5…60bd1`, id 1):
 
 ## Performance (RESULT)
 
+### 2026-10-18 pass
+
+Measured the same way (Chromium, 1440×900, local stack, snapshot 1), long
+tasks counted with a `PerformanceObserver`:
+
+| Step | Before | After |
+|---|---|---|
+| Feature collection transferred | 9,372,348 B (no compression) | 2,650,275 B (gzip level 6) |
+| Zoom in ×4 into rodal-label zoom | 2 long tasks, max 534 ms | none |
+| Mapa → Informes → Mapa | full re-download; max 354 ms | no download; max 151 ms |
+| Pan, cursor moves, selection, recolor | no long tasks | no long tasks |
+
+**DECISION** — What changed:
+- the API gzips only the large geometry reads (`app.compression`: GET
+  `/api/forestry/snapshots/{id}/feature-collection` and
+  `/api/forestry/reports/{id}`, and since 2026-10-18 Transelec's row
+  reads `pmfs`, `lifecycle`, `plazos`, `aef`, `pending`), level 6 (about 2 % larger than level 9 for
+  less than half the server time on a synthetic 12 MB GeoJSON); session,
+  CSRF and form responses stay uncompressed, so compression cannot be used
+  to guess a token (BREACH needs a secret and reflected input together);
+- the dashboard keeps the downloaded collection in memory for the page
+  session, two versions at most (`fetchFeatureCollection`), and reprojects
+  each geometry once (`multiPolygonToLatLngs`, a `WeakMap` by geometry).
+  Nothing goes to browser storage; the API keeps `Cache-Control: no-store`;
+- rodal labels skip off-screen and too-small polygons using a bbox stored
+  per polygon before computing an interior point;
+- zooming restyles all polygons only when it crosses zoom 12, where the
+  outline changes.
+
+**INFERENCE** — Over the hosted network the transfer saving dominates: at
+20 Mbit/s, about 3.7 s for 9.4 MB against about 1.1 s for 2.65 MB, plus
+roughly 0.3 s of server compression. Not measured in production (it is
+down while the Railway plan is inactive).
+
+Earlier measurement (V1):
+
 Measured in Chromium at 1440×900 against the real snapshot, dev server:
 
 - feature collection: 9.15 MB decoded, fetched in ≈0.4 s locally;
@@ -210,7 +361,14 @@ KPI strip, table `Evidencia` column, map `Opacidad`, the boundary simulator
 pages (CRS, content fingerprint, GEOS reason, version status). The tooltip
 is portalled with fixed positioning so scrolling containers never clip it.
 
-## Local boundary simulation ("Simular ajuste")
+## Local boundary simulation ("Simular ajuste") — removed 2026-10-18
+
+**DECISION** (2026-10-18) — Removed from the map. It duplicated the report
+editor's «Dividir con línea» and saved nothing, which confused users about
+where a cut lives. The record below stays as history; the code
+(`straightCutCandidates`, vertex moving, point reduction, `draftHistory`) was
+deleted, and only `multiPolygonAreaSquareMeters` remains in
+`src/lib/draftGeometry.ts`.
 
 A local-only draft editor for one selected, OGC-valid polygon: move
 vertices, reduce points (Douglas–Peucker at 2 / 10 / 30 m), or cut with a

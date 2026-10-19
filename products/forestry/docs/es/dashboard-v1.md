@@ -8,11 +8,20 @@ polígonos, 13 predios, 10.422,61 ha) tal como viene en la fuente.
 
 ## Qué permite hacer hoy
 
-- **Ver el patrimonio completo en un mapa** sobre OpenStreetMap, con los
-  polígonos coloreados por Uso 2026 (o por Uso 2024, predio, comparación
-  2024→2026, o evidencia de calidad) y una leyenda con hectáreas y número de
-  polígonos por clase.
-- **Buscar y filtrar**: por predio, uso, rodal, código, descripción, y
+- **Ver el patrimonio completo en un mapa** sobre imagen satelital, con los
+  polígonos coloreados por Uso 2026 (o por Uso 2024, especie, predio,
+  comparación 2024→2026, o evidencia de calidad) y una leyenda con hectáreas
+  y número de polígonos por clase. En la vista general aparece el nombre de
+  cada predio.
+- **Superficie por especie** (desde el 18 de octubre de 2026): en
+  «Colorear por», la opción **Especie** pinta el mapa por especie y la
+  leyenda suma las hectáreas de cada una para los polígonos filtrados (por
+  ejemplo, solo un predio). También hay un filtro **Especie**. La especie se
+  lee del código 2026 (Pi06 = pino radiata de 2006); las plantaciones mixtas
+  se muestran juntas, sin repartir la superficie. Al (aliso), Ci (ciprés),
+  Se (secuoya) y Ss (*Sequoia sempervirens*) los confirmó Javier el 19 de
+  octubre.
+- **Buscar y filtrar**: por predio, uso, especie, rodal, código, descripción, y
   combinar filtros. El mapa, la tabla y el total (polígonos y hectáreas) se
   actualizan juntos.
 - **Inspeccionar cada polígono**: clic en el mapa o en la tabla abre una
@@ -33,13 +42,22 @@ polígonos, 13 predios, 10.422,61 ha) tal como viene en la fuente.
 - **Ajustar la opacidad** de los polígonos para ver la imagen satelital de
   fondo; bajo 50 % el borde toma el color del uso, así no se pierden los
   límites entre usos.
-- **Simular un ajuste de límite** de un polígono (mover puntos, reducir
-  puntos o cortar con una línea recta) y ver el área resultante. Es solo una
-  simulación en pantalla: no se guarda. Desde el 2026-10-15 el corte también
-  funciona en polígonos con varias partes, con huecos o con bordes muy
-  irregulares (antes estaba desactivado en ~200 polígonos). La línea debe
-  empezar y terminar fuera del polígono; solo se cortan las partes que
-  cruza, y si atraviesa un hueco, este queda como una entrada en ambos lados.
+- **Agregar a un informe** (desde el 18 de octubre de 2026): en la ficha de un
+  rodal, o con un filtro puesto, el botón «Agregar a un informe» lleva esos
+  polígonos a un informe en borrador (o crea uno) y abre el editor con ellos
+  ya pegados. Ahí se dividen y se envían a revisión. La antigua «Simular
+  ajuste» del mapa se quitó: no guardaba nada y repetía lo que hace el editor.
+- **Revisión de la base**: abajo del mapa, la pestaña «Revisión de la base»
+  reúne la versión, la capa de origen, el sistema de coordenadas, los
+  indicadores y los casos de calidad de datos. El panel empieza cerrado para
+  que el mapa tenga más espacio.
+- **Herramientas del mapa** (18 de octubre de 2026): al acercarse, cada rodal
+  muestra su número y código; **Mayús + clic** agrega rodales a la selección y
+  **Mayús + arrastrar** elige todos los de un área, con la suma de hectáreas
+  por especie; **Medir** da distancias y áreas; **Mi ubicación** muestra en
+  qué rodal está el teléfono (pide permiso y no guarda la ubicación); abajo a
+  la izquierda se ven las coordenadas UTM del cursor; **Ctrl + / Ctrl −**
+  acercan y alejan el mapa.
 - **Ayudas en pantalla**: los términos menos obvios (Evidencia, Sup_ha vs.
   geometría, huella del contenido, etc.) tienen un pequeño `?` que los
   explica al pasar el mouse.
@@ -48,8 +66,8 @@ polígonos, 13 predios, 10.422,61 ha) tal como viene en la fuente.
 
 - No permite editar ni crear solicitudes de planes de manejo (esperamos tus
   respuestas sobre ese flujo).
-- No interpreta los códigos (`Pi06`, `En11`…) como especie/año: los muestra
-  tal cual hasta confirmar el vocabulario.
+- No usa el año de plantación del código (`Pi06` y `Pi26` cuentan los dos
+  como pino radiata).
 - No declara esta base como "la vigente": la etiqueta dice "última ingesta"
   porque es lo único comprobable.
 - No repara geometrías ni corrige los datos observados.
