@@ -89,7 +89,7 @@ export function AccesosPage() {
       <section>
         <SectionHeader
           title="Accesos a Transelec"
-          meta="Sólo cuentas verificadas de campodigital.cl pueden iniciar sesión."
+          meta="Inician sesión las cuentas verificadas de campodigital.cl y las cuentas externas que Campo Digital invite."
         />
 
         {granted && (

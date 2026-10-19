@@ -95,7 +95,8 @@ export function FrontDoor() {
             <section className="door__panel" aria-labelledby="door-signin-title">
               <h2 id="door-signin-title">Inicie sesión para continuar</h2>
               <p className="door__muted">
-                Use su cuenta de Google de Campo Digital (@campodigital.cl).
+                Use su cuenta de Google de Campo Digital (@campodigital.cl), o la cuenta de
+                Google que Campo Digital le haya invitado a usar.
               </p>
               <a className="door__primary door__primary--block" href={GOOGLE_LOGIN_PATH}>
                 Iniciar sesión con Google

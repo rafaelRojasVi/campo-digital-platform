@@ -141,6 +141,14 @@ def test_initiate_hints_the_workspace_domain_to_google() -> None:
     assert query["hd"] == WORKSPACE_DOMAIN
 
 
+def test_initiate_drops_the_workspace_hint_when_external_accounts_are_invited() -> None:
+    settings = _settings(platform_external_accounts="forestry:viewer:ana@gmail.com")
+    query = _query(GoogleOidcSignInClient(settings).initiate(_REDIRECT_URI).auth_uri)
+
+    # Otherwise Google's chooser would hide the invited personal accounts.
+    assert "hd" not in query
+
+
 # ---------------------------------------------------------------------------
 # /callback -- completing the flow
 # ---------------------------------------------------------------------------

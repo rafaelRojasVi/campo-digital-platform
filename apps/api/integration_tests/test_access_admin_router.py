@@ -14,6 +14,7 @@ from datetime import timedelta
 
 import pytest
 from app.access_repository import grant_product_role, resolve_or_create_app_user
+from app.config import get_settings
 from app.csrf import CSRF_HEADER_NAME
 from app.deps import SESSION_COOKIE_NAME
 from app.dev_auth import DEFAULT_SEED_GRANTS, DEV_IDENTITY_KIND, SEEDED_DEV_IDENTITIES
@@ -246,3 +247,79 @@ def test_a_refused_grant_records_no_role_change(client: TestClient) -> None:
 
     assert response.status_code == 403
     assert _grant_events(client) == []
+
+
+# ---------------------------------------------------------------------------
+# Invited external accounts: operator or viewer, on their product only
+# ---------------------------------------------------------------------------
+
+_GUEST = "editor.externo@gmail.com"
+
+
+@pytest.fixture
+def invited_guest(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> Generator[str, None, None]:
+    monkeypatch.setenv("PLATFORM_EXTERNAL_ACCOUNTS", f"forestry:operator:{_GUEST}")
+    get_settings.cache_clear()
+    engine: Engine = client.engine
+    with engine.connect() as connection:
+        resolve_or_create_app_user(
+            connection,
+            identity_kind="google",
+            identity_key="200000000000000000001",
+            display_name="Editor Externo",
+            email=_GUEST,
+        )
+        connection.commit()
+    yield _GUEST
+    monkeypatch.delenv("PLATFORM_EXTERNAL_ACCOUNTS")
+    get_settings.cache_clear()
+
+
+def _grant(client: TestClient, product_key: str, email: str, role: str) -> int:
+    return client.post(
+        f"/auth/admin/product-grants/{product_key}",
+        json={"email": email, "role": role},
+        headers={CSRF_HEADER_NAME: _csrf_token(client), "Origin": _SAME_ORIGIN},
+    ).status_code
+
+
+def test_an_admin_cannot_make_an_invited_account_an_admin(
+    client: TestClient, invited_guest: str
+) -> None:
+    _login(client, "dev-admin")
+    assert _grant(client, "forestry", invited_guest, "admin") == 403
+
+
+def test_an_admin_cannot_open_another_product_to_an_invited_account(
+    client: TestClient, invited_guest: str
+) -> None:
+    _login(client, "dev-admin")
+    assert _grant(client, "transelect", invited_guest, "viewer") == 403
+
+
+def test_an_admin_can_lower_an_invited_account_on_its_product(
+    client: TestClient, invited_guest: str
+) -> None:
+    _login(client, "dev-admin")
+    assert _grant(client, "forestry", invited_guest, "viewer") == 200
+
+
+def test_a_google_account_off_the_workspace_domain_is_treated_as_external(
+    client: TestClient, invited_guest: str
+) -> None:
+    # Not invited at all (e.g. its invitation was removed): no role anywhere
+    # can be granted by hand.
+    engine: Engine = client.engine
+    with engine.connect() as connection:
+        resolve_or_create_app_user(
+            connection,
+            identity_kind="google",
+            identity_key="300000000000000000001",
+            display_name="Otra",
+            email="otra@gmail.com",
+        )
+        connection.commit()
+    _login(client, "dev-admin")
+    assert _grant(client, "forestry", "otra@gmail.com", "viewer") == 403
