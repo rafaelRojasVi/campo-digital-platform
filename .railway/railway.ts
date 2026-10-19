@@ -45,6 +45,7 @@ export default defineRailway(() => {
       GOOGLE_CLIENT_SECRET: preserve(),
       GOOGLE_REDIRECT_BASE_URL: preserve(),
       GOOGLE_WORKSPACE_DOMAIN: preserve(),
+      PLATFORM_EXTERNAL_ACCOUNTS: preserve(),
       PLATFORM_TOKEN_ENCRYPTION_KEY: preserve(),
       POSTGRES_DB: preserve(),
       POSTGRES_HOST: preserve(),

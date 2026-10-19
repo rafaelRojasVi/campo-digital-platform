@@ -18,7 +18,9 @@ of which is deliberate:
 3. The bootstrap grants are per product: Transelec-only
    (``maybe_grant_transelec_bootstrap_admin``) and the configured first
    admin of each named product (``maybe_grant_configured_product_admins``),
-   never the all-products one.
+   never the all-products one. Both apply to Workspace members only; an
+   invited external account (``PLATFORM_EXTERNAL_ACCOUNTS``) receives its
+   configured operator/viewer roles instead (``maybe_grant_external_accounts``).
 
 Signing in here proves who the caller is and nothing else. Every Transelec
 route still requires a ``platform.product_grant`` through
@@ -38,7 +40,9 @@ from sqlalchemy import Connection
 
 from app.access_repository import (
     maybe_grant_configured_product_admins,
+    maybe_grant_external_accounts,
     maybe_grant_transelec_bootstrap_admin,
+    other_identity_holds_email,
     resolve_or_create_app_user,
 )
 from app.audit import record_audit_event
@@ -155,6 +159,19 @@ def google_callback(
             401, str(exc), SecurityEventNote("sign_in.rejected", reason=reason)
         ) from exc
 
+    if not sign_in.workspace_member and other_identity_holds_email(
+        connection,
+        identity_kind=GOOGLE_IDENTITY_KIND,
+        identity_key=sign_in.subject,
+        email=sign_in.email,
+    ):
+        logger.warning("Google sign-in rejected: invited address now on another Google account")
+        raise SecurityHTTPException(
+            401,
+            "This address already signed in with another Google account.",
+            SecurityEventNote("sign_in.rejected", reason="external_identity_mismatch"),
+        )
+
     user = resolve_or_create_app_user(
         connection,
         identity_kind=GOOGLE_IDENTITY_KIND,
@@ -162,20 +179,30 @@ def google_callback(
         display_name=sign_in.display_name,
         email=sign_in.email,
     )
-    maybe_grant_transelec_bootstrap_admin(
-        connection,
-        settings=settings,
-        email=sign_in.email,
-        app_user_id=user.id,
-    )
-    # After the Transelec bootstrap, which fires only for a user with no grant
-    # at all: a per-product first-admin grant must not pre-empt it.
-    maybe_grant_configured_product_admins(
-        connection,
-        settings=settings,
-        email=sign_in.email,
-        app_user_id=user.id,
-    )
+    if sign_in.workspace_member:
+        maybe_grant_transelec_bootstrap_admin(
+            connection,
+            settings=settings,
+            email=sign_in.email,
+            app_user_id=user.id,
+        )
+        # After the Transelec bootstrap, which fires only for a user with no
+        # grant at all: a per-product first-admin grant must not pre-empt it.
+        maybe_grant_configured_product_admins(
+            connection,
+            settings=settings,
+            email=sign_in.email,
+            app_user_id=user.id,
+        )
+    else:
+        # An invited external account gets exactly its configured roles and
+        # never a bootstrap admin grant, whatever the configuration says.
+        maybe_grant_external_accounts(
+            connection,
+            settings=settings,
+            email=sign_in.email,
+            app_user_id=user.id,
+        )
 
     raw_secret = platform_sessions.create_session(connection, app_user_id=user.id, ttl=_SESSION_TTL)
     record_audit_event(connection, actor_app_user_id=user.id, event_type="session.created")
