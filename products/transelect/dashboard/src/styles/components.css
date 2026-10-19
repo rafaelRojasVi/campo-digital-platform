@@ -2139,3 +2139,48 @@ td .web-chip,
   align-items: center;
   gap: var(--s-3);
 }
+
+/* A legend entry that narrows the list below (Estado). */
+.composition-filter {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  font: inherit;
+  color: var(--ink-2);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: var(--s-1) var(--s-3);
+  margin: calc(-1 * var(--s-1)) calc(-1 * var(--s-3));
+  cursor: pointer;
+}
+
+.composition-filter:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--surface);
+}
+
+.composition-filter[aria-pressed='true'] {
+  color: var(--ink);
+  border-color: var(--forest);
+  background: var(--forest-tint);
+}
+
+.composition-filter:disabled {
+  cursor: default;
+}
+
+.composition-seg[data-dimmed] {
+  opacity: 0.35;
+}
+
+/* Company names in «Por empresa» link to the Explorador: platform green,
+   not the browser's default blue. */
+.breakdown a {
+  color: var(--forest-deep);
+  font-weight: 600;
+}
+
+.breakdown a:hover {
+  color: var(--forest);
+}

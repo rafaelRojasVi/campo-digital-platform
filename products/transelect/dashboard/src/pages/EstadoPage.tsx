@@ -39,13 +39,23 @@ import { activeFilterChips, withoutChip } from '../lib/filterUrl'
 import { lifecycleGroupSegments, lifecycleStepSegments } from '../lib/lifecycle'
 import { indexPlazos, plazoDetail } from '../lib/plazo'
 import { plazoColumn } from '../lib/plazoColumn'
-import { CONAF_ESTADO_ENABLED, conafColumn, conafNumero } from '../lib/conafColumn'
+import { conafColumn, conafNumero } from '../lib/conafColumn'
+import { CONAF_ESTADO_ENABLED } from '../lib/conafFlag'
 import { normalizeSolicitud } from '../lib/conafEstado'
 import { useReads, type FilterController } from '../lib/useFilters'
 import { PENDING_QUEUE_HASH, useRouter } from '../router'
 import { CompositionBar } from '../ui/CompositionBar'
 import { HowCalculated } from '../ui/HowCalculated'
 import { Chip, SectionHeader } from '../ui/Primitives'
+
+/** Case- and accent-insensitive text for the table search. */
+function foldText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
 
 export function EstadoPage({
   filterController,
@@ -113,6 +123,11 @@ export function EstadoPage({
 
   const [openRow, setOpenRow] = useState<ResumenRow | null>(null)
   const [soloVencidos, setSoloVencidos] = useState(false)
+  // Narrowing the table on this page only: a group or a step from the bars,
+  // and a search by PMF or N.º de ingreso. The shared filters stay as they are.
+  const [grupo, setGrupo] = useState<string | null>(null)
+  const [paso, setPaso] = useState<string | null>(null)
+  const [buscar, setBuscar] = useState('')
 
   // Without a plazo read there is nothing to filter by: leave the view, so the
   // table never shows every PMF under a stuck «Ver todos los PMF».
@@ -121,10 +136,21 @@ export function EstadoPage({
   const chips = activeFilterChips(filters)
   const openLifecycle: LifecycleRow | null =
     openRow && data ? (data.rows.find((entry) => entry.pmf === openRow.pmf) ?? null) : null
-  const rows =
+  const vencidos =
     data && soloVencidos && plazos.data
       ? data.rows.filter((row) => plazoIndex.get(row.pmf)?.estado === 'vencido')
       : (data?.rows ?? [])
+  const query = foldText(buscar)
+  const rows = vencidos.filter(
+    (row) =>
+      (grupo === null || row.lifecycle_group === grupo) &&
+      (paso === null || row.lifecycle_step === paso) &&
+      (query === '' ||
+        [row.pmf, row.numero_ingreso, row.numero_ingreso_2].some(
+          (value) => value !== null && foldText(value).includes(query),
+        )),
+  )
+  const narrowed = grupo !== null || paso !== null || query !== ''
   const sinContar = plazos.data
     ? plazos.data.estados.sin_fecha_texto + plazos.data.estados.conflicto
     : 0
@@ -192,6 +218,11 @@ export function EstadoPage({
               noun="PMF"
               testId="estado-group"
               segments={lifecycleGroupSegments(data)}
+              selectedKey={grupo}
+              onSelect={(key) => {
+                setGrupo(key)
+                setPaso(null)
+              }}
             />
             <CompositionBar
               title="En trámite, por paso"
@@ -199,6 +230,11 @@ export function EstadoPage({
               testId="estado-step"
               lead={false}
               segments={lifecycleStepSegments(data)}
+              selectedKey={paso}
+              onSelect={(key) => {
+                setPaso(key)
+                setGrupo(null)
+              }}
             />
           </div>
 
@@ -275,9 +311,35 @@ export function EstadoPage({
               meta={
                 soloVencidos && plazos.data
                   ? `${formatInteger(rows.length)} de ${formatInteger(data.rows.length)} PMF · vencidos al ${formatDate(plazos.data.observed_on)}`
-                  : `${formatInteger(rows.length)} PMF · seleccione uno para ver su detalle`
+                  : narrowed
+                    ? `${formatInteger(rows.length)} de ${formatInteger(data.rows.length)} PMF · seleccione uno para ver su detalle`
+                    : `${formatInteger(rows.length)} PMF · seleccione uno para ver su detalle`
               }
             />
+            <div className="estado-search no-print">
+              <label className="estado-search-field">
+                <span>Buscar PMF o N.º de ingreso</span>
+                <input
+                  type="search"
+                  value={buscar}
+                  placeholder="Ej.: BN041 o 170/341"
+                  onChange={(event) => setBuscar(event.target.value)}
+                />
+              </label>
+              {narrowed && (
+                <button
+                  type="button"
+                  className="btn alt"
+                  onClick={() => {
+                    setGrupo(null)
+                    setPaso(null)
+                    setBuscar('')
+                  }}
+                >
+                  Ver todos
+                </button>
+              )}
+            </div>
             <EstadoTable
               rows={rows}
               selectedRow={openRow?.source_row_number ?? null}
@@ -286,7 +348,13 @@ export function EstadoPage({
                 plazoColumn(plazoIndex, plazos.loading),
                 ...(CONAF_ESTADO_ENABLED ? [conafColumn(conafIndex)] : []),
               ]}
-              emptyText={soloVencidos ? 'Ningún PMF del alcance superó el plazo.' : undefined}
+              emptyText={
+                narrowed
+                  ? 'Ningún PMF coincide con la búsqueda o el grupo elegido.'
+                  : soloVencidos
+                    ? 'Ningún PMF del alcance superó el plazo.'
+                    : undefined
+              }
             />
           </section>
 

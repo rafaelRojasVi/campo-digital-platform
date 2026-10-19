@@ -53,30 +53,32 @@ export function ReforestacionPanel({ reforestacion }: { reforestacion: Reforesta
         {reforestacion.definicion}
       </p>
 
-      {reforestacion.sentinel_row_count > 0 && (
-        <p className="hint">
-          {formatInteger(reforestacion.sentinel_row_count)}{' '}
-          {reforestacion.sentinel_row_count === 1 ? 'fila declara' : 'filas declaran'} «
-          {reforestacion.sentinel_label}»: ausencia de reforestación, no un predio, por lo que no
-          se cuenta.
-        </p>
-      )}
-
-      {reforestacion.etiquetas_compuestas.length > 0 && (
-        <p className="hint" data-testid="reforestacion-composite">
-          {formatInteger(reforestacion.etiquetas_compuestas.length)} etiquetas nombran más de un
-          predio ({reforestacion.etiquetas_compuestas.join(' · ')}), por lo que el conteo de
-          etiquetas es menor que el número real de predios. Es una cota inferior: una etiqueta
-          puede nombrar varios predios sin separador.
-        </p>
-      )}
-
-      <p className="hint">
-        Para saber con certeza cuántos predios y cuántos propietarios de reforestación hay, la
-        planilla tendría que identificar cada predio de reforestación y a su propietario (o
-        propietarios) en columnas propias. Hoy solo tiene un texto libre por fila.
-      </p>
+      {/* The caveats behind the counts, folded (2026-10-18): they read as a
+          wall of text right under three numbers. */}
       <HowCalculated testId="reforestacion-how">
+        {reforestacion.sentinel_row_count > 0 && (
+          <p className="hint">
+            {formatInteger(reforestacion.sentinel_row_count)}{' '}
+            {reforestacion.sentinel_row_count === 1 ? 'fila declara' : 'filas declaran'} «
+            {reforestacion.sentinel_label}»: ausencia de reforestación, no un predio, por lo que no
+            se cuenta.
+          </p>
+        )}
+
+        {reforestacion.etiquetas_compuestas.length > 0 && (
+          <p className="hint" data-testid="reforestacion-composite">
+            {formatInteger(reforestacion.etiquetas_compuestas.length)} etiquetas nombran más de un
+            predio ({reforestacion.etiquetas_compuestas.join(' · ')}), por lo que el conteo de
+            etiquetas es menor que el número real de predios. Es una cota inferior: una etiqueta
+            puede nombrar varios predios sin separador.
+          </p>
+        )}
+
+        <p className="hint">
+          Para saber con certeza cuántos predios y cuántos propietarios de reforestación hay, la
+          planilla tendría que identificar cada predio de reforestación y a su propietario (o
+          propietarios) en columnas propias. Hoy solo tiene un texto libre por fila.
+        </p>
         <p>
           Columnas que se proponen a Campo Digital (preguntas abiertas en la documentación de
           diseño):{' '}

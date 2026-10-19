@@ -125,6 +125,33 @@ describe('collectAllRows', () => {
   })
 })
 
+describe('collectAllRows — one walk at a time', () => {
+  it('shares a walk already in progress for the same filters, then walks again later', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const fetchPage = vi.fn(async () => {
+      await gate
+      return {
+        ok: true as const,
+        data: { items: [row({ source_row_number: 1 })], next_cursor: null, has_more: false, total_count: 1 },
+      }
+    })
+
+    const first = collectAllRows(EMPTY_FILTERS, { fetchPage })
+    const second = collectAllRows(EMPTY_FILTERS, { fetchPage })
+    release()
+    const [a, b] = await Promise.all([first, second])
+
+    expect(fetchPage).toHaveBeenCalledTimes(1)
+    expect(a).toEqual(b)
+
+    await collectAllRows(EMPTY_FILTERS, { fetchPage })
+    expect(fetchPage).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('deriveFilterOptions', () => {
   it('collects distinct, non-blank values per filterable field, collated in Spanish', () => {
     const options = deriveFilterOptions([

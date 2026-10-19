@@ -35,9 +35,34 @@ export type CollectResult =
   | { ok: true; rows: ResumenRow[]; truncated: boolean }
   | { ok: false; status: number; error: string }
 
-export async function collectAllRows(
+// The Explorador's filter options and the web-edit suggestions both walk
+// every row on arrival (about 1.4 MB for 729 rows). A walk already in progress
+// for the same filters is shared instead of started twice; once it settles the
+// next call walks again, so a web edit is never hidden behind a stale copy.
+const inFlight = new WeakMap<PageFetcher, Map<string, Promise<CollectResult>>>()
+
+export function collectAllRows(
   filters: TranselecFilterState,
   { limit = 200, maxPages = 60, fetchPage = listRows }: CollectOptions = {},
+): Promise<CollectResult> {
+  const key = JSON.stringify([filters, limit, maxPages])
+  let walks = inFlight.get(fetchPage)
+  if (walks === undefined) {
+    walks = new Map()
+    inFlight.set(fetchPage, walks)
+  }
+  const running = walks.get(key)
+  if (running !== undefined) return running
+  const walk = walkAllRows(filters, limit, maxPages, fetchPage).finally(() => walks.delete(key))
+  walks.set(key, walk)
+  return walk
+}
+
+async function walkAllRows(
+  filters: TranselecFilterState,
+  limit: number,
+  maxPages: number,
+  fetchPage: PageFetcher,
 ): Promise<CollectResult> {
   const rows: ResumenRow[] = []
   let cursor: string | null = null

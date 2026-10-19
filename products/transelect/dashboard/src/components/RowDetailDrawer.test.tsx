@@ -421,7 +421,7 @@ describe("RowDetailDrawer — Proceso CONAF (lifecycle_pmf_v1)", () => {
     expect(within(block).queryByText("Para revisar en la planilla")).toBeNull();
   });
 
-  it("has no Proceso CONAF block from elsewhere, but always links the Oficina Virtual", () => {
+  it("has no Proceso CONAF block from elsewhere, and only «Copiar N.º» while CONAF is off", () => {
     render(
       <RowDetailDrawer
         row={makeRow({ source_row_number: 3, pmf: "MP002", numero_ingreso: "4417" })}
@@ -430,14 +430,8 @@ describe("RowDetailDrawer — Proceso CONAF (lifecycle_pmf_v1)", () => {
     );
 
     expect(screen.queryByTestId("drawer-lifecycle")).toBeNull();
-    const link = screen.getByTestId("drawer-ov-1-link");
-    expect(link).toHaveAttribute(
-      "href",
-      "https://oficinavirtual.conaf.cl/consultas/action.php?nsolicitud=4417",
-    );
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    expect(link).toHaveAccessibleName(/pestaña nueva/);
+    // The planilla's N Ingreso is not CONAF's consulta number yet (CONAF_ESTADO_ENABLED).
+    expect(screen.queryByTestId("drawer-ov-1-link")).toBeNull();
     expect(screen.getByTestId("drawer-ov-1-copy")).toHaveAccessibleName("Copiar N.º 4417");
   });
 
@@ -461,7 +455,7 @@ describe("RowDetailDrawer — Proceso CONAF (lifecycle_pmf_v1)", () => {
     }
   });
 
-  it("still closes with Escape pressed on the Oficina Virtual link", () => {
+  it("still closes with Escape pressed on «Copiar N.º»", () => {
     const onClose = vi.fn();
     render(
       <RowDetailDrawer
@@ -469,7 +463,7 @@ describe("RowDetailDrawer — Proceso CONAF (lifecycle_pmf_v1)", () => {
         onClose={onClose}
       />,
     );
-    fireEvent.keyDown(screen.getByTestId("drawer-ov-1-link"), { key: "Escape" });
+    fireEvent.keyDown(screen.getByTestId("drawer-ov-1-copy"), { key: "Escape" });
     expect(onClose).toHaveBeenCalled();
   });
 });

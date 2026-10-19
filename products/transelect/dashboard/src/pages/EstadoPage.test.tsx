@@ -70,6 +70,33 @@ describe('EstadoPage', () => {
     expect(screen.getByTestId('estado-how')).toHaveTextContent('lifecycle_pmf_v1')
   })
 
+  it('shows only one group or step when its legend entry is chosen, and again all', async () => {
+    renderPage()
+    await waitFor(() => expect(screen.getByTestId('estado-zone')).toBeInTheDocument())
+    const group = screen.getByTestId('estado-group')
+
+    await userEvent.click(within(group).getByRole('button', { name: /Aprobado/ }))
+    expect(screen.getByTestId('estado-row-2')).toBeInTheDocument()
+    expect(screen.queryByTestId('estado-row-5')).toBeNull()
+    expect(screen.getByText(/1 de 4 PMF · seleccione/)).toBeInTheDocument()
+
+    await userEvent.click(within(group).getByRole('button', { name: /Aprobado/ }))
+    expect(screen.getByTestId('estado-row-5')).toBeInTheDocument()
+
+    const step = screen.getByTestId('estado-step')
+    await userEvent.click(within(step).getByRole('button', { name: /Rechazado, esperando recurso/ }))
+    expect(screen.getByTestId('estado-row-3')).toBeInTheDocument()
+    expect(screen.queryByTestId('estado-row-2')).toBeNull()
+  })
+
+  it('finds a PMF by its code', async () => {
+    renderPage()
+    await waitFor(() => expect(screen.getByTestId('estado-zone')).toBeInTheDocument())
+    await userEvent.type(screen.getByLabelText('Buscar PMF o N.º de ingreso'), 'mp004')
+    expect(screen.getByTestId('estado-row-7')).toBeInTheDocument()
+    expect(screen.queryByTestId('estado-row-2')).toBeNull()
+  })
+
   it('opens the PMF drawer with its «Proceso CONAF» block', async () => {
     renderPage()
     await userEvent.click(await screen.findByTestId('estado-row-3'))

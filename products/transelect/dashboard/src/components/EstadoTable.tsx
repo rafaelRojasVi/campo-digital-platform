@@ -48,7 +48,7 @@ export function EstadoTable({
           Los valores marcados «web» se editaron en el panel; la planilla publicada no cambió.
         </p>
       )}
-      <div className="tablewrap" data-testid="estado-table">
+      <div className="tablewrap estado-tablewrap" data-testid="estado-table">
         <table className="queue-table rows-table estado-table">
           <thead>
             <tr>

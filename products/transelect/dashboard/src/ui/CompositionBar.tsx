@@ -47,6 +47,8 @@ export function CompositionBar({
   segments,
   testId,
   lead: showLead = true,
+  selectedKey = null,
+  onSelect,
 }: {
   /**
    * Omitted when the enclosing section heading already names this bar —
@@ -67,6 +69,13 @@ export function CompositionBar({
    * data does not carry. The legend then does all the work.
    */
   lead?: boolean
+  /**
+   * When given, each legend entry (and each segment, for a mouse) narrows a
+   * list below to that segment; choosing it again shows everything. The
+   * legend entries are buttons, so the filter does not rest on the bar.
+   */
+  onSelect?: (key: string | null) => void
+  selectedKey?: string | null
 }) {
   const present = segments.filter((segment) => segment.value > 0)
   const total = segments.reduce((sum, segment) => sum + segment.value, 0)
@@ -101,7 +110,13 @@ export function CompositionBar({
               className="composition-seg"
               data-tone={segment.tone}
               data-segment={segment.key}
-              style={{ width: `${percentage}%` }}
+              data-dimmed={selectedKey !== null && selectedKey !== segment.key ? '' : undefined}
+              style={{ width: `${percentage}%`, cursor: onSelect ? 'pointer' : undefined }}
+              onClick={
+                onSelect
+                  ? () => onSelect(selectedKey === segment.key ? null : segment.key)
+                  : undefined
+              }
             >
               {percentage >= DIRECT_LABEL_MIN_PERCENT && formatInteger(segment.value)}
             </div>
@@ -114,14 +129,30 @@ export function CompositionBar({
 
       {segments.length > 1 && (
         <div className="composition-legend">
-          {segments.map((segment) => (
-            <span key={segment.key}>
-              <i className="legend-swatch" data-tone={segment.tone} aria-hidden="true" />
-              {segment.label} <b data-testid={testId && `${testId}-${segment.key}`}>
-                {formatInteger(segment.value)}
-              </b>
-            </span>
-          ))}
+          {segments.map((segment) => {
+            const content = (
+              <>
+                <i className="legend-swatch" data-tone={segment.tone} aria-hidden="true" />
+                {segment.label} <b data-testid={testId && `${testId}-${segment.key}`}>
+                  {formatInteger(segment.value)}
+                </b>
+              </>
+            )
+            return onSelect ? (
+              <button
+                key={segment.key}
+                type="button"
+                className="composition-filter"
+                aria-pressed={selectedKey === segment.key}
+                disabled={segment.value === 0}
+                onClick={() => onSelect(selectedKey === segment.key ? null : segment.key)}
+              >
+                {content}
+              </button>
+            ) : (
+              <span key={segment.key}>{content}</span>
+            )
+          })}
           {showLead && (
             <span className="muted">
               {formatNumber(leadPercentage)}% {lead.label.toLocaleLowerCase('es-CL')}
