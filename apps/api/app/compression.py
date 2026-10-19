@@ -21,6 +21,8 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 COMPRESSED_PATHS: tuple[re.Pattern[str], ...] = (
     re.compile(r"/api/forestry/snapshots/\d+/feature-collection"),
     re.compile(r"/api/forestry/reports/\d+"),
+    # Transelec's row-level reads (a 729-row planilla: ~200 KB per page).
+    re.compile(r"/api/transelec/(pmfs|lifecycle|plazos|aef|pending)"),
 )
 
 # Below this a response is not worth compressing.

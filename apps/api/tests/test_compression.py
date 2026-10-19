@@ -29,6 +29,10 @@ def _client() -> TestClient:
     def report(report_id: int) -> JSONResponse:
         return JSONResponse(BIG)
 
+    @app.get("/api/transelec/pmfs")
+    def pmfs() -> JSONResponse:
+        return JSONResponse(BIG)
+
     @app.get("/api/auth/session")
     def session() -> JSONResponse:
         return JSONResponse(BIG)
@@ -39,7 +43,11 @@ def _client() -> TestClient:
 
 def test_geometry_reads_are_compressed() -> None:
     client = _client()
-    for path in ("/api/forestry/snapshots/1/feature-collection", "/api/forestry/reports/7"):
+    for path in (
+        "/api/forestry/snapshots/1/feature-collection",
+        "/api/forestry/reports/7",
+        "/api/transelec/pmfs",
+    ):
         response = client.get(path, headers={"Accept-Encoding": "gzip"})
         assert response.headers.get("content-encoding") == "gzip", path
         assert response.json() == BIG
@@ -50,8 +58,12 @@ def test_everything_else_is_left_alone() -> None:
     response = client.get("/api/auth/session", headers={"Accept-Encoding": "gzip"})
     assert "content-encoding" not in response.headers
     # A report export or a sub-path is not the report detail.
-    export = "/api/forestry/reports/7/export"
-    assert not any(pattern.fullmatch(export) for pattern in COMPRESSED_PATHS)
+    for path in (
+        "/api/forestry/reports/7/export",
+        "/api/transelec/pmfs/MP001",
+        "/api/transelec/export.csv",
+    ):
+        assert not any(pattern.fullmatch(path) for pattern in COMPRESSED_PATHS), path
 
 
 def test_main_app_installs_the_selective_gzip() -> None:

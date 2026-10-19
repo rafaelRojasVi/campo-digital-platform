@@ -318,7 +318,8 @@ tasks counted with a `PerformanceObserver`:
 **DECISION** — What changed:
 - the API gzips only the large geometry reads (`app.compression`: GET
   `/api/forestry/snapshots/{id}/feature-collection` and
-  `/api/forestry/reports/{id}`), level 6 (about 2 % larger than level 9 for
+  `/api/forestry/reports/{id}`, and since 2026-10-18 Transelec's row
+  reads `pmfs`, `lifecycle`, `plazos`, `aef`, `pending`), level 6 (about 2 % larger than level 9 for
   less than half the server time on a synthetic 12 MB GeoJSON); session,
   CSRF and form responses stay uncompressed, so compression cannot be used
   to guess a token (BREACH needs a secret and reflected input together);
