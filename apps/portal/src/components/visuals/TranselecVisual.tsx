@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+
 /**
  * Abstract node/tracking-grid motif for the Transelec module. Not a real
  * network diagram — a restrained geometric identity mark.
@@ -23,6 +25,9 @@ export function TranselecVisual() {
         {edges.map(([a, b]) => (
           <line
             key={`${a}-${b}`}
+            className="pv-edge"
+            pathLength={1}
+            style={{ '--i': a } as CSSProperties}
             x1={nodes[a][0]}
             y1={nodes[a][1]}
             x2={nodes[b][0]}
@@ -33,6 +38,8 @@ export function TranselecVisual() {
       {nodes.map(([x, y], index) => (
         <rect
           key={`${x}-${y}`}
+          className={index % 4 === 0 ? 'pv-node pv-node--hub' : 'pv-node'}
+          style={{ '--i': index } as CSSProperties}
           x={x - 5}
           y={y - 5}
           width={10}

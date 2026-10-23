@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+
 /**
  * Abstract point-cloud / cross-section motif for the LiDAR module. Not a
  * screenshot or a real measurement — a restrained geometric identity mark.
@@ -19,6 +21,7 @@ export function LidarVisual() {
       className="product-visual"
     >
       <polyline
+        className="pv-trace"
         points="24,150 92,126 164,92 236,64 290,34"
         fill="none"
         stroke="var(--cd-lidar)"
@@ -26,6 +29,7 @@ export function LidarVisual() {
         strokeWidth="1"
       />
       <polyline
+        className="pv-trace"
         points="30,168 126,134 226,90 296,56"
         fill="none"
         stroke="var(--cd-lidar)"
@@ -33,8 +37,25 @@ export function LidarVisual() {
         strokeWidth="1"
       />
       {points.map(([x, y], index) => (
-        <circle key={`${x}-${y}`} cx={x} cy={y} r={index % 3 === 0 ? 2.6 : 1.8} fill="var(--cd-lidar)" />
+        <circle
+          key={`${x}-${y}`}
+          className="pv-point"
+          style={{ '--i': index % 16 } as CSSProperties}
+          cx={x}
+          cy={y}
+          r={index % 3 === 0 ? 2.6 : 1.8}
+          fill="var(--cd-lidar)"
+        />
       ))}
+      {/* Scan beam, swept across the cloud by the front door's CSS. */}
+      <rect className="pv-scan" x={0} y={0} width={56} height={200} fill="url(#pv-scan-fade)" />
+      <defs>
+        <linearGradient id="pv-scan-fade" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stopColor="var(--cd-lidar)" stopOpacity="0" />
+          <stop offset="0.5" stopColor="var(--cd-lidar)" stopOpacity="0.18" />
+          <stop offset="1" stopColor="var(--cd-lidar)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
     </svg>
   )
 }
