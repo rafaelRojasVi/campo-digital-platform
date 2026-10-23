@@ -17,6 +17,13 @@
   --door-forest-tint: #e7f1eb;
   --door-focus: #0b6ea8;
   --door-ease: cubic-bezier(0.2, 0, 0, 1);
+  /* campodigital.cl: the brand green of its buttons, the deep teal of its
+     hero, and the orange of its accents. The site's green (#00943d) is 3.96:1
+     under white text; one step darker (4.76:1) carries the button labels. */
+  --door-brand: #008537;
+  --door-teal: #055265;
+  --door-teal-2: #0a6178;
+  --door-orange: #ff9300;
 
   min-height: 100dvh;
   background: var(--door-ground);
@@ -31,38 +38,45 @@
 }
 
 .door__bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  height: 56px;
+  height: 76px;
   padding: 0 24px;
-  border-bottom: 1px solid var(--door-forest-dark);
-  background: linear-gradient(100deg, var(--door-forest-dark), var(--door-forest-deep));
+  border-bottom: 1px solid var(--door-line);
+  background: #fff;
+  box-shadow: 0 2px 12px -8px rgb(5 82 101 / 0.35);
 }
 
 .door__logo {
   display: block;
   width: auto;
-  height: 44px;
+  height: 56px;
 }
 
 .door__signout {
-  min-height: 34px;
+  min-height: 36px;
   padding: 6px 14px;
-  border: 1px solid rgb(255 255 255 / 0.28);
+  border: 1px solid var(--door-teal);
   border-radius: 6px;
-  background: transparent;
-  color: var(--door-ink-inverse);
+  background: #fff;
+  color: var(--door-teal);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 120ms var(--door-ease);
+  transition:
+    background-color 120ms var(--door-ease),
+    color 120ms var(--door-ease);
 }
 
 .door__signout:hover {
-  background: rgb(255 255 255 / 0.1);
+  background: var(--door-teal);
+  color: #fff;
 }
 
 .door__main {
@@ -98,12 +112,241 @@
   font-size: 14px;
 }
 
+/* Checking the session: the teal stage, the logo in a white card ringed by a
+   turning arc, and one line of text. */
+.door__stage--loading {
+  display: grid;
+  place-items: center;
+}
+
+.door__loader {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  color: #fff;
+  animation: door-rise 500ms var(--door-ease) both;
+}
+
+.door__loader p {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.door__loader-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 30px 60px -30px rgb(0 0 0 / 0.6);
+}
+
+.door__loader-ring img {
+  width: 120px;
+  height: auto;
+}
+
+.door__loader-ring::after {
+  position: absolute;
+  inset: -10px;
+  border: 3px solid rgb(255 255 255 / 0.18);
+  border-top-color: var(--door-orange);
+  border-radius: 50%;
+  content: '';
+  animation: door-spin 1.1s linear infinite;
+}
+
+@keyframes door-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Signed out: the sign-in sits on the same teal stage as the greeting. */
+.door__stage {
+  position: relative;
+  overflow: hidden;
+  min-height: calc(100dvh - 76px);
+  padding: 56px max(24px, calc((100% - 1040px) / 2)) 104px;
+  background:
+    radial-gradient(90% 120% at 90% 10%, rgb(0 148 61 / 0.28), transparent 60%),
+    linear-gradient(160deg, var(--door-teal-2), var(--door-teal) 70%);
+}
+
 .door__signin {
+  position: relative;
   display: grid;
   grid-template-columns: 1.05fr 1fr;
   gap: 64px;
   align-items: center;
-  min-height: calc(100dvh - 56px - 112px);
+  min-height: calc(100dvh - 76px - 112px);
+}
+
+.door__stage .door__intro,
+.door__stage .door__lead {
+  color: var(--door-ink-inverse);
+}
+
+.door__stage .door__eyebrow {
+  color: #ffb54d;
+}
+
+.door__stage .door__facts {
+  border-top-color: rgb(255 255 255 / 0.2);
+  color: rgb(242 246 243 / 0.82);
+}
+
+.door__stage .door__facts svg {
+  stroke: var(--door-orange);
+}
+
+/* The title, bigger on the stage, underlined in orange like the greeting. */
+.door .door__stage .door__intro h1 {
+  font-size: clamp(34px, 4.6vw, 48px);
+}
+
+.door .door__stage .door__intro h1::after {
+  display: block;
+  width: 84px;
+  height: 3px;
+  margin-top: 16px;
+  border-radius: 2px;
+  background: var(--door-orange);
+  content: '';
+  transform-origin: left;
+  animation: hub-underline 700ms var(--door-ease) 300ms both;
+}
+
+/* What the platform brings together: three quiet tiles, generic on purpose. */
+.door__areas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.door__areas li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.08);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  backdrop-filter: blur(2px);
+}
+
+.door__areas svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: #ffb54d;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.door__areas circle {
+  fill: #ffb54d;
+  stroke: none;
+}
+
+.door__lock {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  background: var(--door-forest-tint);
+}
+
+.door__lock svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: var(--door-teal);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+/* Google's own sign-in look: white, a grey hairline, the four-colour «G». */
+.door__google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 8px;
+  padding: 10px 18px;
+  border: 1px solid #c7ccd1;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(22 33 29 / 0.08);
+  color: #1f1f1f;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background-color 120ms var(--door-ease),
+    box-shadow 160ms var(--door-ease),
+    border-color 160ms var(--door-ease);
+}
+
+.door__google svg {
+  width: 20px;
+  height: 20px;
+}
+
+.door__google:hover {
+  border-color: var(--door-teal);
+  background: #f8faf9;
+  box-shadow: 0 6px 16px -10px rgb(5 82 101 / 0.6);
+}
+
+.door__demo-label {
+  margin: 0;
+  color: var(--door-ink-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.door__stage-wave {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 72px;
+  fill: var(--door-ground);
+}
+
+.door__stage .door__panel {
+  padding: 36px;
+  border: 0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 30px 60px -30px rgb(0 0 0 / 0.55);
+  animation: door-rise 600ms var(--door-ease) 120ms both;
+}
+
+.door__stage .door__intro {
+  animation: door-rise 600ms var(--door-ease) both;
 }
 
 .door__intro {
@@ -149,19 +392,21 @@
 }
 
 .door__facts li {
-  position: relative;
-  padding-left: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
 
-.door__facts li::before {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 0;
-  width: 3px;
-  height: 16px;
-  border-radius: 2px;
-  background: #c3cabf;
+.door__facts svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .door__panel h2 {
@@ -193,9 +438,9 @@
   justify-content: center;
   min-height: 40px;
   padding: 8px 18px;
-  border: 1px solid var(--door-forest);
+  border: 1px solid var(--door-brand);
   border-radius: 6px;
-  background: var(--door-forest);
+  background: var(--door-brand);
   color: var(--door-ink-inverse);
   font: inherit;
   font-size: 14px;
@@ -207,8 +452,8 @@
 }
 
 .door__primary:hover {
-  border-color: var(--door-forest-deep);
-  background: var(--door-forest-deep);
+  border-color: var(--door-teal);
+  background: var(--door-teal);
 }
 
 .door__demo {
@@ -216,8 +461,10 @@
   flex-direction: column;
   gap: 8px;
   margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--door-line);
+  padding: 14px;
+  border: 1px dashed var(--door-line);
+  border-radius: 10px;
+  background: var(--door-ground);
 }
 
 .door__demo .door__muted {
@@ -243,41 +490,235 @@
   background: #eef0ec;
 }
 
-.door .door__hello {
-  font-size: 30px;
+/* ---- Signed in: account chip --------------------------------------------- */
+
+.door__account {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
-.door__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
+.door__user {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--door-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.door__avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--door-teal);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ---- Signed in: the project hub ------------------------------------------
+   A greeting band that continues the green bar, then one large section per
+   granted project, stacked, the illustration alternating sides. Each section
+   keeps its product's tint (--cd-* in theme.css) through --door-card-accent. */
+
+.door__main--hub {
+  max-width: none;
   margin: 0;
   padding: 0;
-  list-style: none;
+}
+
+.hub__hero {
+  position: relative;
+  overflow: hidden;
+  /* Keeps the particles' and contours' repaints inside the hero. */
+  contain: paint;
+  padding: 56px max(24px, calc((100% - 1040px) / 2)) 132px;
+  background:
+    radial-gradient(90% 120% at 90% 10%, rgb(0 148 61 / 0.28), transparent 60%),
+    linear-gradient(160deg, var(--door-teal-2), var(--door-teal) 70%);
+  color: var(--door-ink-inverse);
+}
+
+/* Faint contour lines, like the topographic map behind campodigital.cl. */
+.hub__hero::before {
+  position: absolute;
+  inset: -60px;
+  background:
+    repeating-radial-gradient(
+      ellipse 60% 45% at 78% 62%,
+      transparent 0 26px,
+      rgb(255 255 255 / 0.06) 26px 27px
+    ),
+    repeating-radial-gradient(
+      ellipse 40% 55% at 12% 20%,
+      transparent 0 30px,
+      rgb(255 255 255 / 0.05) 30px 31px
+    );
+  content: '';
+  pointer-events: none;
+  /* Its own compositor layer: the drift moves a painted texture instead of
+     repainting the gradient every frame. */
+  will-change: transform;
+  animation: hub-drift 24s ease-in-out infinite alternate;
+}
+
+@keyframes hub-drift {
+  to {
+    transform: translate(-24px, 14px) scale(1.03);
+  }
+}
+
+.hub__particles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.hub__wave {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 80px;
+  fill: var(--door-ground);
+}
+
+.hub__date {
+  position: relative;
+  margin: 0 0 6px;
+  color: rgb(242 246 243 / 0.75);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.door .hub__hello {
+  position: relative;
+  margin: 0 0 18px;
+  font-size: clamp(32px, 5vw, 44px);
+  letter-spacing: -0.02em;
+  animation: door-rise 520ms var(--door-ease) both;
+}
+
+.door .hub__hello::after {
+  display: block;
+  width: 84px;
+  height: 3px;
+  margin-top: 14px;
+  border-radius: 2px;
+  background: var(--door-orange);
+  content: '';
+  transform-origin: left;
+  animation: hub-underline 700ms var(--door-ease) 300ms both;
+}
+
+@keyframes hub-underline {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.hub__intro {
+  position: relative;
+  max-width: 560px;
+  margin: 0;
+  color: rgb(242 246 243 / 0.88);
+  font-size: 17px;
+  line-height: 1.5;
+  animation: door-rise 520ms var(--door-ease) 80ms both;
+}
+
+.hub__list {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 1040px;
+  position: relative;
+  margin: -88px auto 64px;
+  padding: 0 16px;
 }
 
 .door__card {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
   overflow: hidden;
   border: 1px solid var(--door-line);
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--door-surface);
-  box-shadow: 0 1px 2px rgb(22 33 29 / 0.06);
+  box-shadow:
+    0 10px 30px -18px rgb(22 33 29 / 0.35),
+    0 1px 2px rgb(22 33 29 / 0.06);
   color: inherit;
-  text-decoration: none;
+}
+
+.door__card--transelec {
+  --door-card-accent: var(--cd-transelec);
+}
+
+.door__card--forestal {
+  --door-card-accent: var(--cd-forestal);
+}
+
+.door__card--lidar {
+  --door-card-accent: var(--cd-lidar);
+}
+
+.hub__project {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  min-height: 300px;
   transition:
-    border-color 160ms var(--door-ease),
-    box-shadow 160ms var(--door-ease),
-    transform 160ms var(--door-ease);
+    border-color 200ms var(--door-ease),
+    box-shadow 200ms var(--door-ease),
+    transform 200ms var(--door-ease);
+  animation: door-rise 600ms var(--door-ease) both;
+  animation-delay: calc(160ms + var(--i, 0) * 120ms);
+}
+
+/* Product colour along the section's leading edge. */
+.hub__project::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  width: 5px;
+  background: var(--door-card-accent, var(--door-forest));
+  content: '';
+}
+
+.hub__project:nth-child(even) {
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+}
+
+.hub__project:nth-child(even) .hub__visual-link,
+.hub__project:nth-child(even) > .hub__visual {
+  order: 2;
+}
+
+.hub__project:not(.door__card--soon):hover {
+  border-color: var(--door-card-accent);
+  box-shadow:
+    0 24px 44px -20px rgb(22 33 29 / 0.38),
+    0 1px 2px rgb(22 33 29 / 0.06);
+  transform: translateY(-3px);
+}
+
+.hub__visual-link {
+  display: block;
 }
 
 .door__card-visual {
   display: block;
-  height: 148px;
+  height: 100%;
+  min-height: 220px;
   overflow: hidden;
-  border-bottom: 1px solid var(--door-line);
 }
 
 .door__card--transelec .door__card-visual {
@@ -295,63 +736,170 @@
 .door__card-visual svg {
   display: block;
   width: 100%;
+  max-width: none; /* app.css caps .product-visual at 320px for the demo portal */
   height: 100%;
-  transition: transform 240ms var(--door-ease);
+  transition: transform 400ms var(--door-ease);
 }
 
-.door__card-body {
+/* The illustrations carry their own margins; in the tall hub panel they read
+   better a little larger. */
+.hub__project .door__card-visual svg {
+  transform: scale(1.1);
+}
+
+.hub__project:not(.door__card--soon):hover .door__card-visual svg {
+  transform: scale(1.16);
+}
+
+.hub__content {
   display: flex;
-  flex: 1;
   flex-direction: column;
-  gap: 6px;
-  padding: 18px 20px 20px;
+  gap: 10px;
+  padding: 30px 34px 32px;
 }
 
-.door__card-title {
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+.hub__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.door__card-text {
+.hub__role {
+  padding: 3px 10px;
+  border: 1px solid var(--door-line);
+  border-radius: 999px;
   color: var(--door-ink-2);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.door__card-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: auto;
-  padding-top: 12px;
-  color: var(--door-forest);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 650;
 }
 
-.door__card-cta span {
+.door .hub__title {
+  margin: 4px 0 0;
+  font-size: 30px;
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.hub__lead {
+  margin: 0;
+  color: var(--door-card-accent, var(--door-forest));
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.hub__summary {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--door-ink-2);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.hub__features {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hub__features li {
+  position: relative;
+  padding-left: 22px;
+  color: var(--door-ink);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.hub__features li::before {
+  position: absolute;
+  top: 0.5em;
+  left: 2px;
+  width: 9px;
+  height: 5px;
+  border-bottom: 2px solid var(--door-card-accent, var(--door-forest));
+  border-left: 2px solid var(--door-card-accent, var(--door-forest));
+  content: '';
+  transform: rotate(-45deg);
+}
+
+.hub__figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--door-line);
+}
+
+.hub__figures--loading {
+  height: 62px;
+  border-top-color: transparent;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #eef0ec 0%, #f7f8f6 50%, #eef0ec 100%) 0 0 / 200% 100%;
+  animation: hub-shimmer 1.2s linear infinite;
+}
+
+@keyframes hub-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.hub__figure {
+  display: flex;
+  flex-direction: column;
+}
+
+.hub__figure-value {
+  color: var(--door-ink);
+  font-size: 28px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.hub__figure-label {
+  color: var(--door-ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hub__cta {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin-top: auto;
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: var(--door-brand);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: background-color 160ms var(--door-ease);
+}
+
+.hub__figures + .hub__cta,
+.hub__features + .hub__cta {
+  margin-top: 14px;
+}
+
+.hub__cta span {
   transition: transform 160ms var(--door-ease);
 }
 
-a.door__card:hover {
-  border-color: var(--door-forest);
-  box-shadow:
-    0 12px 28px -12px rgb(22 33 29 / 0.28),
-    0 1px 2px rgb(22 33 29 / 0.06);
-  transform: translateY(-2px);
+.hub__cta:hover {
+  background: var(--door-teal);
 }
 
-a.door__card:hover .door__card-visual svg {
-  transform: scale(1.04);
-}
-
-a.door__card:hover .door__card-cta span {
-  transform: translateX(3px);
-}
-
-a.door__card:active {
-  transform: translateY(0);
+.hub__project:hover .hub__cta span,
+.hub__cta:focus-visible span {
+  transform: translateX(4px);
 }
 
 .door__card--soon .door__card-visual {
@@ -359,36 +907,266 @@ a.door__card:active {
   opacity: 0.75;
 }
 
-.door__card--soon .door__card-title,
-.door__card--soon .door__card-text {
+.door__card--soon .hub__title,
+.door__card--soon .hub__lead {
   color: var(--door-ink-2);
 }
 
 .door__soon {
-  align-self: flex-start;
-  margin-top: auto;
   padding: 3px 10px;
   border-radius: 999px;
   background: var(--door-forest-tint);
   color: var(--door-forest-deep);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
 }
 
+/* ---- Project picker motion -------------------------------------------------
+   Entrance: cards rise in one after another, then each illustration builds
+   itself (Transelec's network draws, Rodales' stands settle, LiDAR's points
+   are scanned in). Hover or keyboard focus plays the product's own gesture.
+   Everything here is scoped to .door__card: the demo portal's ProductPanel
+   draws the same illustrations, still. prefers-reduced-motion turns it off. */
+
+@keyframes door-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes door-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes door-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes door-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.45);
+  }
+}
+
+@keyframes door-flow {
+  to {
+    stroke-dashoffset: -1;
+  }
+}
+
+@keyframes door-pan {
+  to {
+    transform: translate(-46px, -44px);
+  }
+}
+
+@keyframes door-scan {
+  from {
+    transform: translateX(-40px);
+  }
+  to {
+    transform: translateX(330px);
+  }
+}
+
+/* Transelec: the network draws in, then its hubs pulse. */
+.door__card .pv-edge {
+  stroke-dasharray: 1;
+  animation: door-draw 900ms var(--door-ease) both;
+  animation-delay: calc(300ms + var(--i, 0) * 70ms);
+}
+
+.door__card .pv-node {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: door-pop 420ms var(--door-ease) both;
+  animation-delay: calc(500ms + var(--i, 0) * 55ms);
+}
+
+.door__card:not(.door__card--soon):hover .pv-node--hub,
+.door__card:not(.door__card--soon):focus-within .pv-node--hub {
+  animation: door-pulse 1100ms ease-in-out infinite;
+}
+
+.door__card:not(.door__card--soon):hover .pv-edge,
+.door__card:not(.door__card--soon):focus-within .pv-edge {
+  stroke-dasharray: 0.12 0.08;
+  stroke-opacity: 0.9;
+  animation: door-flow 1600ms linear infinite;
+}
+
+/* Rodales: each stand's outline draws itself and then fills, harvest lines
+   sweep into the cut stands and pines grow up in the planted ones, then the
+   property boundary appears. Hover: the boundary's dashes
+   march, the grid drifts, a cut line slices across and the two stands it
+   splits light up. */
+.door__card .pv-stand {
+  stroke-dasharray: 1;
+  animation: door-stand 900ms var(--door-ease) both;
+  animation-delay: calc(300ms + var(--i, 0) * 90ms);
+}
+
+@keyframes door-stand {
+  0% {
+    fill-opacity: 0;
+    stroke-dashoffset: 1;
+  }
+  60% {
+    fill-opacity: 0;
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.door__card .pv-rows {
+  animation: door-fade 700ms var(--door-ease) both;
+  animation-delay: calc(800ms + var(--i, 0) * 70ms);
+}
+
+.door__card .pv-tree {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: door-grow 520ms var(--door-ease) both;
+  animation-delay: calc(950ms + var(--i, 0) * 45ms);
+}
+
+@keyframes door-grow {
+  from {
+    opacity: 0;
+    transform: scaleY(0);
+  }
+}
+
+.door__card .pv-boundary {
+  animation: door-fade 600ms var(--door-ease) 1100ms both;
+}
+
+@keyframes door-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes door-march {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.door__card:not(.door__card--soon):hover .pv-boundary,
+.door__card:not(.door__card--soon):focus-within .pv-boundary {
+  animation: door-march 1.1s linear infinite;
+}
+
+.door__card:not(.door__card--soon):hover .pv-grid,
+.door__card:not(.door__card--soon):focus-within .pv-grid {
+  animation: door-pan 6s linear infinite;
+}
+
+.door__card .pv-pick {
+  opacity: 0;
+  transition: opacity 260ms var(--door-ease);
+}
+
+.door__card:not(.door__card--soon):hover .pv-pick,
+.door__card:not(.door__card--soon):focus-within .pv-pick {
+  opacity: 1;
+  transition-delay: 420ms;
+}
+
+.door__card .pv-cut {
+  opacity: 0;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition:
+    stroke-dashoffset 600ms var(--door-ease),
+    opacity 150ms var(--door-ease);
+}
+
+.door__card:not(.door__card--soon):hover .pv-cut,
+.door__card:not(.door__card--soon):focus-within .pv-cut {
+  opacity: 1;
+  stroke-dashoffset: 0;
+}
+
+/* LiDAR: points are scanned in, and a slow beam keeps sweeping the cloud.
+   The card is not open yet, so this is its only motion. */
+.door__card .pv-point {
+  animation: door-pop 360ms var(--door-ease) both;
+  animation-delay: calc(400ms + var(--i, 0) * 45ms);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.door__card .pv-trace {
+  stroke-dasharray: 400;
+  animation: door-draw-long 1400ms var(--door-ease) 300ms both;
+}
+
+@keyframes door-draw-long {
+  from {
+    stroke-dashoffset: 400;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.pv-scan {
+  opacity: 0;
+}
+
+.door__card .pv-scan {
+  opacity: 1;
+  /* Three sweeps, then still: an endless SVG animation repaints forever. */
+  animation: door-scan 4.5s ease-in-out 1.2s 3;
+  transform: translateX(-40px);
+}
+
+/* Reduced motion: the same page, still. Elements simply rest at their final
+   state (every entrance keyframe ends at the element's normal style). */
 @media (prefers-reduced-motion: reduce) {
-  .door__card,
-  .door__card-visual svg,
-  .door__card-cta span,
-  .door__primary,
-  .door__secondary,
-  .door__signout {
-    transition: none;
+  .door *,
+  .door *::before,
+  .door *::after {
+    animation: none !important;
+    transition: none !important;
   }
 
-  a.door__card:hover,
-  a.door__card:hover .door__card-visual svg,
-  a.door__card:hover .door__card-cta span {
+  .door__card .pv-scan {
+    display: none;
+  }
+
+  .hub__project:not(.door__card--soon):hover,
+  .hub__project:hover .hub__cta span {
     transform: none;
+  }
+
+  .hub__project:not(.door__card--soon):hover .door__card-visual svg {
+    transform: scale(1.1);
   }
 }
 
@@ -418,7 +1196,55 @@ a.door__card:active {
     margin: 32px auto;
   }
 
+  .door__main--hub {
+    margin: 0;
+  }
+
   .door__panel {
     padding: 24px;
   }
 }
+
+@media (max-width: 760px) {
+  .door__user-name {
+    display: none;
+  }
+
+
+  .door__bar {
+    height: 64px;
+    padding: 0 16px;
+  }
+
+  .door__logo {
+    height: 44px;
+  }
+
+  .hub__hero {
+    padding: 36px 16px 112px;
+  }
+
+  .hub__project,
+  .hub__project:nth-child(even) {
+    grid-template-columns: 1fr;
+  }
+
+  .hub__project:nth-child(even) .hub__visual-link,
+  .hub__project:nth-child(even) > .hub__visual {
+    order: 0;
+  }
+
+  .door__card-visual {
+    height: 180px;
+    min-height: 0;
+  }
+
+  .hub__content {
+    padding: 22px 20px 24px;
+  }
+
+  .door .hub__title {
+    font-size: 25px;
+  }
+}
+

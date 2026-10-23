@@ -155,6 +155,34 @@ export function getMe(): Promise<ApiResult<Me>> {
   return request<Me>('/api/auth/me')
 }
 
+/** The few headline figures of the active Transelec import the front door shows. */
+export interface TranselecHeadline {
+  pmf_count: number
+  predio_count: number
+  /** Hectares, as the Transelec dashboard labels it. */
+  surface_total: number
+  aprobados_pmf_count: number
+  en_tramite_pmf_count: number
+}
+
+export function getTranselecHeadline(): Promise<ApiResult<TranselecHeadline>> {
+  return request<TranselecHeadline>('/api/transelec/summary')
+}
+
+export interface RodalesHeadline {
+  feature_count: number
+  total_sup_ha: number
+}
+
+/** The published Rodales version's totals; 404 while none is published. */
+export async function getRodalesHeadline(): Promise<ApiResult<RodalesHeadline>> {
+  const published = await request<{ shapefile_snapshot_id: number }>(
+    '/api/forestry/snapshots/published',
+  )
+  if (!published.ok) return published
+  return request<RodalesHeadline>(`/api/forestry/snapshots/${published.data.shapefile_snapshot_id}`)
+}
+
 export async function logout(): Promise<ApiResult<void>> {
   const result = await request<void>('/api/auth/logout', { method: 'POST' })
   forgetCsrfToken()

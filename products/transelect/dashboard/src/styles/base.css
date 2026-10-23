@@ -341,9 +341,9 @@ th.numeric {
   gap: var(--s-2);
   min-height: 34px;
   padding: 0 var(--s-5);
-  border: 1px solid var(--forest);
+  border: 1px solid var(--brand);
   border-radius: var(--r-control);
-  background: var(--forest);
+  background: var(--brand);
   color: #fff;
   font-family: inherit;
   font-size: var(--t-small);
@@ -362,8 +362,8 @@ th.numeric {
 }
 
 .btn:hover {
-  background: var(--forest-deep);
-  border-color: var(--forest-deep);
+  background: var(--teal);
+  border-color: var(--teal);
 }
 
 .btn:active {

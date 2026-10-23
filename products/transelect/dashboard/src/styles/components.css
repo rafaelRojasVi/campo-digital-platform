@@ -13,9 +13,10 @@
   position: sticky;
   top: 0;
   z-index: 40;
-  border-bottom: 1px solid var(--forest-dark);
-  background: linear-gradient(100deg, var(--forest-dark), var(--forest-deep));
-  color: var(--ink-inverse);
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 2px 12px -8px rgb(5 82 101 / 0.35);
+  color: var(--ink);
 }
 
 .topbar-inner {
@@ -38,22 +39,21 @@
 }
 
 /*
- * Campo Digital's own white logo, drawn for a dark ground. At 44px the
- * wordmark stays legible; the small tagline under it is part of the mark and
- * is not relied on for meaning (the alt text carries the name).
+ * Campo Digital's full-colour logo, the one campodigital.cl's own white header
+ * carries. The alt text carries the name.
  */
 .wordmark-logo {
   display: block;
   width: auto;
-  height: 44px;
+  height: 50px;
 }
 
 .wordmark-text {
-  padding-left: var(--s-3);
-  border-left: 1px solid rgb(255 255 255 / 0.28);
-  color: var(--ink-inverse);
-  font-size: var(--t-small);
-  font-weight: 600;
+  padding-left: var(--s-4);
+  border-left: 1px solid var(--line);
+  color: var(--teal);
+  font-size: var(--t-section);
+  font-weight: 700;
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
@@ -61,10 +61,10 @@
 /* Back to the Campo Digital project picker (unified platform builds only). */
 .project-switch {
   flex-shrink: 0;
-  padding: var(--s-2) var(--s-4);
-  border: 1px solid rgb(255 255 255 / 0.28);
+  padding: var(--s-3) var(--s-5);
+  border: 1px solid var(--teal);
   border-radius: var(--r-control);
-  color: var(--ink-inverse);
+  color: var(--teal);
   font-size: var(--t-small);
   font-weight: 600;
   text-decoration: none;
@@ -73,7 +73,51 @@
 }
 
 .project-switch:hover {
-  background: rgb(255 255 255 / 0.1);
+  background: var(--teal);
+  color: #fff;
+}
+
+.project-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.project-switch-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+/* The menu toggle's three lines, folding into an ✕ while open. */
+.menu-icon {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.menu-icon path {
+  transform-origin: 12px 12px;
+  transition:
+    transform var(--d-base) var(--ease),
+    opacity var(--d-fast) var(--ease);
+}
+
+.topnav-toggle[aria-expanded='true'] .menu-icon-top {
+  transform: translateY(5px) rotate(45deg);
+}
+
+.topnav-toggle[aria-expanded='true'] .menu-icon-mid {
+  opacity: 0;
+}
+
+.topnav-toggle[aria-expanded='true'] .menu-icon-bottom {
+  transform: translateY(-5px) rotate(-45deg);
 }
 
 /* ------------------------------------------------------------ shell nav */
@@ -96,8 +140,8 @@
   position: relative;
   padding: var(--s-3) var(--s-4);
   border-radius: var(--r-control);
-  color: var(--ink-inverse-2);
-  font-size: var(--t-small);
+  color: var(--teal);
+  font-size: var(--t-body);
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
@@ -107,13 +151,12 @@
 }
 
 .topnav a:hover {
-  background: rgb(255 255 255 / 0.09);
-  color: var(--ink-inverse);
+  background: var(--sunken);
+  color: var(--brand);
 }
 
 .topnav a[aria-current='page'] {
-  background: rgb(255 255 255 / 0.13);
-  color: #fff;
+  color: var(--brand);
 }
 
 /* The current section is marked by a rule at the bar's own edge, so it stays
@@ -122,11 +165,11 @@
   content: '';
   position: absolute;
   right: var(--s-4);
-  bottom: -11px;
+  bottom: -16px;
   left: var(--s-4);
-  height: 2px;
-  border-radius: 1px;
-  background: #8ed3a9;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--brand);
 }
 
 .topnav-toggle {
@@ -150,26 +193,28 @@
   align-items: center;
   gap: var(--s-3);
   padding: var(--s-2) var(--s-4);
-  border: 1px solid rgb(255 255 255 / 0.22);
+  border: 1px solid var(--line);
   border-radius: var(--r-pill);
+  background: var(--ground);
   font-size: var(--t-micro);
   line-height: 1.35;
   white-space: nowrap;
 }
 
 .version-chip b {
-  color: #fff;
+  color: var(--teal);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
 
 .version-chip span {
-  color: var(--ink-inverse-2);
+  color: var(--ink-3);
 }
 
 .version-chip.none {
-  border-color: rgb(255 210 150 / 0.5);
-  color: #ffd9a8;
+  border-color: var(--st-progress);
+  background: var(--st-progress-tint);
+  color: var(--st-progress-ink);
 }
 
 /* ------------------------------------------------- web edits: pill and log */
@@ -384,17 +429,32 @@ a.edit-log-target:hover {
  * a fixed --shell-h row that scroll offsets and the current-section rule are
  * measured against. The full name stays in the DOM and in the title.
  */
+.identity-avatar {
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--teal);
+  color: #fff;
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .identity-name {
   min-width: 0;
   overflow: hidden;
-  color: #fff;
+  color: var(--ink);
+  font-size: var(--t-small);
   font-weight: 650;
   text-overflow: ellipsis;
 }
 
 .identity-role {
   flex-shrink: 0;
-  color: var(--ink-inverse-2);
+  color: var(--ink-3);
 }
 
 .session-control {
@@ -405,41 +465,309 @@ a.edit-log-target:hover {
 }
 
 .session-control .btn {
-  border-color: rgb(255 255 255 / 0.28);
-  background: rgb(255 255 255 / 0.08);
-  color: #fff;
+  border-color: var(--teal);
+  background: #fff;
+  color: var(--teal);
 }
 
 .session-control .btn:hover {
-  border-color: rgb(255 255 255 / 0.5);
-  background: rgb(255 255 255 / 0.16);
+  background: var(--teal);
+  color: #fff;
 }
 
 .session-control-error {
-  color: #ffd2d2;
+  color: var(--st-rejected);
   font-size: var(--t-micro);
 }
 
-/* ------------------------------------------------------- context strip */
+/* ------------------------------------------------------------ page band */
 
-.context-strip {
+/* The teal band under the bar (components/PageBand.tsx), in the look of the
+   platform's front door and campodigital.cl. */
+.page-band {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(80% 140% at 92% 0%, rgb(0 148 61 / 0.3), transparent 60%),
+    linear-gradient(160deg, var(--teal-2), var(--teal) 70%);
+  color: var(--ink-inverse);
+}
+
+/* Faint contour lines, like the topographic map behind campodigital.cl. */
+.page-band::before {
+  position: absolute;
+  inset: -40px;
+  background: repeating-radial-gradient(
+    ellipse 55% 60% at 82% 70%,
+    transparent 0 24px,
+    rgb(255 255 255 / 0.07) 24px 25px
+  );
+  content: '';
+  pointer-events: none;
+}
+
+.page-band-inner {
+  position: relative;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--s-6) var(--s-6) var(--s-8);
+}
+
+.page-band-client {
+  margin: 0;
+  color: #ffb54d;
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.page-band-title {
+  margin: var(--s-2) 0 var(--s-3);
+  color: #fff;
+  font-size: var(--t-title);
+  font-weight: 750;
+  letter-spacing: -0.015em;
+}
+
+.page-band-version {
+  margin: 0;
+  color: rgb(242 246 243 / 0.8);
+  font-size: var(--t-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.page-band-wave {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 28px;
+  fill: var(--ground);
+}
+
+@media print {
+  .page-band {
+    background: none;
+    color: var(--ink);
+  }
+
+  .page-band::before,
+  .page-band-wave {
+    display: none;
+  }
+
+  .page-band-title,
+  .page-band-client,
+  .page-band-version {
+    color: var(--ink);
+  }
+
+  .page-band-inner {
+    padding: 0 0 var(--s-4);
+  }
+}
+
+/* ----------------------------------------------------------- filter bar */
+
+/* The shared filters (components/ActiveFiltersBar.tsx): amber, pinned under
+   the top bar, so a narrowed scope is visible on every section and while
+   scrolling. Amber is the app's «look here» tone; the text is
+   --st-progress-ink, 5.8:1 or more on the tint. */
+.filters-bar {
+  position: sticky;
+  top: var(--shell-h);
+  z-index: 30;
+  border-bottom: 2px solid var(--st-progress);
+  background: var(--st-progress-tint);
+  box-shadow: 0 8px 16px -14px rgb(122 86 0 / 0.6);
+  animation: rise var(--d-base) var(--ease-out) both;
+}
+
+.filters-bar-inner {
   display: flex;
   align-items: center;
-  gap: var(--s-4);
+  gap: var(--s-3) var(--s-5);
   flex-wrap: wrap;
-  padding: var(--s-3) 0 var(--s-5);
-  border-bottom: 1px solid var(--line);
-  color: var(--ink-3);
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--s-3) var(--s-6);
+}
+
+.filters-bar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--st-progress-ink);
   font-size: var(--t-small);
+  font-weight: 750;
 }
 
-.context-strip .client {
-  color: var(--ink);
+.filters-bar-note {
+  font-weight: 500;
+}
+
+.filters-bar-icon {
+  width: 18px;
+  height: 18px;
+  fill: var(--st-progress);
+  stroke: var(--st-progress-ink);
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+
+.filters-bar-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+.filters-bar .chip {
+  border-color: var(--st-progress);
+  background: #fff;
+}
+
+.filters-bar-clear {
+  min-height: 32px;
+  margin-left: auto;
+  padding: 0 var(--s-4);
+  border: 1px solid var(--st-progress-ink);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--st-progress-ink);
+  font: inherit;
+  font-size: var(--t-small);
   font-weight: 650;
+  cursor: pointer;
+  transition: background-color var(--d-fast) var(--ease);
 }
 
-.context-strip .sep {
-  color: var(--line-strong);
+.filters-bar-clear:hover {
+  background: #fff;
+}
+
+@media (max-width: 767px) {
+  .filters-bar-inner {
+    padding: var(--s-3) var(--s-4);
+  }
+
+  .filters-bar-note {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------- help bubble */
+
+/* «?» beside a heading or term (ui/HelpBubble.tsx). */
+.help {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.help-trigger {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--teal);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--teal);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  cursor: help;
+  transition:
+    background-color var(--d-fast) var(--ease),
+    color var(--d-fast) var(--ease);
+}
+
+/* A 44px hit area around the 20px mark, for touch. */
+.help-trigger::after {
+  position: absolute;
+  inset: -12px;
+  content: '';
+}
+
+.help-trigger:hover,
+.help-trigger[aria-expanded='true'] {
+  background: var(--teal);
+  color: #fff;
+}
+
+.help-bubble {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  z-index: 60;
+  width: max-content;
+  max-width: min(320px, 80vw);
+  padding: var(--s-4) var(--s-5);
+  border-radius: var(--r-surface);
+  background: var(--teal);
+  box-shadow: 0 16px 32px -16px rgb(5 82 101 / 0.6);
+  color: #fff;
+  font-size: var(--t-small);
+  font-weight: 450;
+  letter-spacing: 0;
+  line-height: 1.5;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  transform: translateX(-50%);
+}
+
+.help-bubble[hidden] {
+  display: none;
+}
+
+.help-bubble.open {
+  animation: help-in var(--d-base) var(--ease-out) both;
+}
+
+.help-bubble::before {
+  position: absolute;
+  top: -5px;
+  left: calc(50% - 5px);
+  width: 10px;
+  height: 10px;
+  background: var(--teal);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.help-bubble a {
+  color: #fff;
+}
+
+/* Near the right edge it opens leftwards, its tail still on the «?». */
+.help-bubble.end {
+  right: -10px;
+  left: auto;
+  transform: none;
+}
+
+.help-bubble.end::before {
+  right: 15px;
+  left: auto;
+}
+
+@keyframes help-in {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+.section-head-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
 }
 
 /* ================================================================= figure */
@@ -809,21 +1137,127 @@ a.edit-log-target:hover {
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
+  padding: var(--s-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-surface);
+  background: var(--surface);
 }
 
 .loading-row {
-  color: var(--ink-3);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--ink-2);
   font-size: var(--t-small);
+  font-weight: 600;
+}
+
+/* The whole screen waiting: centred mark and line, nothing else. */
+.loading-page {
+  display: flex;
+  min-height: 50vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-4);
+}
+
+.loading-page .loading-mark {
+  width: 96px;
+  height: 64px;
+}
+
+.loading-page .loading-row {
+  font-size: var(--t-body);
+}
+
+.loading-mark {
+  flex-shrink: 0;
+  width: 30px;
+  height: 20px;
+  overflow: visible;
+}
+
+.loading-mark-line {
+  fill: none;
+  stroke: var(--teal);
+  stroke-dasharray: 1;
+  stroke-linecap: round;
+  stroke-opacity: 0.45;
+  stroke-width: 1.5;
+  animation: loading-draw 1.8s var(--ease) infinite;
+}
+
+.loading-mark-line + .loading-mark-line {
+  animation-delay: 0.3s;
+}
+
+.loading-mark-node {
+  fill: #fff;
+  stroke: var(--teal);
+  stroke-width: 1.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: loading-node 1.8s var(--ease) infinite;
+}
+
+.loading-mark-node:nth-of-type(2) {
+  animation-delay: 0.15s;
+}
+
+.loading-mark-node:nth-of-type(3) {
+  animation-delay: 0.3s;
+}
+
+.loading-mark-node:nth-of-type(4) {
+  animation-delay: 0.45s;
+}
+
+.loading-mark-node:nth-of-type(5) {
+  animation-delay: 0.6s;
+}
+
+@keyframes loading-draw {
+  0% {
+    stroke-dashoffset: 1;
+  }
+  55%,
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes loading-node {
+  0%,
+  100% {
+    fill: #fff;
+    transform: scale(1);
+  }
+  40% {
+    fill: var(--teal);
+    transform: scale(1.25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-mark-line,
+  .loading-mark-node {
+    animation: none;
+  }
+
+  .loading-mark-line {
+    stroke-dashoffset: 0;
+  }
 }
 
 .skeleton {
   display: block;
   height: 12px;
-  border-radius: var(--r-control);
+  border-radius: var(--r-pill);
   background: linear-gradient(
     90deg,
     var(--sunken) 0%,
-    #e3e7e1 50%,
+    #dbe8ec 50%,
     var(--sunken) 100%
   );
   background-size: 200% 100%;
@@ -1630,23 +2064,64 @@ a.edit-log-target:hover {
  * Pinned by tests/e2e/navigation.spec.ts "the shell bar at laptop widths"
  * and "the shell bar with a long signed-in name".
  */
-@media (max-width: 1439px) {
+/* The white bar's larger logo and avatar need ~160px more than the old dark
+   one, so the role label gives way below 1600px instead of 1440px, and below
+   1440px the bar tightens: a smaller logo, closer links, and «Proyectos» as
+   its grid icon alone (the word stays its accessible name). Pinned by
+   tests/e2e/navigation.spec.ts «nothing overflows at 1280px / 1366px». */
+@media (max-width: 1599px) {
   .identity-role {
     display: none;
   }
 }
 
+@media (max-width: 1439px) {
+  .topbar-inner {
+    gap: var(--s-4);
+  }
+
+  .wordmark-logo {
+    height: 40px;
+  }
+
+  .wordmark-text {
+    font-size: var(--t-body);
+  }
+
+  .topnav a {
+    padding: var(--s-3);
+    font-size: var(--t-small);
+  }
+
+  .shell-side {
+    gap: var(--s-3);
+  }
+
+  .project-switch {
+    padding: var(--s-3);
+  }
+
+  .project-switch-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 @media (max-width: 1279px) {
   .topnav-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--s-3);
-    min-height: 32px;
-    padding: 0 var(--s-4);
-    border: 1px solid rgb(255 255 255 / 0.28);
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--teal);
     border-radius: var(--r-control);
-    background: rgb(255 255 255 / 0.08);
-    color: #fff;
+    background: #fff;
+    color: var(--teal);
     font-family: inherit;
     font-size: var(--t-micro);
     font-weight: 650;
@@ -1664,8 +2139,9 @@ a.edit-log-target:hover {
     align-items: stretch;
     gap: var(--s-1);
     padding: var(--s-3);
-    border-bottom: 1px solid var(--forest-dark);
-    background: var(--forest-deep);
+    border-bottom: 1px solid var(--line);
+    background: #fff;
+    box-shadow: 0 12px 24px -16px rgb(5 82 101 / 0.4);
     animation: rise var(--d-base) var(--ease-out) both;
   }
 
@@ -1682,6 +2158,20 @@ a.edit-log-target:hover {
   .identity,
   .version-chip span {
     display: none;
+  }
+
+  /* Icon only; the word stays as the link's accessible name. */
+  .project-switch {
+    padding: var(--s-3);
+  }
+
+  .project-switch-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .shell-side {
@@ -1718,6 +2208,12 @@ a.edit-log-target:hover {
     justify-content: space-between;
   }
 
+  /* No room for the initials beside the version, the edits pill and the
+     session control on a 390px row; the name is already hidden here. */
+  .identity-avatar {
+    display: none;
+  }
+
   .wordmark-logo {
     height: 40px;
   }
@@ -1729,18 +2225,6 @@ a.edit-log-target:hover {
     width: auto;
     max-height: 70vh;
     border-radius: 0;
-  }
-
-  /* The separators exist to divide a single line. Stacked, they become
-   * orphaned slashes on lines of their own. */
-  .context-strip {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--s-2);
-  }
-
-  .context-strip .sep {
-    display: none;
   }
 
   .figure.lead .figure-value {

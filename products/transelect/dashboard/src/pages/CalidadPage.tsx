@@ -45,9 +45,8 @@ import { ReforestationChips } from '../components/ReforestationChips'
 import { ReportPanel } from '../components/ReportPanel'
 import { WebEditConflicts } from '../components/WebEditConflicts'
 import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
-import { activeFilterChips, withoutChip } from '../lib/filterUrl'
 import { useReads, type FilterController } from '../lib/useFilters'
-import { Chip, SectionHeader } from '../ui/Primitives'
+import { SectionHeader } from '../ui/Primitives'
 
 interface CalidadData {
   summary: TranselecSummary
@@ -62,7 +61,7 @@ export function CalidadPage({
   filterController: FilterController
   canEdit?: boolean
 }) {
-  const { filters, replaceFilters } = filterController
+  const { filters } = filterController
   const key = JSON.stringify(filters)
 
   const { data, loading, failure } = useReads<CalidadData>(
@@ -108,7 +107,6 @@ export function CalidadPage({
     [key],
   )
 
-  const chips = activeFilterChips(filters)
 
   if (failure && !data) {
     return (
@@ -125,20 +123,6 @@ export function CalidadPage({
         meta="Qué conviene revisar en la versión publicada antes de informar sus cifras."
       />
 
-      {chips.length > 0 && (
-        <div className="active-filters no-print" style={{ paddingBottom: 'var(--s-5)' }}>
-          <span className="eyebrow">Alcance filtrado</span>
-          {chips.map((chip) => (
-            <Chip
-              key={chip.key}
-              onRemove={() => replaceFilters(withoutChip(filters, chip))}
-              removeLabel={`Quitar el filtro ${chip.label}: ${chip.value}`}
-            >
-              {chip.label}: {chip.value}
-            </Chip>
-          ))}
-        </div>
-      )}
 
       {failure && data && <AlertBanner title={failure.title}>{failure.message}</AlertBanner>}
 

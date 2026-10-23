@@ -13,6 +13,18 @@
   --green-tint: #e7f1eb;
   --green-line: #b9d6c5;
 
+  /* Campo Digital brand (matches apps/portal and Transelec panel).
+     --brand is #00943d darkened one step to 4.76:1 under white text. */
+  --brand: #008537;
+  --teal: #055265;
+  --teal-2: #0a6178;
+  --orange: #ff9300;
+
+  /* Amber — used for the active-filter bar ("look here" tone). */
+  --amber: #cf9000;
+  --amber-tint: #faf0d9;
+  --amber-ink: #7a5600; /* 5.8:1+ on --amber-tint */
+
   --paper: #f4f5f2;
   --panel: #fbfbfa;
   --panel-2: #eef0ec;
@@ -131,18 +143,25 @@ button {
   min-width: 0;
 }
 
-/* ---------- Header ---------- */
+/* ---------- Header ----------
+   White top bar matching the platform front door (apps/portal) and the
+   Transelec panel's AppHeader. Full-colour logo, teal nav links, green
+   current-page underline, teal Proyectos chip. */
 
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
   min-height: var(--header-h);
   padding: 0 20px;
-  border-bottom: 1px solid var(--green-950);
-  background: linear-gradient(100deg, var(--green-950), var(--green-900));
-  color: var(--ink-inverse);
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 2px 12px -8px rgb(5 82 101 / 0.35);
 }
 
 .header__brand {
@@ -150,8 +169,10 @@ button {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  flex: 1;
 }
 
+/* Full-colour Campo Digital logo (same asset as apps/portal and Transelec). */
 .header__logo {
   display: block;
   width: auto;
@@ -162,52 +183,171 @@ button {
 .header__context {
   min-width: 0;
   padding-left: 12px;
-  border-left: 1px solid rgb(255 255 255 / 0.28);
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
 }
 
 .header__product {
   margin: 0;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.01em;
-  color: var(--ink-inverse-2);
+  color: var(--ink-3);
 }
 
 .header__title {
   margin: 0;
-  font-size: 16px;
-  font-weight: 650;
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1.2;
-  color: var(--ink-inverse);
+  color: var(--teal);
   white-space: nowrap;
 }
+
+/* ---------- Header nav ---------- */
+
+.header__nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: max-content;
+}
+
+.header__nav-link {
+  position: relative;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  color: var(--teal);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 120ms var(--ease),
+    color 120ms var(--ease);
+}
+
+.header__nav-link:hover {
+  background: var(--panel-2);
+  color: var(--brand);
+}
+
+.header__nav-link[aria-current='page'] {
+  color: var(--brand);
+}
+
+/* Green rule flush with the bar's bottom border. */
+.header__nav-link[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  bottom: -16px;
+  left: 12px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--brand);
+}
+
+/* Hamburger for small screens (three lines → ✕ when open). */
+.header__nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--teal);
+  cursor: pointer;
+  transition: background-color 120ms var(--ease);
+}
+
+.header__nav-toggle:hover {
+  background: var(--panel-2);
+}
+
+.header__nav-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.header__menu-icon {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.header__menu-icon path {
+  transform-origin: 11px 11px;
+  transition:
+    transform 200ms var(--ease),
+    opacity 120ms var(--ease);
+}
+
+.header__nav-toggle[aria-expanded='true'] .header__menu-icon-top {
+  transform: translateY(5px) rotate(45deg);
+}
+
+.header__nav-toggle[aria-expanded='true'] .header__menu-icon-mid {
+  opacity: 0;
+}
+
+.header__nav-toggle[aria-expanded='true'] .header__menu-icon-bottom {
+  transform: translateY(-5px) rotate(-45deg);
+}
+
+/* ---------- Header end ---------- */
 
 .header__end {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   min-width: 0;
+  flex-shrink: 0;
 }
 
+/* «Proyectos» link — back to the project picker (platform builds only). */
 .header__projects {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink-inverse);
+  color: var(--teal);
   text-decoration: none;
   padding: 6px 12px;
-  border: 1px solid rgb(255 255 255 / 0.35);
+  border: 1px solid var(--teal);
   border-radius: var(--radius);
-  transition: background-color 120ms var(--ease);
+  transition: background-color 120ms var(--ease), color 120ms var(--ease);
 }
 
 .header__projects:hover {
-  background: rgb(255 255 255 / 0.12);
+  background: var(--teal);
+  color: #fff;
 }
 
 .header__projects:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+.header__project-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+/* The project-switch label is hidden below 1024px; the icon remains. */
+.header__project-label {
+  display: inline;
 }
 
 .header__provenance {
@@ -226,20 +366,20 @@ button {
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--ink-inverse-2);
+  color: var(--ink-3);
 }
 
 .header__provenance dd {
   margin: 0;
   font-size: 12.5px;
-  color: var(--ink-inverse);
+  color: var(--ink);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
 .header__provenance code {
-  background: rgb(255 255 255 / 0.1);
-  color: var(--ink-inverse);
+  background: var(--panel-2);
+  color: var(--ink);
 }
 
 /* ---------- KPI strip ---------- */
@@ -348,8 +488,8 @@ button {
   font-weight: 600;
   white-space: nowrap;
   color: var(--ink-inverse);
-  background: var(--green-700);
-  border: 1px solid var(--green-700);
+  background: var(--brand);
+  border: 1px solid var(--brand);
   border-radius: var(--radius);
   padding: 6px 14px;
   cursor: pointer;
@@ -361,8 +501,8 @@ button {
 }
 
 .button:hover {
-  background: var(--green-600);
-  border-color: var(--green-600);
+  background: var(--teal);
+  border-color: var(--teal);
 }
 
 .button:active {
@@ -1196,12 +1336,107 @@ button {
 
 /* ---------- Status views ---------- */
 
+/* Full-page status container. Error/forbidden/no-snapshot/sign-in use a card
+   on the light paper ground. LoadingView uses the .status--stage modifier for
+   the teal full-bleed Campo Digital look. */
 .status {
   height: 100%;
   display: grid;
   place-items: center;
   background: var(--paper);
 }
+
+/* ---------- Teal loading stage (LoadingView) ---------- */
+
+.status--stage {
+  position: relative;
+  background:
+    radial-gradient(80% 140% at 92% 0%, rgb(0 148 61 / 0.25), transparent 60%),
+    linear-gradient(160deg, var(--teal-2), var(--teal) 70%);
+  color: var(--ink-inverse);
+}
+
+/* Faint contour lines matching the PageBand. */
+.status--stage::before {
+  position: absolute;
+  inset: 0;
+  background: repeating-radial-gradient(
+    ellipse 55% 60% at 82% 70%,
+    transparent 0 24px,
+    rgb(255 255 255 / 0.06) 24px 25px
+  );
+  content: '';
+  pointer-events: none;
+}
+
+.status__stage-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 32px;
+}
+
+/* Stand-mosaic SVG mark: three stylised pines in the teal stage. */
+.status__stage-mark {
+  width: 80px;
+  height: 64px;
+  animation: stage-in 600ms var(--ease) both;
+}
+
+.status__stage-title {
+  margin: 0;
+  color: rgba(242 246 243 / 0.8);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.status__stage-step {
+  margin: 0;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Three pulsing dots — the stage's soft "loading" indicator. */
+.status__stage-dots {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.status__stage-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.7);
+  animation: dot-pulse 1.2s ease-in-out infinite both;
+}
+
+.status__stage-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.status__stage-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes stage-in {
+  from {
+    opacity: 0;
+    translate: 0 -6px;
+  }
+}
+
+@keyframes dot-pulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+  40%           { opacity: 1;   transform: scale(1); }
+}
+
+/* ---------- Card status views (error, forbidden, sign-in, no-snapshot) --- */
 
 .status__card {
   background: var(--panel);
@@ -1249,13 +1484,49 @@ a.button {
   height: 26px;
   border-radius: 50%;
   border: 3px solid var(--border);
-  border-top-color: var(--green-700);
+  border-top-color: var(--brand);
   animation: status-spin 0.9s linear infinite;
+}
+
+/* ---------- Skeleton shimmer (in-page loading blocks) ---------- */
+
+/* Use <div class="skeleton-line"> inside a loading block for a shimmering
+   placeholder. Any element can also carry the class directly. */
+.skeleton-line {
+  height: 14px;
+  border-radius: var(--radius);
+  background: linear-gradient(
+    90deg,
+    var(--panel-2) 25%,
+    var(--border) 50%,
+    var(--panel-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  from { background-position: 200% center; }
+  to   { background-position: -200% center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .status__spinner {
     animation: none;
+  }
+
+  .status--stage::before {
+    display: none;
+  }
+
+  .status__stage-mark,
+  .status__stage-dots span,
+  .skeleton-line {
+    animation: none;
+  }
+
+  .status__stage-dots span {
+    opacity: 0.5;
   }
 }
 
@@ -1272,10 +1543,97 @@ a.button {
   height: 18px;
   margin-left: 6px;
   border-radius: 9px;
-  background: var(--green-700);
+  background: var(--brand);
   color: var(--ink-inverse);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Page band (components/PageBand.tsx) ----------
+   Teal band under the header on document-style pages (PageShell). Slim
+   enough that the first content sits in the first screen. Map pages skip
+   it (would reduce map area). */
+
+.page-band {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(80% 140% at 92% 0%, rgb(0 148 61 / 0.25), transparent 60%),
+    linear-gradient(160deg, var(--teal-2), var(--teal) 70%);
+  color: var(--ink-inverse);
+}
+
+.page-band::before {
+  position: absolute;
+  inset: -40px;
+  background: repeating-radial-gradient(
+    ellipse 55% 60% at 82% 70%,
+    transparent 0 24px,
+    rgb(255 255 255 / 0.07) 24px 25px
+  );
+  content: '';
+  pointer-events: none;
+}
+
+.page-band-inner {
+  position: relative;
+  padding: 16px 20px 32px;
+}
+
+.page-band-client {
+  margin: 0;
+  color: #ffb54d;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.page-band-title {
+  margin: 4px 0 4px;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.page-band-version {
+  margin: 0;
+  color: rgb(242 246 243 / 0.8);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-band-wave {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 24px;
+  fill: var(--paper);
+}
+
+@media print {
+  .page-band {
+    background: none;
+    color: var(--ink);
+  }
+
+  .page-band::before,
+  .page-band-wave {
+    display: none;
+  }
+
+  .page-band-title,
+  .page-band-client,
+  .page-band-version {
+    color: var(--ink);
+  }
+
+  .page-band-inner {
+    padding: 0 0 8px;
+  }
 }
 
 /* ---------- Responsive ---------- */
@@ -1353,14 +1711,38 @@ a.button {
   }
 
   .header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-    padding: 8px 12px;
+    gap: 12px;
+    padding: 0 12px;
   }
 
   .header__logo {
-    height: 32px;
+    height: 34px;
+  }
+
+  .header__project-label {
+    display: none;
+  }
+
+  .header__nav-toggle {
+    display: inline-flex;
+  }
+
+  .header__nav {
+    display: none;
+  }
+
+  .header__nav--open {
+    display: flex;
+    position: absolute;
+    top: var(--header-h);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    flex-direction: column;
+    padding: 8px 12px 12px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 4px 16px -8px rgb(5 82 101 / 0.25);
   }
 
   .kpis {
@@ -1437,8 +1819,8 @@ a.button {
 
 .hint:hover,
 .hint:focus-visible {
-  color: var(--green-700);
-  border-color: var(--green-700);
+  color: var(--teal);
+  border-color: var(--teal);
   opacity: 1;
 }
 
@@ -1467,6 +1849,137 @@ a.button {
 
 .hint__tooltip--above {
   transform: translateY(-100%);
+}
+
+/* ---------- HelpBubble (components/HelpBubble.tsx) ----------
+   «?» beside a heading or term. Hover or focus shows it; click/tap pins it;
+   Escape or click-outside closes it. Near the right edge it opens leftwards. */
+
+.help {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.help-trigger {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  padding: 0;
+  border: 1px solid var(--teal);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--teal);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  cursor: help;
+  transition:
+    background-color 120ms var(--ease),
+    color 120ms var(--ease);
+}
+
+/* 44px touch target around the 18px mark. */
+.help-trigger::after {
+  position: absolute;
+  inset: -13px;
+  content: '';
+}
+
+.help-trigger:hover,
+.help-trigger[aria-expanded='true'] {
+  background: var(--teal);
+  color: #fff;
+}
+
+.help-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.help-bubble {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  z-index: 60;
+  width: max-content;
+  max-width: min(300px, 80vw);
+  padding: 10px 14px;
+  border-radius: var(--radius-surface);
+  background: var(--teal);
+  box-shadow: 0 16px 32px -16px rgb(5 82 101 / 0.6);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: 0;
+  line-height: 1.5;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  transform: translateX(-50%);
+}
+
+.help-bubble[hidden] {
+  display: none;
+}
+
+.help-bubble.open {
+  animation: help-in 200ms var(--ease) both;
+}
+
+.help-bubble::before {
+  position: absolute;
+  top: -5px;
+  left: calc(50% - 5px);
+  width: 10px;
+  height: 10px;
+  background: var(--teal);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.help-bubble a {
+  color: #fff;
+}
+
+/* Near the right edge: opens leftwards, tail stays on the «?». */
+.help-bubble.end {
+  right: -10px;
+  left: auto;
+  transform: none;
+}
+
+.help-bubble.end::before {
+  right: 15px;
+  left: auto;
+}
+
+@keyframes help-in {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+/* An inline heading + its «?». */
+.help-section-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Respect reduced motion: the keyframe and filter bar animation are the
+   only motion this stylesheet adds. The variable swap at the top of tokens
+   is enough for zero-ms but we also stop the keyframe. */
+@media (prefers-reduced-motion: reduce) {
+  .help-bubble.open,
+  .filters-bar {
+    animation: none;
+  }
 }
 
 /* ---------- Map: predio names over the overview ---------- */

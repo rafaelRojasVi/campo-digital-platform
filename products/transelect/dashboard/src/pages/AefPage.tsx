@@ -29,10 +29,11 @@ import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
 import { StatusPill } from '../components/StatusPill'
 import { cell, formatDate, formatInteger } from '../format'
 import { AEF_FIELDS, AEF_FIELD_LABELS, chronologyFlagsOf, chronologyLabel } from '../lib/aef'
-import { activeFilterChips, withoutChip } from '../lib/filterUrl'
+import { activeFilterChips } from '../lib/filterUrl'
 import { useReads, type FilterController } from '../lib/useFilters'
 import { Link, ROUTES } from '../router'
-import { Chip, SectionHeader, StatStrip } from '../ui/Primitives'
+import { HelpBubble } from '../ui/HelpBubble'
+import { SectionHeader, StatStrip } from '../ui/Primitives'
 
 function ofTotal(part: number, total: number): string {
   return `${formatInteger(part)} de ${formatInteger(total)}`
@@ -201,7 +202,7 @@ export function AefPage({
   filterController: FilterController
   sourceFields?: readonly string[] | null
 }) {
-  const { filters, replaceFilters } = filterController
+  const { filters } = filterController
   const key = JSON.stringify(filters)
   const [openRow, setOpenRow] = useState<ResumenRow | null>(null)
   const [openingPmf, setOpeningPmf] = useState<string | null>(null)
@@ -279,30 +280,19 @@ export function AefPage({
     <div className="page enter" aria-busy={loading}>
       <SectionHeader
         title="Seguimiento AEF"
-        meta="AEF, solicitante y fechas de cada PMF, con la fila de la hoja «Resumen» de la que viene cada valor."
+        meta="AEF, solicitante y fechas de cada PMF."
       />
 
-      {chips.length > 0 && (
-        <div className="active-filters no-print" style={{ paddingBottom: 'var(--s-5)' }}>
-          <span className="eyebrow">Alcance filtrado</span>
-          {chips.map((chip) => (
-            <Chip
-              key={chip.key}
-              onRemove={() => replaceFilters(withoutChip(filters, chip))}
-              removeLabel={`Quitar el filtro ${chip.label}: ${chip.value}`}
-            >
-              {chip.label}: {chip.value}
-            </Chip>
-          ))}
-        </div>
-      )}
 
       <AlertBanner tone="info" title="Valores por PMF, con su fila de origen">
-        En la planilla, el AEF aparece en una sola fila de cada PMF. Aquí se muestra como valor del
-        PMF indicando esa fila; las demás filas no se modifican y siguen vacías en el detalle por
-        fila. Si dos filas de un PMF tienen valores distintos, se marca para revisión y no se elige
-        ninguno. Campo Digital aún no confirma qué significa cada valor de AEF ni si se registra
-        por PMF o por área de corta.
+        El AEF de cada PMF viene de una sola fila de la planilla.{' '}
+        <HelpBubble label="Valores por PMF">
+          En la planilla, el AEF aparece en una sola fila de cada PMF. Aquí se muestra como valor
+          del PMF indicando esa fila; las demás filas no se modifican y siguen vacías en el detalle
+          por fila. Si dos filas de un PMF tienen valores distintos, se marca para revisión y no se
+          elige ninguno. Campo Digital aún no confirma qué significa cada valor de AEF ni si se
+          registra por PMF o por área de corta.
+        </HelpBubble>
         {chips.length > 0 &&
           ' Los PMF mostrados tienen alguna fila en el alcance filtrado; sus valores consideran todas sus filas.'}
         {missingColumns > 0 &&
@@ -389,9 +379,16 @@ export function AefPage({
           <section className="ruled" aria-labelledby="aef-rows-title" style={{ marginTop: 'var(--s-6)' }}>
             <div className="table-toolbar">
               <div className="result-count">
-                <h2 id="aef-rows-title" className="eyebrow">
-                  Detalle por fila
-                </h2>
+                <span className="section-head-title">
+                  <h2 id="aef-rows-title" className="eyebrow">
+                    Detalle por fila
+                  </h2>
+                  <HelpBubble label="Detalle por fila">
+                    Cada fila muestra solo sus propios valores, tal como vienen en la planilla; una
+                    fecha marcada para revisar no se corrige aquí. Para verlas junto al resto de las
+                    filas, use el <Link to={ROUTES.explorador}>Explorador</Link> con el filtro AEF.
+                  </HelpBubble>
+                </span>
                 <span data-testid="aef-rows-total">
                   <b>{formatInteger(data.rows_with_any_tracking)}</b>{' '}
                   {data.rows_with_any_tracking === 1 ? 'fila' : 'filas'} con algún valor de
@@ -466,11 +463,6 @@ export function AefPage({
                 </table>
               </div>
             )}
-            <p className="hint">
-              Cada fila muestra solo sus propios valores, tal como vienen en la planilla; una fecha
-              marcada para revisar no se corrige aquí. Para verlas junto al resto de las filas, use
-              el <Link to={ROUTES.explorador}>Explorador</Link> con el filtro AEF.
-            </p>
           </section>
         </>
       )}

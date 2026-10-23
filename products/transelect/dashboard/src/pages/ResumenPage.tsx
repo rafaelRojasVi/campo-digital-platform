@@ -42,8 +42,7 @@ import { EstadoDetalleTable } from '../components/EstadoDetalleTable'
 import { ReforestacionPanel } from '../components/ReforestacionPanel'
 import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
 import { StatusHeadline } from '../components/StatusHeadline'
-import { cell, formatDateTime, formatInteger, formatNumber } from '../format'
-import { activeFilterChips, withoutChip } from '../lib/filterUrl'
+import { cell, formatInteger, formatNumber } from '../format'
 import { PENDING_STAGE_LABELS } from '../lib/pendingStage'
 import {
   buildAttentionItems,
@@ -54,7 +53,8 @@ import { useReads, type FilterController } from '../lib/useFilters'
 import { Link, PENDING_QUEUE_HASH, ROUTES } from '../router'
 import { CompositionBar } from '../ui/CompositionBar'
 import { HowCalculated } from '../ui/HowCalculated'
-import { Chip, SectionHeader, StatStrip } from '../ui/Primitives'
+import { PREDIO_DEFINITION } from '../lib/rules'
+import { SectionHeader, StatStrip } from '../ui/Primitives'
 
 const QUEUE_LIMIT = 6
 
@@ -72,7 +72,7 @@ export function ResumenPage({
   canPublish: boolean
   filterController: FilterController
 }) {
-  const { filters, replaceFilters } = filterController
+  const { filters } = filterController
   const key = JSON.stringify(filters)
 
   const { data, loading, failure } = useReads<ResumenData>(
@@ -86,7 +86,6 @@ export function ResumenPage({
     [key],
   )
 
-  const chips = activeFilterChips(filters)
   const [openRow, setOpenRow] = useState<ResumenRow | null>(null)
 
   if (failure && !data) {
@@ -105,38 +104,7 @@ export function ResumenPage({
 
   return (
     <div className="page enter">
-      <div className="context-strip">
-        <span className="client">Transmisora del Pacífico – Transelec</span>
-        <span className="sep">/</span>
-        <span>Seguimiento de Planes de Manejo Forestal · ingresos CONAF</span>
-        {activeImport && (
-          <>
-            <span className="sep">/</span>
-            <span>
-              Versión #{activeImport.import_id}, publicada{' '}
-              {formatDateTime(activeImport.published_at)}
-              {activeImport.published_by_display_name
-                ? ` por ${activeImport.published_by_display_name}`
-                : ''}
-            </span>
-          </>
-        )}
-      </div>
 
-      {chips.length > 0 && (
-        <div className="active-filters" style={{ paddingTop: 'var(--s-5)' }}>
-          <span className="eyebrow">Alcance filtrado</span>
-          {chips.map((chip) => (
-            <Chip
-              key={chip.key}
-              onRemove={() => replaceFilters(withoutChip(filters, chip))}
-              removeLabel={`Quitar el filtro ${chip.label}: ${chip.value}`}
-            >
-              {chip.label}: {chip.value}
-            </Chip>
-          ))}
-        </div>
-      )}
 
       {failure && data && <AlertBanner title={failure.title}>{failure.message}</AlertBanner>}
 
@@ -160,7 +128,14 @@ export function ResumenPage({
             <SectionHeader
               id="atencion-title"
               title="Requiere atención"
-              meta="Cada tarjeta lleva a la sección que resuelve el caso."
+              help={
+                <>
+                  Cada tarjeta lleva a la sección que resuelve el caso. «Pendientes prioritarios»
+                  no se basa en el «Estado resumido» como «Aprobado» y «En trámite»: mira si falta
+                  el N.º de ingreso o si el «Estado» menciona un rechazo. Por eso un mismo PMF
+                  puede figurar «En trámite» y a la vez ser pendiente prioritario.
+                </>
+              }
             />
             <div className="attention">
               {buildAttentionItems(data.summary, {
@@ -183,11 +158,6 @@ export function ResumenPage({
                 </Link>
               ))}
             </div>
-            <p className="hint" style={{ marginTop: 'var(--s-4)' }}>
-              «Pendientes prioritarios» no se basa en el «Estado resumido» como «Aprobado» y «En
-              trámite»: mira si falta el N.º de ingreso o si el «Estado» menciona un rechazo. Por
-              eso un mismo PMF puede figurar «En trámite» y a la vez ser pendiente prioritario.
-            </p>
             <HowCalculated
               bases={[data.summary.basis_pending_priority, data.summary.basis_estado_resumido]}
               testId="attention-how"
@@ -256,9 +226,9 @@ export function ResumenPage({
             <SectionHeader
               id="detalle-title"
               title="Estado detallado de tramitación"
-              meta={`Desglose del encabezado sobre los mismos ${formatInteger(
+              help={`Desglose del encabezado sobre los mismos ${formatInteger(
                 data.summary.pmf_count,
-              )} PMF · evaluación, rechazos y recursos`}
+              )} PMF: evaluación, rechazos y recursos, según la columna «Estado».`}
             />
             <EstadoDetalleTable summary={data.summary} />
           </section>
@@ -267,7 +237,7 @@ export function ResumenPage({
             <SectionHeader
               id="empresa-title"
               title="Por empresa"
-              meta="Cada PMF pertenece a una sola empresa, por lo que los subtotales suman el total."
+              help="Cada PMF pertenece a una sola empresa, por lo que los subtotales suman el total."
             />
             <CompanyMatrix summary={data.summary} filters={filters} />
           </section>
@@ -276,7 +246,7 @@ export function ResumenPage({
             <SectionHeader
               id="alcance-title"
               title="Alcance medido"
-              meta="Conteos de referencia del alcance seleccionado."
+              help={`Conteos de referencia del alcance seleccionado. ${PREDIO_DEFINITION}`}
             />
             <StatStrip items={buildScaleStats(data.summary)} />
           </section>
@@ -294,7 +264,11 @@ export function ResumenPage({
               title="Estado resumido por predio"
               meta={`${formatInteger(
                 data.summary.predio_count,
-              )} predios únicos del alcance seleccionado · un denominador distinto del de los PMF`}
+              )} predios únicos del alcance seleccionado`}
+              help={
+                'Cada predio se cuenta una vez, con el «Estado resumido» de su primera fila. ' +
+                'Es un denominador distinto del de los PMF: un PMF puede abarcar varios predios.'
+              }
             />
             <CompositionBar
               noun="predios aprobados"
@@ -308,7 +282,7 @@ export function ResumenPage({
             <SectionHeader
               id="reforestacion-title"
               title="Reforestación"
-              meta="Lo que la planilla puede responder sobre reforestación, y lo que no."
+              help="Lo que la planilla puede responder sobre reforestación, y lo que no."
             />
             <ReforestacionPanel reforestacion={data.summary.reforestacion} />
           </section>
