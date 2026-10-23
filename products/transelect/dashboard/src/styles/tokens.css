@@ -49,6 +49,14 @@
   --forest-deep: #15503a;
   --forest-dark: #0f3b2b;
   --forest-tint: #e7f1eb;
+  /* campodigital.cl, shared with the platform's front door (apps/portal):
+     the brand green of its buttons, the deep teal of its hero, its orange.
+     The site's green (#00943d) is 3.96:1 under white text; this one step
+     darker is 4.76:1, so it carries button labels and green text. */
+  --brand: #008537;
+  --teal: #055265;
+  --teal-2: #0a6178;
+  --orange: #ff9300;
 
   /* ------------------------------------------------------------- status */
   --st-approved: #1e8055;
@@ -89,8 +97,8 @@
   --s-9: 64px;
 
   /* -------------------------------------------------------------- shape */
-  --r-control: 3px;
-  --r-surface: 6px;
+  --r-control: 6px;
+  --r-surface: 12px;
   --r-pill: 999px;
 
   /* ------------------------------------------------------------ shadows */
@@ -122,7 +130,7 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* -------------------------------------------------------------- shell */
-  --shell-h: 56px;
+  --shell-h: 68px;
   --page-max: 1440px;
 }
 

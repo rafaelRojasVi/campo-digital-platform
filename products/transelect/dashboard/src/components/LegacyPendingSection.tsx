@@ -14,6 +14,7 @@ import { cell, formatInteger, formatNumber } from '../format'
 import { PENDING_STAGE_LABELS, PENDING_STAGE_ORDER } from '../lib/pendingStage'
 import { useReads } from '../lib/useFilters'
 import { CompositionBar, type CompositionSegment } from '../ui/CompositionBar'
+import { HelpBubble } from '../ui/HelpBubble'
 import { HowCalculated } from '../ui/HowCalculated'
 import { Figure, SectionHeader } from '../ui/Primitives'
 import { AlertBanner, LoadingBlock } from './StateViews'
@@ -89,10 +90,12 @@ export function LegacyPendingSection({
             </div>
 
             <p className="hint">
-              Regla anterior a «Estado», que el Resumen todavía usa: un PMF es pendiente
-              prioritario si le falta el N.º de ingreso o si su «Estado» menciona un rechazo. No se
-              basa en el «Estado resumido». La etapa se deduce del texto de «Estado»; no es una
-              clasificación confirmada por CONAF.
+              Regla anterior a «Estado», que el Resumen todavía usa.{' '}
+              <HelpBubble label="Regla anterior a «Estado»">
+                Un PMF es pendiente prioritario si le falta el N.º de ingreso o si su «Estado»
+                menciona un rechazo. No se basa en el «Estado resumido». La etapa se deduce del
+                texto de «Estado»; no es una clasificación confirmada por CONAF.
+              </HelpBubble>
             </p>
             <HowCalculated bases={[data.basis, data.stage_basis]} testId="pending-how" />
 

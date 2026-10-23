@@ -35,7 +35,7 @@ import { LegacyPendingSection } from '../components/LegacyPendingSection'
 import { RowDetailDrawer } from '../components/RowDetailDrawer'
 import { AlertBanner, LoadingBlock, StateBlock } from '../components/StateViews'
 import { formatDate, formatInteger } from '../format'
-import { activeFilterChips, withoutChip } from '../lib/filterUrl'
+import { activeFilterChips } from '../lib/filterUrl'
 import { lifecycleGroupSegments, lifecycleStepSegments } from '../lib/lifecycle'
 import { indexPlazos, plazoDetail } from '../lib/plazo'
 import { plazoColumn } from '../lib/plazoColumn'
@@ -70,7 +70,7 @@ export function EstadoPage({
   /** Operator/admin: the drawer offers web edits. */
   canEdit?: boolean
 }) {
-  const { filters, replaceFilters, reset } = filterController
+  const { filters, reset } = filterController
   const { hash } = useRouter()
   const key = JSON.stringify(filters)
 
@@ -151,6 +151,9 @@ export function EstadoPage({
         )),
   )
   const narrowed = grupo !== null || paso !== null || query !== ''
+  const grupoLabel =
+    data && grupo !== null ? segmentLabel(lifecycleGroupSegments(data), grupo) : null
+  const pasoLabel = data && paso !== null ? segmentLabel(lifecycleStepSegments(data), paso) : null
   const sinContar = plazos.data
     ? plazos.data.estados.sin_fecha_texto + plazos.data.estados.conflicto
     : 0
@@ -177,23 +180,20 @@ export function EstadoPage({
             Estado <span className="hint">(provisional)</span>
           </>
         }
-        meta="Dónde está cada PMF en la tramitación CONAF y cuánto le queda del plazo de 90 días hábiles. Un rechazo es un paso, no un final."
+        meta="Dónde está cada PMF en la tramitación CONAF y cuánto le queda de plazo."
+        helpLabel="Estado"
+        help={
+          <>
+            El grupo sale del «Estado resumido» de la primera fila de cada PMF; el paso, de su
+            «Estado». «Rechazado» es un paso dentro de «En trámite»: todo rechazo termina en
+            «Aprobado», «Descartado» o «Desistido». Lo que esta regla no reconoce queda «Sin
+            clasificar» y se lista en Calidad. El plazo CONAF cuenta 90 días hábiles desde el
+            ingreso más reciente. Categorías y plazo provisionales hasta que Campo Digital los
+            confirme.
+          </>
+        }
       />
 
-      {chips.length > 0 && (
-        <div className="active-filters no-print" style={{ paddingBottom: 'var(--s-5)' }}>
-          <span className="eyebrow">Alcance filtrado</span>
-          {chips.map((chip) => (
-            <Chip
-              key={chip.key}
-              onRemove={() => replaceFilters(withoutChip(filters, chip))}
-              removeLabel={`Quitar el filtro ${chip.label}: ${chip.value}`}
-            >
-              {chip.label}: {chip.value}
-            </Chip>
-          ))}
-        </div>
-      )}
 
       {failure && data && <AlertBanner title={failure.title}>{failure.message}</AlertBanner>}
       {plazos.failure && (
@@ -238,14 +238,6 @@ export function EstadoPage({
             />
           </div>
 
-          <p className="hint">
-            El grupo sale del «Estado resumido» de la primera fila de cada PMF; el paso, de su
-            «Estado». «Rechazado» es un paso dentro de «En trámite»: todo rechazo termina en
-            «Aprobado», «Descartado» o «Desistido». Lo que esta regla no reconoce queda «Sin
-            clasificar» y se lista en Calidad. El plazo CONAF cuenta 90 días hábiles desde el
-            ingreso más reciente. Categorías y plazo provisionales hasta que Campo Digital los
-            confirme.
-          </p>
           <HowCalculated
             bases={[
               data.basis,
@@ -326,6 +318,29 @@ export function EstadoPage({
                   onChange={(event) => setBuscar(event.target.value)}
                 />
               </label>
+              {/* What the bars narrowed, on this page only, said next to the
+                  table it narrows and removable from there. */}
+              {(grupo !== null || paso !== null) && (
+                <span className="active-filters">
+                  <span className="eyebrow">Mostrando solo</span>
+                  {grupoLabel !== null && (
+                    <Chip
+                      onRemove={() => setGrupo(null)}
+                      removeLabel={`Dejar de mostrar solo ${grupoLabel}`}
+                    >
+                      {grupoLabel}
+                    </Chip>
+                  )}
+                  {pasoLabel !== null && (
+                    <Chip
+                      onRemove={() => setPaso(null)}
+                      removeLabel={`Dejar de mostrar solo ${pasoLabel}`}
+                    >
+                      {pasoLabel}
+                    </Chip>
+                  )}
+                </span>
+              )}
               {narrowed && (
                 <button
                   type="button"
@@ -388,4 +403,9 @@ export function EstadoPage({
       )}
     </div>
   )
+}
+
+/** A bar segment's label by key, for the «Mostrando solo» chip. */
+function segmentLabel(segments: readonly { key: string; label: string }[], key: string): string {
+  return segments.find((segment) => segment.key === key)?.label ?? key
 }

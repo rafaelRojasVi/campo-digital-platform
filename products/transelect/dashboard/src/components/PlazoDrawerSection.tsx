@@ -15,6 +15,7 @@ import {
 } from '../lib/plazo'
 import { Fact } from './Fact'
 import { LoadingBlock } from './StateViews'
+import { HelpBubble } from '../ui/HelpBubble'
 
 export type PlazoDrawerStatus = 'loading' | 'error' | 'empty'
 
@@ -63,9 +64,16 @@ export function PlazoDrawerSection({ detail }: { detail: PlazoDetail }) {
       aria-labelledby="drawer-plazo-title"
       data-testid="drawer-plazo"
     >
-      <h3 id="drawer-plazo-title">
-        {TITLE} <span className="hint">(provisional)</span>
-      </h3>
+      <div className="section-head-title">
+        <h3 id="drawer-plazo-title">
+          {TITLE} <span className="hint">(provisional)</span>
+        </h3>
+        <HelpBubble label="Días hábiles">
+          Días hábiles: lunes a viernes sin feriados nacionales de Chile (calendario holidays{' '}
+          {detail.calendarVersion}). Hoy es {formatDate(detail.observedOn)}, la fecha del servidor
+          en Chile. Regla provisional hasta que Campo Digital confirme cuándo empieza el plazo.
+        </HelpBubble>
+      </div>
       <dl className="facts plazo-facts">
         <Fact label="Estado del plazo" wide>
           <span className={`pill ${PLAZO_ESTADO_PILL[entry.estado]}`}>
@@ -83,11 +91,6 @@ export function PlazoDrawerSection({ detail }: { detail: PlazoDetail }) {
           {cruceText(entry)}
         </Fact>
       </dl>
-      <p className="hint">
-        Días hábiles: lunes a viernes sin feriados nacionales de Chile (calendario holidays{' '}
-        {detail.calendarVersion}). Hoy es {formatDate(detail.observedOn)}, la fecha del servidor en
-        Chile. Regla provisional hasta que Campo Digital confirme cuándo empieza el plazo.
-      </p>
     </section>
   )
 }

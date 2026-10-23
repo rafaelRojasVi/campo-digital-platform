@@ -8,10 +8,10 @@
  * The client's full name and the programme description move into the Resumen's
  * own context strip, where they belong to a page rather than to every page.
  *
- * The brand mark is Campo Digital's own logo, as published on
- * campodigital.cl (logo-campo-blanco-home-1-02.png), resized to a 2x asset
- * and served from this bundle rather than hotlinked. It is the white variant,
- * drawn for a dark ground, which is what this bar is. The image's alt text
+ * The brand mark is Campo Digital's own full-colour logo, the one
+ * campodigital.cl's white header carries (cropped-CDlogo2.jpg), served from
+ * this bundle rather than hotlinked; the bar is white like that header and
+ * like the platform's front door. The image's alt text
  * carries the company name, and "Transelec" stays real text beside it, so
  * the link still reads "Campo Digital Transelec" without the picture.
  * The Transelec logo embedded in the source HTML is still not reused.
@@ -25,7 +25,7 @@ import type { Me, TranselecActiveImport } from '../api'
 import { logout, transelecRole } from '../api'
 import { formatDate, formatDateTime } from '../format'
 import { Link, ROUTES, useRouter, type Route } from '../router'
-import campoDigitalLogo from '../assets/campo-digital-logo.png'
+import campoDigitalLogo from '../assets/campo-digital-logo-color.jpg'
 import { PLATFORM_FRONT_DOOR_PATH, platformFrontDoorEnabled } from '../runtime/frontDoor'
 import { WebEditsPill } from './WebEditsPill'
 
@@ -161,8 +161,8 @@ export function AppHeader({
             className="wordmark-logo"
             src={campoDigitalLogo}
             alt="Campo Digital"
-            width={103}
-            height={44}
+            width={500}
+            height={168}
             fetchPriority="high"
             translate="no"
           />
@@ -177,11 +177,17 @@ export function AppHeader({
           <button
             type="button"
             className="topnav-toggle"
+            aria-label="Secciones"
             aria-expanded={navOpen}
             aria-controls="secciones"
             onClick={() => setNavOpen((value) => !value)}
           >
-            Secciones
+            {/* Three lines that fold into an ✕ while the menu is open. */}
+            <svg className="menu-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path className="menu-icon-top" d="M4 7h16" />
+              <path className="menu-icon-mid" d="M4 12h16" />
+              <path className="menu-icon-bottom" d="M4 17h16" />
+            </svg>
           </button>
         )}
 
@@ -224,6 +230,11 @@ export function AppHeader({
           )}
 
           {me && (
+            <span className="identity-avatar" aria-hidden="true">
+              {initials(me.display_name)}
+            </span>
+          )}
+          {me && (
             <span className="identity" data-testid="shell-identity">
               <span className="identity-name" title={me.display_name}>
                 {me.display_name}
@@ -241,7 +252,13 @@ export function AppHeader({
               href={PLATFORM_FRONT_DOOR_PATH}
               title="Cambiar de proyecto o cerrar sesión"
             >
-              Proyectos
+              <svg className="project-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />
+                <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" />
+                <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" />
+                <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" />
+              </svg>
+              <span className="project-switch-label">Proyectos</span>
             </a>
           )}
           {me && onSignedOut && !platformFrontDoorEnabled() && (
@@ -254,4 +271,15 @@ export function AppHeader({
       </div>
     </header>
   )
+}
+
+/** "Javier Soto" -> "JS", for the round mark beside the signed-in name. */
+function initials(displayName: string): string {
+  return displayName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('')
 }

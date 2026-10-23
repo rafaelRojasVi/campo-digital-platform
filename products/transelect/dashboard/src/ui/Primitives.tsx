@@ -9,6 +9,7 @@
  */
 import type { ReactNode } from 'react'
 import { useId, useState } from 'react'
+import { HelpBubble } from './HelpBubble'
 
 /**
  * A section heading and a right-hand slot.
@@ -22,17 +23,32 @@ export function SectionHeader({
   id,
   meta,
   actions,
+  help,
+  helpLabel,
 }: {
   title: ReactNode
   id?: string
   meta?: ReactNode
   actions?: ReactNode
+  /**
+   * What the section means, in a «?» bubble beside the heading instead of a
+   * paragraph under it. Kept outside the <h2> so the heading's name stays
+   * the title alone.
+   */
+  help?: ReactNode
+  /** The bubble's name when the title is not plain text. */
+  helpLabel?: string
 }) {
   return (
     <div className="section-head">
-      <h2 id={id}>
-        {title}
-      </h2>
+      <div className="section-head-title">
+        <h2 id={id}>{title}</h2>
+        {help && (
+          <HelpBubble label={helpLabel ?? (typeof title === 'string' ? title : 'esta sección')}>
+            {help}
+          </HelpBubble>
+        )}
+      </div>
       {(meta || actions) && (
         <div className="section-head-meta">
           {meta}

@@ -9,8 +9,10 @@ import {
   onUnauthorized,
   isTranselecAdmin,
 } from './api'
+import { ActiveFiltersBar } from './components/ActiveFiltersBar'
 import { AppHeader } from './components/AppHeader'
 import { LoginCard } from './components/LoginCard'
+import { PageBand } from './components/PageBand'
 import { WebEditsProvider } from './components/WebEditsProvider'
 import { LoadingBlock, StateBlock } from './components/StateViews'
 import { classifyFailure, type ApiFailure } from './lib/apiState'
@@ -24,6 +26,20 @@ import { ResumenPage } from './pages/ResumenPage'
 import { ROUTES, RouterProvider, isAdminRoute, resolveRoute, useRouter } from './router'
 import { PLATFORM_FRONT_DOOR_PATH, platformFrontDoorEnabled } from './runtime/frontDoor'
 import { demoSignInAvailable } from './runtime/environment'
+
+/**
+ * The sections that read the shared filters, where the filter bar shows. Not
+ * the Explorador: its own filter panel, open on the page, already lists every
+ * active filter with its removal control, and a second copy would only
+ * duplicate those controls.
+ */
+const FILTERED_ROUTES: readonly string[] = [
+  ROUTES.resumen,
+  ROUTES.estado,
+  ROUTES.pendientes,
+  ROUTES.aef,
+  ROUTES.calidad,
+]
 
 function Shell() {
   const { pathname, search, navigate } = useRouter()
@@ -149,7 +165,7 @@ function Shell() {
     if (sessionLoading) {
       return (
         <div className="page">
-          <LoadingBlock label="Verificando la sesión…" lines={2} />
+          <LoadingBlock label="Verificando la sesión…" page />
         </div>
       )
     }
@@ -164,7 +180,7 @@ function Shell() {
         // The effect below performs the navigation; render stays pure.
         return (
           <div className="page">
-            <LoadingBlock label="Abriendo la entrada de Campo Digital…" lines={1} />
+            <LoadingBlock label="Abriendo la entrada de Campo Digital…" page />
           </div>
         )
       }
@@ -261,7 +277,13 @@ function Shell() {
         demoMode={demoSignInAvailable()}
         onSignedOut={onSignedOut}
       />
-      <main id="contenido">{body()}</main>
+      <main id="contenido">
+        {me && !sessionFailure && <PageBand activeImport={activeImport} />}
+        {me && !sessionFailure && FILTERED_ROUTES.includes(route) && (
+          <ActiveFiltersBar filterController={filterController} />
+        )}
+        {body()}
+      </main>
     </WebEditsProvider>
   )
 }

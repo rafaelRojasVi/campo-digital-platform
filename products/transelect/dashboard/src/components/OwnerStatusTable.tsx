@@ -15,6 +15,7 @@ import type { TranselecOwnerStatus, TranselecSummary } from '../api'
 import { formatInteger, formatPercent } from '../format'
 import { buildOwnerStatusTable, type OwnerStatusTable as OwnerTable } from '../lib/ownerStatus'
 import { HowCalculated } from '../ui/HowCalculated'
+import { HelpBubble } from '../ui/HelpBubble'
 
 function signed(value: number): string {
   if (value === 0) return '0'
@@ -132,13 +133,15 @@ export function OwnerStatusTable({
 
   return (
     <div data-testid="owner-status">
-      <h2 id="owner-title">Estado por tipo de propietario</h2>
-      <p className="hint" style={{ margin: 'var(--s-3) 0 var(--s-4)' }}>
-        Predios del alcance seleccionado ({formatInteger(ownerStatus.total_predio_count)}),
-        agrupados por tipo de propietario. Un predio con rechazo en su «Estado» se cuenta como
-        «Rechazado», por lo que esta tabla puede clasificar un predio de forma distinta al resto
-        del panel.
-      </p>
+      <div className="section-head-title" style={{ marginBottom: 'var(--s-4)' }}>
+        <h2 id="owner-title">Estado por tipo de propietario</h2>
+        <HelpBubble label="Estado por tipo de propietario">
+          Predios del alcance seleccionado ({formatInteger(ownerStatus.total_predio_count)}),
+          agrupados por tipo de propietario. Un predio con rechazo en su «Estado» se cuenta como
+          «Rechazado», por lo que esta tabla puede clasificar un predio de forma distinta al resto
+          del panel.
+        </HelpBubble>
+      </div>
       <div className="tablewrap short">
         <table className="ownerstatus">
           <thead>

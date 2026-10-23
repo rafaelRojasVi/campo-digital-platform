@@ -42,6 +42,7 @@ import {
   useXlsxDownload,
 } from "../lib/xlsxDownload";
 import { SectionHeader } from "../ui/Primitives";
+import { HelpBubble } from "../ui/HelpBubble";
 
 const ORDER: Record<TranselecOverride["status"], number> = {
   en_conflicto: 0,
@@ -236,14 +237,19 @@ export function EdicionesPage({
         </p>
 
         {notWritten + incorporated > 0 && (
-          <p className="hint" data-testid="conflict-help">
-            «En conflicto con la planilla»: la planilla publicada cambió ese
-            valor después de la edición y el panel muestra el de la planilla.
-            «Mantener valor web» vuelve a mostrar el valor web y lo escribe en
-            la descarga; «Descartar» lo borra y queda el de la planilla. «Sin
-            fila en la versión publicada»: la edición no se muestra ni se
-            descarga. «Ya está en la planilla»: la planilla ya tiene el valor
-            web.
+          <p className="hint">
+            Qué significa cada estado de una edición{" "}
+            <HelpBubble label="estados de una edición">
+              <span data-testid="conflict-help">
+                «En conflicto con la planilla»: la planilla publicada cambió ese
+                valor después de la edición y el panel muestra el de la planilla.
+                «Mantener valor web» vuelve a mostrar el valor web y lo escribe en
+                la descarga; «Descartar» lo borra y queda el de la planilla. «Sin
+                fila en la versión publicada»: la edición no se muestra ni se
+                descarga. «Ya está en la planilla»: la planilla ya tiene el valor
+                web.
+              </span>
+            </HelpBubble>
           </p>
         )}
 

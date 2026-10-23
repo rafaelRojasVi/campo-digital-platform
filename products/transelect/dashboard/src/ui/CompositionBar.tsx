@@ -86,6 +86,12 @@ export function CompositionBar({
     .map((segment) => `${formatInteger(segment.value)} ${segment.label}`)
     .join(', ')
 
+  // A segment holding every item is not a choice: picking it shows exactly
+  // what is already shown, and un-picking it changes nothing either, which
+  // reads as a broken control. It stays clickable only to clear a selection.
+  const selectable = (segment: CompositionSegment) =>
+    segment.value > 0 && (segment.value < total || selectedKey === segment.key)
+
   return (
     <div className="composition" data-testid={testId}>
       <div className="composition-head">
@@ -111,9 +117,12 @@ export function CompositionBar({
               data-tone={segment.tone}
               data-segment={segment.key}
               data-dimmed={selectedKey !== null && selectedKey !== segment.key ? '' : undefined}
-              style={{ width: `${percentage}%`, cursor: onSelect ? 'pointer' : undefined }}
+              style={{
+                width: `${percentage}%`,
+                cursor: onSelect && selectable(segment) ? 'pointer' : undefined,
+              }}
               onClick={
-                onSelect
+                onSelect && selectable(segment)
                   ? () => onSelect(selectedKey === segment.key ? null : segment.key)
                   : undefined
               }
@@ -144,7 +153,12 @@ export function CompositionBar({
                 type="button"
                 className="composition-filter"
                 aria-pressed={selectedKey === segment.key}
-                disabled={segment.value === 0}
+                disabled={!selectable(segment)}
+                title={
+                  segment.value > 0 && !selectable(segment)
+                    ? `Ya se muestran todos los ${noun}`
+                    : undefined
+                }
                 onClick={() => onSelect(selectedKey === segment.key ? null : segment.key)}
               >
                 {content}

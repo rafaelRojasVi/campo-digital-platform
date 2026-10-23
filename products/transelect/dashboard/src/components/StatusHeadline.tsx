@@ -25,6 +25,7 @@ import {
 import { useWebEdits } from '../lib/webEditsState'
 import { Link, ROUTES } from '../router'
 import { CompositionBar } from '../ui/CompositionBar'
+import { HelpBubble } from '../ui/HelpBubble'
 import { HowCalculated } from '../ui/HowCalculated'
 
 function bucketHref(filters: TranselecFilterState, bucket: StatusBucket): string {
@@ -58,7 +59,13 @@ export function StatusHeadline({
       </div>
 
       <div className="compositions">
-        <h2 id="estado-title">Estado de los planes de manejo</h2>
+        <div className="section-head-title">
+          <h2 id="estado-title">Estado de los planes de manejo</h2>
+          <HelpBubble label="Estado de los planes de manejo">
+            Cada PMF se cuenta una sola vez, aunque tenga varias filas en la planilla. Su estado es
+            el «Estado resumido» de su primera fila (la de número de fila más bajo).
+          </HelpBubble>
+        </div>
         <CompositionBar
           noun="PMF"
           testId="status-pmf"
