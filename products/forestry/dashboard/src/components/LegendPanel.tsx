@@ -81,6 +81,8 @@ export function LegendPanel({
     }
   }
 
+  const shownFeatures = encoding.legend.reduce((sum, entry) => sum + entry.featureCount, 0)
+
   return (
     <section
       className={`legend${encoding.dimension === 'especie' ? ' legend--wrap' : ''}`}
@@ -106,8 +108,13 @@ export function LegendPanel({
 
       <ul className="legend__list">
         {encoding.legend.map((entry) => {
-          const clickable = entry.filterValue !== null
           const active = isEntryActive(entry)
+          // A category holding every polygon shown is not a choice: picking it
+          // changes nothing on the map, and un-picking it changes nothing
+          // either, which reads as a broken control. It stays clickable only
+          // to clear a filter that is already on.
+          const holdsAll = entry.featureCount >= shownFeatures
+          const clickable = entry.filterValue !== null && (active || !holdsAll)
           const barWidth = Math.max(2, Math.round((entry.supHaTotal / maxSupHa) * 100))
 
           const row = (
@@ -145,7 +152,16 @@ export function LegendPanel({
                   {row}
                 </button>
               ) : (
-                <span className="legend__entry">{row}</span>
+                <span
+                  className="legend__entry"
+                  title={
+                    entry.filterValue !== null && holdsAll
+                      ? 'Ya se muestran todos los polígonos'
+                      : undefined
+                  }
+                >
+                  {row}
+                </span>
               )}
             </li>
           )

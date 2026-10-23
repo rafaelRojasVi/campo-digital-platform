@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Header } from './Header.tsx'
+import { PageBand } from './PageBand.tsx'
 import type { Route } from '../router.ts'
 import type { ForestryRole, VersionStatus } from '../types.ts'
 import { STATUS_LABELS } from '../lib/versions.ts'
@@ -17,6 +18,7 @@ export function PageShell({
   return (
     <div className="page-app">
       <Header active={active} role={role} />
+      <PageBand />
       <main className="page">{children}</main>
     </div>
   )

@@ -8,11 +8,38 @@ interface RetryProps {
 
 export function LoadingView({ step }: { step: string }) {
   return (
-    <div className="status" role="status" aria-live="polite">
-      <div className="status__card">
-        <div className="status__spinner" aria-hidden="true" />
-        <h1 className="status__title">Gestión Predial Forestal</h1>
-        <p className="status__text">{step}</p>
+    <div className="status status--stage" role="status" aria-live="polite">
+      <div className="status__stage-inner">
+        {/* Stand-mosaic mark: stylised pine trees representing Gestión Predial Forestal. */}
+        <svg
+          className="status__stage-mark"
+          viewBox="0 0 80 64"
+          aria-hidden="true"
+          focusable="false"
+        >
+          {/* Left tree — tall pine */}
+          <polygon points="16,48 24,48 20,36" fill="rgba(255,255,255,0.55)" />
+          <polygon points="14,42 26,42 20,26" fill="rgba(255,255,255,0.75)" />
+          <polygon points="12,35 28,35 20,14" fill="rgba(255,255,255,0.95)" />
+          <rect x="18" y="48" width="4" height="8" rx="1" fill="rgba(255,255,255,0.4)" />
+          {/* Centre tree — tallest */}
+          <polygon points="34,50 46,50 40,38" fill="rgba(255,255,255,0.55)" />
+          <polygon points="32,44 48,44 40,28" fill="rgba(255,255,255,0.75)" />
+          <polygon points="30,37 50,37 40,16" fill="rgba(255,255,255,0.95)" />
+          <polygon points="28,30 52,30 40,6" fill="rgba(255,255,255,0.70)" />
+          <rect x="38" y="50" width="4" height="8" rx="1" fill="rgba(255,255,255,0.4)" />
+          {/* Right tree — medium */}
+          <polygon points="54,48 64,48 59,37" fill="rgba(255,255,255,0.50)" />
+          <polygon points="52,42 66,42 59,24" fill="rgba(255,255,255,0.70)" />
+          <rect x="57" y="48" width="4" height="8" rx="1" fill="rgba(255,255,255,0.35)" />
+          {/* Ground line */}
+          <rect x="8" y="57" width="64" height="2" rx="1" fill="rgba(255,255,255,0.25)" />
+        </svg>
+        <h1 className="status__stage-title">Gestión Predial Forestal</h1>
+        <p className="status__stage-step">{step}</p>
+        <div className="status__stage-dots" aria-hidden="true">
+          <span /><span /><span />
+        </div>
       </div>
     </div>
   )

@@ -130,9 +130,17 @@ export function ActiveFilterBar({ filters, onFiltersChange }: ActiveFilterBarPro
 
   if (chips.length === 0) return null
 
+  const countLabel = chips.length === 1 ? 'Filtro activo' : `${chips.length} filtros activos`
+
   return (
-    <div className="active-filters" aria-label="Filtros activos">
-      <span className="active-filters__label">Filtros activos</span>
+    <div className="active-filters" role="region" aria-label="Filtros activos en el mapa">
+      <span className="active-filters__label">
+        {/* Funnel icon */}
+        <svg className="active-filters__icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 5h16l-6.2 7.4V19l-3.6-1.8v-4.8z" />
+        </svg>
+        {countLabel}
+      </span>
       <div className="active-filters__chips">
         {chips.map((chip) => (
           <button
@@ -140,7 +148,7 @@ export function ActiveFilterBar({ filters, onFiltersChange }: ActiveFilterBarPro
             type="button"
             className="active-filters__chip"
             onClick={chip.clear}
-            title={`Quitar ${chip.label}`}
+            aria-label={`Quitar filtro: ${chip.label}`}
           >
             <span>{chip.label}</span>
             <span aria-hidden="true">×</span>
@@ -169,7 +177,7 @@ export function ActiveFilterBar({ filters, onFiltersChange }: ActiveFilterBarPro
           })
         }
       >
-        Limpiar todos
+        Quitar todos
       </button>
     </div>
   )

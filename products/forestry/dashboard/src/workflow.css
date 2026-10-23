@@ -3,38 +3,8 @@
    controls 6px, surfaces 8px, chips pill. */
 
 /* ---------- Header navigation ---------- */
-
-.header__nav {
-  display: flex;
-  gap: 2px;
-  margin-left: 12px;
-}
-
-.header__nav-link {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-inverse-2);
-  text-decoration: none;
-  padding: 6px 10px;
-  border-radius: var(--radius);
-  white-space: nowrap;
-  transition: background-color 120ms var(--ease), color 120ms var(--ease);
-}
-
-.header__nav-link:hover {
-  color: var(--ink-inverse);
-  background: rgb(255 255 255 / 0.1);
-}
-
-.header__nav-link[aria-current='page'] {
-  color: var(--ink-inverse);
-  background: rgb(255 255 255 / 0.16);
-}
-
-.header__nav-link:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
+/* Note: .header__nav and .header__nav-link base styles live in styles.css.
+   This file only adds the narrow-screen collapse/expand behaviour. */
 
 /* ---------- Map preview banner ---------- */
 
@@ -132,10 +102,35 @@
   flex-wrap: wrap;
 }
 
+/* In-page loading indicator: teal accent strip below the text + shimmer lines. */
 .page__busy {
   margin: 0;
   font-size: 13px;
   color: var(--ink-2);
+}
+
+.page__busy::after {
+  content: '';
+  display: block;
+  margin-top: 12px;
+  height: 10px;
+  width: 60%;
+  border-radius: 5px;
+  background: linear-gradient(
+    90deg,
+    var(--panel-2) 25%,
+    var(--border) 50%,
+    var(--panel-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page__busy::after {
+    animation: none;
+    background: var(--panel-2);
+  }
 }
 
 .page a:not(.button) {
